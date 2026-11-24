@@ -1,0 +1,183 @@
+/* Expansion UI: admin console, procedural mode, streak and fourth campaign floor. */
+body.pig-level{--yellow:#f2b285;--cream:#f6d6be}
+body.pig-level #game{background:#4a3025}
+body.pig-level .logo span{color:#efb28a}
+body.pig-level .objective{border-left-color:#eda372}
+body.pig-level .chip{background:#2b1e19d9;border-color:#ac80668a}
+body.procedural-level{--yellow:#b3afea;--cream:#dcdafc}
+body.procedural-level #game{background:#1d162b}
+body.procedural-level .logo span{color:#bcb5ff}
+body.procedural-level .objective{border-left-color:#aa99e9}
+body.procedural-level .chip{border-color:#9580bd8a}
+body .procedural-entry{border-color:#b9a1ec;background:linear-gradient(180deg,#51416e,#302846);color:#f0dfff}
+#streakChip strong{color:#ffcf78}#seedChip{font-family:ui-monospace,Consolas,monospace;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.streak-menu{border:1px solid #d9a86a50;padding:9px 12px;border-radius:5px;margin:12px 0 0;color:#f1c284;font-size:11px}
+.streak-end{font-size:12px;margin:18px auto 2px;letter-spacing:.09em;font-weight:900;color:#f4bf7b}
+#start .card{width:min(830px,98vw)}#start .cardText{padding-top:26px;padding-bottom:26px}
+#start .primary.secondary{display:block;margin-top:8px;min-width:265px;padding:11px 16px}
+#start .desc{margin-bottom:10px}#start .instructions{margin-bottom:13px}#start .card h1{margin:11px 0 13px}
+#adminConsole{display:none;position:fixed;z-index:100;top:min(12vh,85px);left:50%;transform:translateX(-50%);width:min(700px,95vw);max-height:79vh;border:1px solid #7ca6a5;background:#081019f5;box-shadow:0 20px 100px #000d,0 0 0 6px #07182180;color:#b8ebda;font:13px/1.55 ui-monospace,Consolas,monospace;padding:0;border-radius:10px;overflow:hidden}
+#adminConsole.open{display:block}
+#adminConsole .console-head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #7ca6a56a;background:#13212b;padding:12px 15px;font-size:12px;letter-spacing:.07em}
+#adminClose{border:0;background:transparent;color:#f2e6be;font-size:27px;line-height:1;min-width:34px}
+.console-log{padding:15px;overflow:auto;height:min(40vh,340px);white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;touch-action:pan-y}
+.console-log>div{margin:5px 0;color:#e6d9b0}.console-log>div:nth-child(even){color:#9ad8c4}
+#adminForm{display:flex;align-items:center;gap:10px;padding:10px 15px;border-top:1px solid #6e9c9a67;background:#111c24}
+#adminForm span{font-weight:900;color:#f1c976}#adminInput{font:inherit;border:0;outline:none;color:#fbf0bc;background:transparent;flex:1;min-width:0;user-select:text;touch-action:manipulation}
+#adminConsole small{display:block;padding:0 15px 12px;font-size:10px;color:#84a7a2}
+#dossierPig img{object-fit:contain}
+@media(max-width:650px){#start .primary.secondary{min-width:0;width:100%;font-size:10px}#start .cardText{padding:20px}#start .desc{max-width:100%}.streak-menu{font-size:9px}#streakChip{padding:8px 6px}#seedChip{display:none!important}#adminConsole{top:5vh}}
+@media(pointer:coarse){#streakChip{font-size:10px}#start .card{max-height:95vh;overflow-y:auto}}
+
+.console-mini{padding:7px 10px;background:#111a19a0;color:#9bbdb4;border:1px solid #89b8a456;border-radius:5px;font-size:10px;font-weight:900;letter-spacing:.1em;margin-top:8px;cursor:pointer}
+.console-mini:hover{color:#f7edc5;border-color:#9dd9c2}
+/* Long level picker must stay scrollable from its very first pixel. */
+#start{display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:22px 14px}
+#start .card{margin:auto 0;flex-shrink:0}
+#start.hidden{display:none}
+
+/* A more compact campaign picker on desktops, while keeping touch readability. */
+@media(min-width:651px){
+ #start .cardText{padding-top:18px;padding-bottom:18px}
+ #start .card h1{font-size:54px;margin:8px 0 10px}
+ #start .desc{font-size:12px;line-height:1.45;margin-bottom:7px}
+ #start .instructions{gap:5px;margin-bottom:8px}
+ #start .key{padding:5px 7px}
+ #start .primary:not(.secondary){padding:12px 20px}
+ #start .primary.secondary{padding:8px 12px;margin-top:5px}
+ #start .records{margin-top:5px}
+ #start .streak-menu{margin-top:8px;padding:7px 10px}
+ #start .tiny{margin-top:7px}
+}
+
+#hpWrap{min-width:170px}.hpBar{width:100%;background:linear-gradient(90deg,#74d96f,#ffe86f,#ff6f61)!important}.settingsBox{margin:.8rem 0;color:#e5e2ca;font-size:.95rem}.settingsBox label{display:flex;gap:.55rem;align-items:center;justify-content:center}.settingsBox input{transform:scale(1.15)}
+
+.renderModeLabel{font-size:10px;color:#96b6a0;letter-spacing:.10em;margin:8px 0 0;opacity:.82}
+
+
+/* MOBILE ERGONOMICS v4: two-thumb controls and independent camera look surface. */
+.mobileLookSetting{display:flex;flex-direction:column;align-items:center;gap:5px;margin:7px auto 12px;max-width:260px;color:#c9d5ca;font-size:12px}
+.mobileLookSetting input{width:100%;accent-color:#e8cc7a;touch-action:pan-x}
+@media (pointer:coarse){
+  #mobile.playing{display:block;}
+  #mobile button{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}
+  #lookZone{display:block;position:absolute;inset:max(78px,env(safe-area-inset-top)) 0 0 34%;z-index:0;pointer-events:auto;touch-action:none;cursor:crosshair}
+  #lookZone .lookTip{display:block;position:absolute;top:35%;right:20%;color:#fff9d88a;text-shadow:0 2px 8px #000;font:bold 11px monospace;letter-spacing:.05em;pointer-events:none}
+  #pad{z-index:3;left:max(13px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));width:clamp(116px,26vw,170px);height:clamp(116px,26vw,170px);background:rgba(23,32,26,.70);border:2px solid #ffe6a486;box-shadow:0 3px 15px #0009,inset 0 0 25px #1016109b;touch-action:none}
+  #stick{width:38%;height:38%;left:31%;top:31%;background:#edcf89dd;border:2px solid #fff4ceb8;pointer-events:none}
+  #pad .padHint{position:absolute;left:0;right:0;bottom:9px;text-align:center;font:bold 10px monospace;letter-spacing:1px;opacity:.65;pointer-events:none}
+  #actionCluster{position:absolute;z-index:3;right:max(12px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,clamp(54px,10.5vw,70px));grid-template-rows:repeat(2,clamp(53px,10vw,65px));gap:9px;pointer-events:none}
+  #actionCluster>button{position:relative!important;inset:auto!important;right:auto!important;bottom:auto!important;z-index:3;width:100%!important;height:100%!important;min-width:0;border:1px solid #fff9c29a;border-bottom:3px solid #fff9c239;border-radius:16px;background:rgba(19,28,33,.84);color:#f5f7e5;font-weight:900;font-size:clamp(10px,2vw,13px);letter-spacing:0;pointer-events:auto;box-shadow:0 3px 12px #0009;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  #actionCluster>button:active,#actionCluster>button.pressed{background:#608472e8;transform:scale(.97)}
+  #actionCluster #flashMobileBtn{grid-column:1;grid-row:1;font-size:19px;color:#ffe394}
+  #flashMobileBtn small{font-size:8px}
+  #actionCluster #crouchBtn{grid-column:2;grid-row:1;background:#26463bcc}
+  #actionCluster #interactBtn{grid-column:3;grid-row:1;background:#265850e3;color:#d8fff4}
+  #actionCluster #decoyBtn{grid-column:1;grid-row:2;background:#42304cca}
+  #actionCluster #runBtn{grid-column:2 / 4;grid-row:2;background:#645024e3;color:#ffe4a1;font-size:16px}
+  #pauseMobileBtn{position:absolute;z-index:4;right:max(12px,env(safe-area-inset-right));top:max(75px,env(safe-area-inset-top));width:43px;height:39px;border-radius:12px;background:#101e22d9;color:#ffecb5;border:1px solid #ffd2a17a;pointer-events:auto}
+  #rageMobile{right:auto!important;left:max(13px,env(safe-area-inset-left))!important;top:max(86px,env(safe-area-inset-top))!important;bottom:auto!important;font-size:9px!important;padding:7px 10px!important}
+  .bottombar{bottom:clamp(149px,19vh,177px);left:max(11px,env(safe-area-inset-left));right:max(11px,env(safe-area-inset-right));gap:10px;max-width:100%;}
+  .objective{max-width:59%;padding:7px 10px}.goal{font-size:11px}.signal{font-size:9px}
+  #staminaWrap,#hpWrap{min-width:0;width:clamp(76px,17vw,125px)}
+  #hpWrap .barText,#staminaWrap .barText{font-size:9px}
+  #interactHint{top:48%;font-size:11px;max-width:74vw;text-overflow:ellipsis;overflow:hidden}
+  #tipDesktop{display:none!important}
+  #mapPanel{z-index:5;max-height:58vh;overflow:auto}
+}
+@media (pointer:coarse) and (orientation:portrait){
+  #pad{width:clamp(130px,36vw,175px);height:clamp(130px,36vw,175px)}
+  #actionCluster{grid-template-columns:repeat(3,clamp(53px,17vw,69px));grid-template-rows:repeat(2,clamp(54px,16vw,67px));gap:7px}
+  #lookZone{left:29%;}
+  .bottombar{bottom:max(185px,calc(env(safe-area-inset-bottom) + 169px));flex-wrap:wrap}
+  .objective{max-width:65%}
+  #lookZone .lookTip{top:42%;right:12%}
+}
+@media (pointer:coarse) and (max-height:430px){
+  #pad{width:112px;height:112px}
+  #actionCluster{grid-template-columns:repeat(3,56px);grid-template-rows:repeat(2,48px);gap:6px}
+  #actionCluster>button{border-radius:12px;font-size:10px}
+  #actionCluster #runBtn{font-size:13px}
+  #actionCluster #flashMobileBtn{font-size:16px}
+  .bottombar{bottom:124px}
+  .bottombar .objective{max-width:54%}
+  .topbar{padding-top:8px}
+  #pauseMobileBtn{top:58px}
+  #lookZone{top:66px}
+  #rageMobile{top:67px!important}
+  #lookZone .lookTip{top:33%;right:28%}
+}
+@media (pointer:coarse) and (max-width:360px){
+  #pad{width:112px;height:112px}
+  #actionCluster{grid-template-columns:repeat(3,49px);grid-template-rows:repeat(2,52px);gap:5px}
+  #actionCluster>button{font-size:10px;border-radius:11px}
+  #actionCluster #runBtn{font-size:13px}
+  .bottombar{bottom:145px}
+  .bottombar .objective{max-width:56%}
+  .hudRight .chip{padding:5px;font-size:9px}
+  #mapToggle,#soundToggle{width:30px;height:30px}
+}
+
+/* CO-OP lobby and teammate HUD */
+.coop-entry{border:1px solid #69b6aa!important;color:#b6ffdf!important;margin-top:7px!important}
+.coop-hud{position:fixed;z-index:19;top:75px;left:50%;transform:translateX(-50%);color:#a4ffe0;background:#071b1dda;border:1px solid #6cc9b983;padding:6px 12px;border-radius:12px;font:700 11px ui-monospace,monospace;white-space:nowrap;pointer-events:none}
+.coop-overlay{display:none;position:fixed;inset:0;z-index:2000;background:#020a0bef;align-items:center;justify-content:center;overflow-y:auto;padding:16px;overscroll-behavior:contain}
+.coop-overlay.open{display:flex}
+.coop-card{background:#131d1bdc;color:#eaf6e6;border:1px solid #688f85;border-radius:18px;box-shadow:0 8px 60px #000a;width:min(600px,100%);max-height:calc(100dvh - 32px);overflow-y:auto;padding:22px;font:13px system-ui,sans-serif;display:flex;flex-direction:column;gap:12px}
+.coop-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.coop-heading h2{font-size:24px;margin:4px 0;color:#eaf6dc;line-height:1.1}
+.coop-heading h2 em{color:#91e3c7;font-style:normal}
+#coopLobbyClose{border:0;border-radius:8px;background:#304b44;color:#fff;font-size:23px;width:36px;height:36px;cursor:pointer}
+.coop-help{color:#c3cec8;line-height:1.4;margin:0}
+.coop-label,.coop-two label{display:flex;flex-direction:column;gap:6px;color:#adcfbf;font-size:12px}
+.coop-card input,.coop-card select{width:100%;border:1px solid #4d7266;border-radius:8px;padding:11px 12px;background:#071210;color:#f4fce7;font-size:14px;min-width:0}
+.coop-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.coop-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.coop-buttons button{flex:1;min-width:150px;font-size:12px!important;padding:13px!important}
+.coop-details{display:flex;flex-wrap:wrap;align-items:center;gap:9px;font-size:12px;background:#0c2220;padding:10px;border-radius:8px}
+.coop-details strong{color:#a0ffdc;letter-spacing:1px}
+#coopCodeCopy,#coopChatSend{border:1px solid #587c74;background:#1b3834;color:#eafff5;padding:9px 12px;border-radius:6px;cursor:pointer}
+#coopStatus{padding:8px 10px;border-left:3px solid #76d4ab;background:#24382d;color:#d4ffe0;min-height:28px}
+#coopStatus.coop-error{color:#ffc6c0;background:#3b1d20;border-color:#ec7e68}
+.coop-roster{border:1px solid #3c6155;border-radius:9px;padding:10px}
+#coopRoster{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.coop-person{padding:7px 10px;background:#173730;border-radius:6px;color:#d0fff1}
+.coop-chat{padding:8px;background:#101b18;border:1px solid #31514a;border-radius:8px}
+#coopLastChat{font-size:12px;margin-bottom:7px;color:#dae7db;word-break:break-word}
+.coop-chat .coop-two{grid-template-columns:1fr auto}
+.coop-card small{color:#a7bdb3;line-height:1.5}
+@media(max-width:620px){.coop-card{padding:14px;gap:8px}.coop-heading h2{font-size:20px}.coop-buttons button{min-width:125px}.coop-hud{top:50px;font-size:9px}.coop-card input{padding:9px}}
+
+/* CO-OP switched off in this release; the code and host server remain in ZIP. */
+#coopOpenBtn,#coopLobby[hidden],#coopHud{display:none!important}
+/* FPS overlay stays readable without blocking game inputs */
+#fpsCounter{position:fixed;top:65px;right:16px;z-index:21;pointer-events:none;border:1px solid #b7d69e55;border-radius:8px;padding:6px 10px;background:#0e1913cb;color:#a9f9b2;font:800 13px ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 3px 16px #0005}
+#settingsHudBtn{pointer-events:auto;position:relative;z-index:9;width:32px;height:32px;border:1px solid #dcdaa488;border-radius:8px;background:#152019b8;color:#fff4cf;cursor:pointer;font-size:18px;line-height:1}
+.settingsLaunch{display:block;margin:10px auto 5px;padding:10px 18px;border-radius:11px;border:1px solid #d9d2a179;background:#22342a;color:#f6edc4;font:800 12px ui-monospace,monospace;letter-spacing:.08em;cursor:pointer}
+.settingsLaunch:hover,#settingsHudBtn:hover{background:#365342}
+.settings-overlay{display:none;position:fixed;inset:0;z-index:2200;background:#030807e8;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain}
+.settings-overlay.open{display:flex}
+.settings-dialog{width:min(660px,100%);max-height:min(740px,94dvh);display:flex;flex-direction:column;background:#111b19;color:#f8f1db;border:1px solid #7898898e;border-radius:18px;box-shadow:0 24px 80px #000b;padding:18px;gap:12px;font:13px system-ui,sans-serif}
+.settings-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.settings-head h2{margin:4px 0 0;font-size:23px;letter-spacing:.05em}
+#settingsCloseBtn{width:39px;height:39px;border-radius:9px;border:1px solid #6d8b7c;color:#fff;background:#263d34;cursor:pointer;font-size:19px}
+.settings-intro{margin:0;color:#a8beb0}
+.settings-scroll{overflow-y:auto;overscroll-behavior:contain;display:grid;gap:14px;padding:2px 5px 12px 0}
+.settings-scroll section{padding:14px 16px;background:#1a2a258c;border:1px solid #446458a1;border-radius:12px}
+.settings-scroll h3{font-size:13px;margin:0 0 11px;letter-spacing:.05em}
+.settings-scroll h3 span{color:#9ed0a1;margin-right:8px}
+.setting-slider{display:block;margin:11px 0 16px;color:#e3eee4;cursor:pointer}
+.setting-slider>span{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:7px}
+.setting-slider output{color:#f7d887;font-weight:800;font-variant-numeric:tabular-nums}
+.setting-slider input[type=range]{width:100%;height:21px;accent-color:#e5c46a;cursor:pointer;touch-action:pan-x}
+.setting-check{display:flex;align-items:center;gap:10px;margin:10px 0;color:#d7e8d9;cursor:pointer}
+.setting-check input{width:18px;height:18px;accent-color:#b5cf76}
+.setting-select{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#e9edde}
+.setting-select select{border:1px solid #59786c;background:#0c1914;color:#f0ebd6;padding:9px 12px;border-radius:8px;max-width:250px;width:100%}
+.settings-warning,.settings-hint{color:#9baea2;font-size:11px;line-height:1.5;margin:9px 0 2px}
+.settings-warning{color:#f1c0a7}
+.settings-footer{display:flex;align-items:center;gap:10px;justify-content:space-between;border-top:1px solid #6b887753;padding-top:13px}
+.settings-footer button{border-radius:9px;cursor:pointer;font-size:12px;font-weight:800}
+.settingsSecondary{color:#d7e9d3;background:#2a3b34;border:1px solid #627c72;padding:10px 13px}
+@media(max-width:560px){.settings-dialog{padding:12px;max-height:96dvh}.settings-head h2{font-size:20px}.settings-scroll section{padding:11px}.settings-footer{flex-wrap:wrap}.settings-footer button{flex:1}.setting-select{align-items:stretch;flex-direction:column}.setting-select select{max-width:100%}}
+@media(pointer:coarse){#fpsCounter{top:max(55px,env(safe-area-inset-top));right:5px;padding:4px 7px;font-size:10px}#settingsHudBtn{width:30px;height:30px}}

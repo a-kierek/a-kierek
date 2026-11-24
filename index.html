@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080e0d">
+<title>THE CATROOMS | NORMAL / HARD</title>
+<link rel="stylesheet" href="css/game.css">
+<link rel="stylesheet" href="css/expansion.css">
+<link rel="stylesheet" href="css/haunted-ui.css">
+<link rel="stylesheet" href="css/macabre-ui.css">
+<link rel="stylesheet" href="css/hard-release.css">
+<link rel="stylesheet" href="css/rework-2026.css">
+<link rel="stylesheet" href="css/hard-campaign.css">
+<link rel="stylesheet" href="css/pixel-menu.css">
+<link rel="stylesheet" href="css/v1-style.css">
+
+</head>
+<body>
+<canvas id="game"></canvas><div id="noise"></div><div id="grain"></div>
+<div id="hud">
+ <div class="topbar"><div><div class="logo">THE <span>CATROOMS</span> <span style="font-size:11px;vertical-align:top">®</span></div><div class="sub"><span id="playerNameTag">GRACZ</span> · <span id="levelLabel">LEVEL 1 / ZOLTE KORYTARZE</span></div></div><div class="hudRight"><div class="chip" title="Bezpieczniki"><span class="gem"><span class="icon-slot" data-icon="battery" aria-hidden="true"></span></span> <strong id="count">0</strong> / <span id="required">5</span></div><div class="chip" id="streakChip" title="Kolejne wygrane"><span class="icon-slot" data-icon="flame" aria-hidden="true"></span> <strong id="streakCount">0</strong></div><div class="chip" id="seedChip" style="display:none">#<span id="seedText">0</span></div><div class="chip" id="timeChip"><span class="icon-slot" data-icon="clock" aria-hidden="true"></span> <span id="clock">00:00</span></div><button id="mapToggle" title="Mapa (M)"><span class="icon-slot" data-icon="map" aria-hidden="true"></span></button><button id="soundToggle" title="Dzwiek"><span class="icon-slot" data-icon="sound" aria-hidden="true"></span></button><button id="settingsHudBtn" title="Ustawienia" aria-label="Ustawienia" type="button"><span class="icon-slot" data-icon="settings" aria-hidden="true"></span></button></div></div>
+ <div id="coopHud" class="coop-hud" style="display:none"></div><div id="fpsCounter" aria-label="Licznik klatek na sekunde" style="display:none">-- FPS</div><div class="crosshair"></div><div id="interactHint">[ E ] UZYJ TERMINALA</div><div id="stealthStatus"><span class="icon-slot" data-icon="dot" aria-hidden="true"></span> NIEWYKRYTY</div><div id="eventTag" aria-live="polite"></div><div id="danger"><span class="icon-slot" data-icon="warning" aria-hidden="true"></span> ON JEST BLISKO <span class="icon-slot" data-icon="warning" aria-hidden="true"></span></div><div id="toast"></div>
+ <div class="bottombar"><div class="objective"><div class="eyebrow">AKTUALNE ZADANIE</div><div class="goal" id="goal">ZNAJDZ 7 BATERII</div><div id="missionDetails" style="display:none"></div><div class="signal"><span id="bearing"><span class="icon-slot" data-icon="up" aria-hidden="true"></span></span> <span id="signalText">Szukaj sygnalu...</span></div></div><div id="staminaWrap"><div class="barText">WYTRZYMALOSC</div><div class="bar"><div id="staminaFill" class="barFill"></div></div></div><div id="hpWrap"><div class="barText">HP <span id="hpValue">100 / 100</span></div><div class="bar"><div id="hpFill" class="barFill hpBar"></div></div></div></div>
+ <div id="fieldInventory" aria-label="Ekwipunek"><div class="f-inv-heading">DOWODY / ZASOBY</div><div class="f-inv-main"><span class="icon-slot" data-icon="archive" aria-hidden="true"></span><span id="fieldItemCount">0 / 7</span></div><div class="f-inv-bottom"><span id="fieldDecoys">WABIKI: 0</span><span id="fieldZone">SEKTOR 01</span></div></div>
+ <div id="fieldAction" aria-label="Podpowiedz akcji"><div class="f-action-title">PROTOKOL INTERAKCJI</div><div class="f-action-value" id="fieldActionText">E / SPRAWDZ OTOCZENIE</div></div>
+ <div id="activeInventory" class="active-inventory" aria-label="Przedmioty do uzycia"><div class="inv-title">EKWIPUNEK / AKTYWUJ PRZEDMIOT</div><div class="inv-buttons"><button id="inventoryDrink" type="button" aria-label="Wypij napoj energetyczny"><img id="inventoryDrinkSprite" alt="Napoj" src="assets/items/energy-classic.png"><span>NAPOJ <b id="inventoryDrinkCount">0</b></span><small>1</small></button><button id="inventorySlow" type="button" aria-label="Aktywuj spowalniacz"><img src="assets/items/slow-device.png" alt="Spowalniacz"><span>SPOWALNIACZ <b id="inventorySlowCount">0</b></span><small>2</small></button><button id="inventoryFreeze" type="button" aria-label="Aktywuj zamrazacz"><img src="assets/items/freeze-device.png" alt="Zamrazacz"><span>ZAMRAZACZ <b id="inventoryFreezeCount">0</b></span><small>3</small></button></div></div>
+ <div id="hardEmergency" role="status" aria-live="assertive" hidden><strong>AWARIA / NAPRAW PANEL</strong><span id="hardEmergencyTime">00:45</span><small id="hardEmergencyDistance">PODAZAJ DO PANELU</small></div>
+ <div id="tipDesktop">WASD RUCH · F2 KONSOLA · MYSZ OBROT · SHIFT BIEG · CTRL SKRADANIE · E INTERAKCJA · F LATARKA · M MAPA · R RAGE MODE · ESC PAUZA</div>
+ <div id="mapPanel"><div class="mapTitle"><span class="icon-slot" data-icon="map" aria-hidden="true"></span> SZKIC / ODKRYTY OBSZAR</div><canvas id="mapCanvas" width="280" height="280"></canvas><small><span class="icon-slot" data-icon="dot" aria-hidden="true"></span> Ty · <span class="icon-slot" data-icon="battery" aria-hidden="true"></span> bezpieczniki · <span style="color:#f16e65"><span class="icon-slot" data-icon="dot" aria-hidden="true"></span> zagrozenie</span></small></div>
+</div>
+<div id="rageBadge"><span class="icon-slot" data-icon="skull" aria-hidden="true"></span> RAGE MODE · AKTYWNY</div><button id="rageMobile" type="button"><span class="icon-slot" data-icon="skull" aria-hidden="true"></span> RAGE</button><div id="mobile">
+ <div id="lookZone" aria-label="Strefa rozgladania: przesun palcem w kazda strone"><span class="lookTip"><span class="icon-slot" data-icon="horizontal" aria-hidden="true"></span> 360° · <span class="icon-slot" data-icon="vertical" aria-hidden="true"></span> 75°</span></div>
+ <button id="pauseMobileBtn" type="button" aria-label="Pauza"><span class="icon-slot" data-icon="pause" aria-hidden="true"></span></button>
+ <div id="pad"><div id="stick"></div><span class="padHint">RUCH</span></div>
+ <div id="actionCluster">
+  <button id="flashMobileBtn" type="button" aria-label="Latarka"><span class="icon-slot" data-icon="flashlight" aria-hidden="true"></span><small>LATARKA</small></button>
+  <button id="crouchBtn" type="button" aria-pressed="false">CICHO</button>
+  <button id="interactBtn" type="button">E · UZYJ</button>
+  <button id="decoyBtn" type="button">Q · WABIK</button>
+  <button id="hardSlowBtn" type="button" hidden>Z · SPOWOLNIJ</button>
+  <button id="hardFreezeBtn" type="button" hidden>X · ZAMROZ</button>
+  <button id="runBtn" type="button">BIEG</button>
+ </div>
+</div>
+<div id="versionBadge" aria-label="Wersja gry">v1.3</div>
+<div id="coinHud"><img src="assets/items/grosz.png" alt="Grosz"><span id="coinHudValue">0</span> GROSZY</div>
+<div id="safeRoomLabel">STREFA BEZPIECZNA · DRZWI ZAMKNIETE</div>
+<div id="start" class="modal pixel-menu-root">
+  <div class="pixel-shell" role="region" aria-label="Menu glowne CATROOMS">
+    <div class="pixel-blood-decals" id="pixelBloodDecals" aria-hidden="true"></div>
+    <div class="pixel-splash" id="pixelSplash">
+      <div class="pixel-splash-noise" aria-hidden="true"></div>
+      <div class="pixel-start-center">
+        <h1 class="pixel-logo">CATROOMS</h1>
+        <button id="pixelPressStart" class="pixel-press" type="button">PRESS START</button>
+      </div>
+    </div>
+    <div class="pixel-hub" id="pixelHub" hidden>
+      <header class="pixel-hub-head"><span>ARCHIWUM // SYSTEM 01</span><span id="pixelLiveStatus">WYBIERZ OPCJE</span></header>
+      <div class="pixel-hub-layout">
+        <nav class="pixel-side-nav" aria-label="Menu gry">
+          <button class="pixel-nav-item selected" id="pixelNavPlay" type="button" aria-current="page">GRAJ</button>
+          <button class="pixel-nav-item" id="pixelNavSettings" type="button">USTAWIENIA</button>
+          <button class="pixel-nav-item" id="pixelNavPlayer" type="button">GRACZ</button>
+        </nav>
+        <main class="pixel-panel-area">
+          <section id="pixelPlayPanel" class="pixel-play-panel" aria-label="Wybor poziomu">
+            <div class="pixel-levels">
+              <div class="pixel-section-label">WYBIERZ POZIOM</div>
+              <button class="primary pixel-level-button" id="startBtn">ZOLTE KORYTARZE</button>
+              <button id="level2Btn" class="primary secondary pixel-level-button normal-only" disabled>ZALANY KOMPLEKS</button>
+              <button id="finalBtn" class="primary secondary pixel-level-button normal-only" disabled>CZERWONA STREFA</button>
+              <button id="pigLevelBtn" class="primary secondary pixel-level-button normal-only" disabled>SEKTOR CHRUM</button>
+              <button id="level5Btn" class="primary secondary pixel-level-button normal-only" disabled>OSTATNIE SPOTKANIE</button>
+              <button id="proceduralBtn" class="primary secondary procedural-entry normal-only pixel-level-button">TRYB PROCEDURALNY</button>
+              <button id="adminMenuBtn" type="button" hidden aria-hidden="true">KONSOLA</button>
+              <button id="coopOpenBtn" class="primary secondary coop-entry" type="button" hidden disabled aria-hidden="true">CO-OP</button>
+            </div>
+            <aside class="pixel-play-sidebar">
+              <div id="difficultySwitcher" class="difficulty-switcher pixel-difficulty" role="group" aria-label="Poziom trudnosci">
+                <span>TRUDNOSC</span>
+                <div class="difficulty-controls"><button id="difficultyNormal" type="button" aria-pressed="true">NORMAL</button><button id="difficultyHard" type="button" aria-pressed="false">HARD</button></div>
+                <small id="difficultyInfo">Kampania i standardowe poziomy.</small>
+              </div>
+              <div class="pixel-records">
+                <div id="streakMenu" class="records streak-menu">SERIA: <b id="menuStreak">0</b> · REKORD: <b id="menuBestStreak">0</b></div>
+                <div id="progressText" class="progressTxt">ODKRYTO 1/4 POZIOMOW</div>
+                <div class="records"><span id="record1">BRAK REKORDU</span><span id="record2">BRAK REKORDU</span><span id="record3">BRAK REKORDU</span><span id="record4">BRAK REKORDU</span></div>
+              </div>
+            </aside>
+          </section>
+          <section id="pixelSettingsPanel" class="pixel-simple-panel pixel-settings-panel" hidden aria-label="Ustawienia">
+            <div class="pixel-section-label">USTAWIENIA GRY</div>
+            <p class="pixel-settings-note">USTAWIENIA DZIALAJA OD RAZU I ZAPISUJA SIE AUTOMATYCZNIE.</p>
+            <div class="settings-scroll pixel-inline-scroll">
+              <section aria-label="Kamera">
+                <h3><span>01</span> KAMERA I STEROWANIE</h3>
+                <label class="setting-slider"><span>POLE WIDZENIA (FOV) <output id="menuSettingFovOut" for="menuSettingFov">75°</output></span><input id="menuSettingFov" type="range" min="60" max="110" step="5" value="75"></label>
+                <label class="setting-slider"><span>CZULOSC MYSZY <output id="menuSettingMouseOut" for="menuSettingMouse">1.00×</output></span><input id="menuSettingMouse" type="range" min="0.30" max="2.50" step="0.05" value="1"></label>
+                <label class="setting-slider"><span>CZULOSC DOTYKU <output id="menuSettingTouchOut" for="menuSettingTouch">1.00×</output></span><input id="menuSettingTouch" type="range" min="0.55" max="1.90" step="0.05" value="1"></label>
+                <label class="setting-check"><input id="menuSettingControls" type="checkbox"><span>POKAZUJ PODPOWIEDZI STEROWANIA</span></label>
+              </section>
+              <section aria-label="Dzwiek">
+                <h3><span>02</span> DZWIEK</h3>
+                <label class="setting-slider"><span>GLOSNOSC GLOWNA <output id="menuSettingMasterOut" for="menuSettingMaster">100%</output></span><input id="menuSettingMaster" type="range" min="0" max="100" step="5" value="100"></label>
+                <label class="setting-slider"><span>EFEKTY I KROKI <output id="menuSettingEffectsOut" for="menuSettingEffects">100%</output></span><input id="menuSettingEffects" type="range" min="0" max="100" step="5" value="100"></label>
+                <label class="setting-slider"><span>GLOSY PRZECIWNIKOW <output id="menuSettingVoicesOut" for="menuSettingVoices">100%</output></span><input id="menuSettingVoices" type="range" min="0" max="100" step="5" value="100"></label>
+                <label class="setting-slider"><span>AMBIENT <output id="menuSettingAmbientOut" for="menuSettingAmbient">100%</output></span><input id="menuSettingAmbient" type="range" min="0" max="100" step="5" value="100"></label>
+                <label class="setting-slider"><span>JUMPSCARE <output id="menuSettingJumpscareOut" for="menuSettingJumpscare">100%</output></span><input id="menuSettingJumpscare" type="range" min="0" max="100" step="5" value="100"></label>
+              </section>
+              <section aria-label="Wydajnosc">
+                <h3><span>03</span> GRAFIKA I WYDAJNOSC</h3>
+                <label class="setting-select"><span>JAKOSC RENDEROWANIA</span><select id="menuSettingQuality"><option value="0.7">NISKA · WIEKSZA WYDAJNOSC</option><option value="1">STANDARDOWA</option><option value="1.2">WYSOKA · OSTRZEJSZY OBRAZ</option></select></label>
+                <label class="setting-check"><input id="menuSettingFPS" type="checkbox"><span>POKAZUJ LICZNIK FPS</span></label>
+              </section>
+            </div>
+            <div class="pixel-settings-actions"><button id="menuSettingsDefaultsBtn" type="button" class="settingsSecondary">PRZYWROC DOMYSLNE</button></div>
+          </section>
+          <section id="pixelPlayerPanel" class="pixel-simple-panel" hidden aria-label="Gracz">
+            <div class="pixel-section-label">PROFIL GRACZA</div>
+            <div class="player-profile pixel-profile"><label for="playerNameInput">NAZWA GRACZA</label><input id="playerNameInput" type="text" maxlength="22" autocomplete="off" spellcheck="false" value="GRACZ" aria-label="Nazwa gracza"></div>
+            <div class="pixel-player-help">ZMIANY ZAPISUJA SIE AUTOMATYCZNIE.</div>
+          </section>
+        </main>
+      </div>
+      <footer class="pixel-footer"><span id="rendererMode" class="renderModeLabel">INICJALIZACJA...</span><span>ARCHIWUM / 001</span></footer>
+    </div>
+  </div>
+</div>
+<div id="pause" class="modal hidden"><div id="pauseCard" class="card"><div class="kicker">TRANSMISJA WSTRZYMANA</div><h1>ZLAP <em>ODDECH.</em></h1><p>On tez przystanal. Ale wciaz wie, gdzie jestes.</p><button class="primary" id="resumeBtn"><span class="icon-slot" data-icon="play" aria-hidden="true"></span> WROC DO GRY</button><button class="primary secondary" id="pauseMenuBtn"><span class="icon-slot" data-icon="home" aria-hidden="true"></span> WYBOR POZIOMU</button><button id="settingsPauseBtn" class="settingsLaunch" type="button"><span class="icon-slot" data-icon="settings" aria-hidden="true"></span> USTAWIENIA</button><button class="console-mini" id="adminPauseBtn"><span class="icon-slot" data-icon="terminal" aria-hidden="true"></span> KONSOLA · F2</button><div class="tiny">ESC wznawia gre</div></div></div>
+<div id="ending" class="modal hidden"><div id="endCard" class="card"><img id="endFace" class="endFace catImage" alt="Przeciwnik"><div class="kicker" id="endKicker">KONIEC ZAPISU</div><h1 id="endTitle">ZLAPAL <em>CIE.</em></h1><p id="endDesc">Kot byl szybszy.</p><div id="endKiller" style="display:none"></div><div id="endStreak" class="streak-end"><span class="icon-slot" data-icon="flame" aria-hidden="true"></span> Seria: 0 · Rekord: 0</div><div class="endStats"><span id="endTime">CZAS 00:00</span><span id="endItems"><span class="icon-slot" data-icon="battery" aria-hidden="true"></span> 0/5</span><span id="bestTime"></span></div><button class="primary" id="againBtn"><span class="icon-slot" data-icon="refresh" aria-hidden="true"></span> SPROBUJ PONOWNIE</button><button id="nextBtn" class="primary secondary" style="display:none"><span class="icon-slot" data-icon="play" aria-hidden="true"></span> WEJDZ NA POZIOM 2</button><button id="menuBtn" class="primary secondary"><span class="icon-slot" data-icon="home" aria-hidden="true"></span> WYBOR POZIOMU</button></div></div>
+
+
+<div id="coopLobby" hidden class="coop-overlay" role="dialog" aria-modal="true" aria-label="Lobby CO-OP" aria-hidden="true">
+ <section class="coop-card">
+  <div class="coop-heading"><div><div class="kicker">NETWORK / HOST-AUTHORITATIVE</div><h2>THE CATROOMS <em>CO-OP</em></h2></div><button id="coopLobbyClose" type="button" aria-label="Zamknij lobby">×</button></div>
+  <p class="coop-help">1 komputer uruchamia serwer Node.js i hostuje rozgrywke. Inni lacza sie przez ten sam adres serwera. Maks. 4 graczy.</p>
+  <label class="coop-label" for="coopServerUrl">Adres WebSocket (LAN: ws://IP:8765/ws, internet: wss://ADRES/ws)</label>
+  <input id="coopServerUrl" type="url" spellcheck="false" placeholder="ws://localhost:8765/ws">
+  <div class="coop-two"><label>Twoj nick<input id="coopName" maxlength="22" placeholder="Gracz"></label><label>Kod pokoju<input id="coopCodeInput" maxlength="6" autocomplete="off" placeholder="AB7KQ2"></label></div>
+  <div class="coop-buttons"><button id="coopCreate" class="primary" type="button"><span class="icon-slot" data-icon="plus" aria-hidden="true"></span> HOSTUJ POKOJ</button><button id="coopJoin" class="primary secondary" type="button"><span class="icon-slot" data-icon="right" aria-hidden="true"></span> DOLACZ KODEM</button></div>
+  <div class="coop-details"><span>TRYB: <strong id="coopRoleDisplay">BRAK POLACZENIA</strong></span><span>KOD: <strong id="coopRoomDisplay">------</strong></span><button id="coopCodeCopy" type="button">KOPIUJ KOD</button></div>
+  <div id="coopStatus" role="status" aria-live="polite">Wybierz serwer i utworz pokoj.</div>
+  <div class="coop-roster"><strong>GRACZE</strong><div id="coopRoster"></div></div>
+  <label class="coop-label" for="coopLevel">Level hosta</label>
+  <select id="coopLevel"><option value="1">LEVEL 1 · MARMUR</option><option value="2">LEVEL 2 · ZALANY KOMPLEKS</option><option value="3">LEVEL 3 · CZERWONA STREFA</option><option value="4">LEVEL 4 · CHRUM</option><option value="10">SEKTOR 05 · OSTATNIE SPOTKANIE</option><option value="5">TRYB PROCEDURALNY</option></select>
+  <div class="coop-buttons"><button id="coopLaunch" class="primary" type="button"><span class="icon-slot" data-icon="play" aria-hidden="true"></span> START CO-OP (HOST)</button><button id="coopLeave" class="primary secondary" type="button">OPUSC POKOJ</button></div>
+  <div class="coop-chat"><div id="coopLastChat">Czat lobby jest opcjonalny.</div><div class="coop-two"><input id="coopChatInput" maxlength="120" placeholder="Napisz wiadomosc..."><button id="coopChatSend" type="button">WYSLIJ</button></div></div>
+  <small>GitHub Pages nie obsluguje serwera multiplayer. Na roznych sieciach host musi udostepnic serwer przez HTTPS/WSS (np. tunel Cloudflare). W grze kazda osoba steruje wlasna postacia, a przedmioty i potwory sa wspolne.</small>
+ </section>
+</div>
+
+
+<div id="settingsPanel" class="settings-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settingsHeading">
+ <div class="settings-dialog">
+  <header class="settings-head"><div><div class="kicker">TERMINAL / KONFIGURACJA</div><h2 id="settingsHeading"><span class="icon-slot" data-icon="settings" aria-hidden="true"></span> USTAWIENIA</h2></div><button type="button" id="settingsCloseBtn" aria-label="Zamknij ustawienia"><span class="icon-slot" data-icon="close" aria-hidden="true"></span></button></header>
+  <p class="settings-intro">Zmiany dzialaja od razu i zapisuja sie w tej przegladarce.</p>
+  <div class="settings-scroll">
+   <section aria-label="Kamera"><h3><span>01</span> Kamera i sterowanie</h3>
+    <label class="setting-slider"><span>Pole widzenia (FOV) <output id="settingFovOut" for="settingFov">75°</output></span><input id="settingFov" type="range" min="60" max="110" step="5" value="75"></label>
+    <label class="setting-slider"><span>Czulosc myszy <output id="settingMouseOut" for="settingMouse">1.00×</output></span><input id="settingMouse" type="range" min="0.30" max="2.50" step="0.05" value="1"></label>
+    <label class="setting-slider"><span>Czulosc dotyku <output id="settingTouchOut" for="settingTouch">1.00×</output></span><input id="settingTouch" type="range" min="0.55" max="1.90" step="0.05" value="1"></label>
+    <label class="setting-check"><input id="settingControls" type="checkbox"><span>Pokazuj podpowiedzi sterowania</span></label>
+   </section>
+   <section aria-label="Dzwiek"><h3><span>02</span> Dzwiek</h3>
+    <label class="setting-slider"><span>Glosnosc glowna <output id="settingMasterOut" for="settingMaster">100%</output></span><input id="settingMaster" type="range" min="0" max="100" step="5" value="100"></label>
+    <label class="setting-slider"><span>Efekty i kroki <output id="settingEffectsOut" for="settingEffects">100%</output></span><input id="settingEffects" type="range" min="0" max="100" step="5" value="100"></label>
+    <label class="setting-slider"><span>Glosy przeciwnikow <output id="settingVoicesOut" for="settingVoices">100%</output></span><input id="settingVoices" type="range" min="0" max="100" step="5" value="100"></label>
+    <label class="setting-slider"><span>Ambient <output id="settingAmbientOut" for="settingAmbient">100%</output></span><input id="settingAmbient" type="range" min="0" max="100" step="5" value="100"></label>
+    <label class="setting-slider"><span>Jumpscare <output id="settingJumpscareOut" for="settingJumpscare">100%</output></span><input id="settingJumpscare" type="range" min="0" max="100" step="5" value="100"></label>
+    <p class="settings-warning">Uwaga: efekt jumpscare moze byc bardzo glosny. Suwak pozwala go wyciszyc niezaleznie od reszty gry.</p>
+   </section>
+   <section aria-label="Wydajnosc"><h3><span>03</span> Grafika i wydajnosc</h3>
+    <label class="setting-select"><span>Jakosc renderowania</span><select id="settingQuality"><option value="0.7">Niska · wieksza wydajnosc</option><option value="1">Standardowa</option><option value="1.2">Wysoka · ostrzejszy obraz</option></select></label>
+    <label class="setting-check"><input id="settingFPS" type="checkbox"><span>Pokazuj licznik FPS</span></label>
+    <p class="settings-hint">Renderowanie WebGPU dostosowuje rozdzielczosc do wybranej jakosci. FOV zmienia pole widzenia kamery.</p>
+   </section>
+  </div>
+  <footer class="settings-footer"><button id="settingsDefaultsBtn" type="button" class="settingsSecondary">↺ Przywroc domyslne</button><button id="settingsDoneBtn" type="button" class="primary">ZAPISZ I WROC</button></footer>
+ </div>
+</div>
+
+<div id="adminConsole" role="dialog" aria-label="Konsola administratora" aria-modal="true">
+ <div class="console-head"><strong><span class="icon-slot" data-icon="terminal" aria-hidden="true"></span> CATROOMS / KONSOLA TESTOWA</strong><button id="adminClose" aria-label="Zamknij konsole">×</button></div>
+ <div id="adminLog" class="console-log" aria-live="polite">LOKALNY TERMINAL // WPISZ HELP, ABY WYSWIETLIC KOMENDY (F2)</div>
+ <form id="adminForm"><span>&gt;</span><input id="adminInput" type="text" autocomplete="off" spellcheck="false" placeholder="help, level 4, god on, unlock all..."></form>
+ <small>Tryb deweloperski lokalnej gry. Rozgrywki z cheatami nie zwiekszaja win streak.</small>
+ </div>
+ <div id="dossier" class="modal hidden">
+ <div class="dossierCard">
+  <div class="dossierHead"><div><div id="dossierKicker" class="kicker">AKTA / LEVEL 2</div><h1 id="dossierTitle">NIE JESTES <em>SAM.</em></h1><p id="dossierDesc">Poznaj przeciwnikow.</p></div><div class="dossierSeal" id="dossierLevelName">LEVEL 2</div></div>
+  <div class="chaseTrack" aria-hidden="true"><span>WYKRYTO RUCH</span><div class="trackLine"></div><span><span class="icon-slot" data-icon="dot" aria-hidden="true"></span> <span class="icon-slot" data-icon="dot" aria-hidden="true"></span> <span class="icon-slot" data-icon="dot" aria-hidden="true"></span></span></div>
+  <div class="enemyGrid">
+   <article class="enemyCard" id="dossierCat"><img id="dossierPortraitCat" alt="Marmur, szary kot"><div class="enemyTxt"><span class="enemyThreat">ZAGROZENIE: WYSOKIE</span><h2>MARMUR</h2><small>TROPICIEL · SLEDZI OSTATNI SLAD</small></div></article>
+   <article class="enemyCard" id="dossierWatcher"><img id="dossierPortraitWatcher" alt="Blysk, osoba ze zdjecia"><div class="enemyTxt"><span class="enemyThreat">ZAGROZENIE: BARDZO WYSOKIE</span><h2>BLYSK</h2><small>OBSERWATOR · DALEKI WZROK</small></div></article>
+   <article class="enemyCard" id="dossierListener"><img id="dossierPortraitListener" alt="Szept, osoba w okularach ze zdjecia"><div class="enemyTxt"><span class="enemyThreat">ZAGROZENIE: BARDZO WYSOKIE</span><h2>SZEPT</h2><small>NASLUCHIWACZ · REAGUJE NA HALAS</small></div></article>
+   <article class="enemyCard absent" id="dossierStranger"><img id="dossierPortraitStranger" alt="Nieznajomy z piatego poziomu"><div class="enemyTxt"><span class="enemyThreat">ZAGROZENIE: EKSTREMALNE</span><h2>NIEZNAJOMY</h2><small>TROPICIEL · SEKTOR 05</small></div></article>
+   <article class="enemyCard absent" id="dossierPig"><img id="dossierPortraitPig" alt="CHRUM, swinia"><div class="enemyTxt"><span class="enemyThreat">ZAGROZENIE: EKSTREMALNE</span><h2>CHRUM</h2><small>SZARZA · REAGUJE NA HALAS</small></div></article>
+  </div>
+  <div id="dossierMission" class="dossierMission">4 KARTY · 3 PANELE · 12 BRAM</div>
+  <div class="dossierButtons"><button class="primary" id="dossierPlay"><span class="icon-slot" data-icon="play" aria-hidden="true"></span> PLAY / ROZPOCZNIJ</button><button class="primary secondary" id="dossierBack"><span class="icon-slot" data-icon="left" aria-hidden="true"></span> BACK / POWROT</button></div>
+ </div>
+</div>
+<div id="transition" aria-hidden="true"><div>THE CATROOMS<br><span id="transitionText">SCHODZISZ GLEBIEJ...</span></div></div><div id="jump"><img class="catImage" alt="Postac, ktora zlapala gracza"><div id="jumpName"></div></div>
+
+<script src="js/ui/icons.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/characters/actors.js"></script>
+<script src="js/core/navigation.js"></script>
+<script src="js/maps/level1.js"></script>
+<script src="js/maps/shared.js"></script>
+<script src="js/maps/level2.js"></script>
+<script src="js/maps/level3.js"></script>
+<script src="js/maps/navigable.js"></script>
+<script src="js/maps/level5.js"></script>
+<script src="js/characters/ai.js"></script>
+<script src="js/gameplay/campaign.js"></script>
+<script src="js/graphics/textures.js"></script>
+<script src="js/graphics/art-assets.js"></script>
+<script src="js/graphics/collectibles.js"></script>
+<script src="js/graphics/model-data.js"></script>
+<script src="js/graphics/webgpu.js"></script>
+<script src="js/graphics/minimap.js"></script>
+<script src="js/audio/sound.js"></script>
+<script src="js/progression/streak.js"></script>
+<script src="js/gameplay/procedural.js"></script>
+<script src="js/gameplay/hard.js"></script>
+<script src="js/gameplay/inventory.js"></script>
+<script src="js/network/coop.js"></script>
+<script src="js/gameplay/safe-room.js"></script>
+<script src="js/ui/interface.js"></script>
+<script src="js/ui/settings.js"></script>
+<script src="js/ui/player-profile.js"></script>
+<script src="js/ui/controls.js"></script>
+<script src="js/ui/pixel-menu.js"></script>
+<script src="js/admin/console.js"></script>
+<script src="js/core/boot.js"></script>
+<script src="js/ui/macabre-hud.js"></script>
+</body>
+</html>

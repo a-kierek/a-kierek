@@ -1,0 +1,169 @@
+/* THE CATROOMS / ARCHIVE OF CONTAMINATION
+   Final layer: stained steel, smeared blood, handprints, oily records,
+   torn paper and controlled CRT artifacts. All text/buttons remain usable. */
+:root{--blood-dark:#4e0a0b;--blood-fresh:#8b2520;--amber-dead:#b69a62;--metal:#151817;--paper:#beb39b}
+body{background:#030504;color:#e6d7be}
+#noise{opacity:.32!important;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(221,206,172,.040) 3px,transparent 4px)!important;animation:crtShiver .21s steps(2,end) infinite}
+#grain{opacity:.26!important;filter:contrast(200%) sepia(.25)}
+@keyframes crtShiver{0%,100%{transform:translate(0,0)}33%{transform:translate(.8px,-.4px)}66%{transform:translate(-.5px,.7px)}}
+@keyframes badBulb{0%,15%,17%,42%,44%,67%,69%,90%,100%{opacity:.08}16%,43%,68%{opacity:.26}91%{opacity:.14}}
+@keyframes faultyIndicator{0%,100%{opacity:.95}4%{opacity:.4}5%{opacity:.88}32%{opacity:.9}33%{opacity:.25}34%{opacity:.93}70%{opacity:.65}}
+@keyframes paperWaver{0%,100%{filter:brightness(1)}47%{filter:brightness(.96)}50%{filter:brightness(1.06)}}
+body:after{animation:badBulb 8.7s steps(1,end) infinite!important;background:radial-gradient(55% 27% at 52% -4%,rgba(243,215,154,.18),transparent 87%),linear-gradient(180deg,rgba(255,228,160,.09),transparent 27%)!important;mix-blend-mode:screen}
+/* Lightless, contaminated screen corners without blocking clicks */
+body:before{background:radial-gradient(ellipse at center,transparent 44%,rgba(0,0,0,.60) 100%),url('../assets/ui/handprints-ui.png') right top/35vw auto no-repeat,url('../assets/ui/blood-ui.png') left bottom/48vw auto no-repeat!important;opacity:.55!important;mix-blend-mode:multiply!important}
+#hud{font-family:Consolas,'Courier New',monospace!important}
+#hud:before{z-index:-1;background:linear-gradient(180deg,rgba(0,0,0,.35),transparent 26%,transparent 74%,rgba(0,0,0,.39)),radial-gradient(ellipse at center,transparent 42%,rgba(0,0,0,.58) 100%)!important}
+#hud:after{content:'';position:absolute;inset:0;background:url('../assets/ui/damage-ui.png') repeat/900px auto;mix-blend-mode:overlay;opacity:.20;pointer-events:none;z-index:-1}
+/* Stained metal surfaces share the same transparent textures. */
+#start .card,#pauseCard,#endCard,.dossierCard,.settingsCard,.coop-card,#adminConsole,#mapPanel{
+ border:1px solid rgba(137,114,77,.48)!important;border-radius:1px!important;
+ background:linear-gradient(110deg,rgba(7,9,9,.95),rgba(22,22,17,.96) 52%,rgba(5,6,6,.98)),url('../assets/ui/grease-ui.png') center/cover!important;
+ box-shadow:inset 0 0 45px rgba(0,0,0,.77),inset 0 1px 0 rgba(204,171,109,.06),0 2px 0 #070706,0 24px 95px rgba(0,0,0,.88)!important;
+}
+#start .card:before,#pauseCard:before,#endCard:before,.dossierCard:before,.settingsCard:before,.coop-card:before,#mapPanel:before{
+ content:''!important;position:absolute!important;inset:0!important;z-index:1!important;pointer-events:none!important;
+ background:url('../assets/ui/blood-ui.png') left top/100% 100% no-repeat,url('../assets/ui/grease-ui.png') right center/80% 100% no-repeat,url('../assets/ui/damage-ui.png') center/750px auto repeat!important;
+ opacity:.59!important;mix-blend-mode:normal!important;border:0!important;
+}
+#start .card:after,#pauseCard:after,#endCard:after,.dossierCard:after,.settingsCard:after{content:''!important;position:absolute!important;inset:0!important;pointer-events:none!important;z-index:1!important;background:url('../assets/ui/handprints-ui.png') right center/50% 90% no-repeat!important;opacity:.33!important;mix-blend-mode:multiply!important}
+#start .cardText,#pauseCard>*,#endCard>*,.dossierCard>*:not(style),.settingsCard>*{position:relative;z-index:3}
+#start .card{overflow:hidden}
+#start .cardText{background:linear-gradient(90deg,rgba(8,9,8,.57),rgba(12,11,9,.13))}
+#start .card h1,.dossierHead h1,#pauseCard h1,#endCard h1{font-family:Impact,'Arial Narrow',Consolas,sans-serif!important;text-transform:uppercase;letter-spacing:.035em!important;text-shadow:2px 2px 0 #1a110d,-1px 0 rgba(151,32,24,.24),0 6px 20px #000!important}
+#start .card h1 em,.dossierHead em{color:#b19b78!important;text-shadow:0 0 8px rgba(146,26,25,.18)!important}
+.kicker,.eyebrow,.barText,.sub,.menu-section,.tiny,.mapTitle{color:#b7a580!important;font-family:Consolas,'Courier New',monospace!important}
+/* Die-cut paper, overlaid like an evidence label. */
+#start .desc,.dossierHead p,.settings-hint{position:relative;padding:11px 12px!important;background:linear-gradient(155deg,rgba(135,119,93,.13),rgba(68,64,47,.13));border:1px dashed rgba(157,139,107,.30);clip-path:polygon(0 2%,3% 0,97% .7%,100% 4%,99% 96%,96% 100%,2% 99%,0 96%)}
+#start .desc:before{content:'';position:absolute;top:0;left:32%;width:65px;height:13px;background:linear-gradient(90deg,rgba(171,149,106,.26),rgba(215,195,151,.22));transform:rotate(-5deg);opacity:.7}
+#start .desc strong{color:#f2d0ad}
+/* Recreate HUD orientation from survival horror brief */
+#hud .topbar{position:absolute;top:0;left:0;right:0;padding:12px 20px;align-items:start;z-index:3}
+#hud .topbar:before{bottom:-3px;opacity:.35}
+#hud .logo{font-size:17px;opacity:.85;letter-spacing:.13em}
+#hud .sub{font-size:8px;margin-top:3px}
+#hud .hudRight{gap:5px}
+#hud .chip{padding:7px 9px;font-size:10px}
+#hud #mapToggle,#hud #soundToggle,#hud #settingsHudBtn{width:34px;min-width:34px;height:34px}
+#hud .bottombar{position:static;display:contents}
+#hud #hpWrap,#hud #staminaWrap,#hud .objective,#hud #fieldInventory,#hud #fieldAction{
+ position:absolute;pointer-events:none;border-radius:0!important;
+ background:linear-gradient(180deg,rgba(8,10,9,.94),rgba(17,15,12,.91))!important;
+ box-shadow:inset 0 0 22px #0009,0 8px 28px #000a!important;
+ border:1px solid rgba(126,101,70,.53)!important;
+}
+#hud #hpWrap,#hud #staminaWrap{left:20px!important;right:auto!important;width:min(260px,33vw)!important;min-width:130px!important;max-width:270px;align-self:auto!important;text-align:left!important;margin:0!important;padding:11px 15px}
+#hud #hpWrap{top:82px!important;border-left:3px solid #87302c!important}
+#hud #staminaWrap{top:140px!important;border-left:3px solid #977a45!important}
+#hud .bar{height:8px;background:rgba(24,19,17,.98);border:1px solid #614d3c;position:relative}
+#hud .bar:after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(103deg,rgba(12,0,0,.28) 0 3px,transparent 3px 10px)}
+#hud .hpBar{background:linear-gradient(90deg,#621313,#8c2922,#bd5141)!important;box-shadow:0 0 12px rgba(127,24,19,.22)}
+#hud #staminaFill{background:linear-gradient(90deg,#74633a,#a28c53,#d3b16e)!important}
+#hud #hpValue{color:#e9b2a5!important}
+#hud .objective{top:80px!important;right:20px!important;left:auto!important;bottom:auto!important;width:min(360px,35vw)!important;max-width:none!important;min-width:200px;padding:13px 16px;border-right:3px solid #74201d!important;border-left:1px solid rgba(126,101,70,.53)!important;z-index:2}
+#hud .objective:before{content:'[ AKTA / CEL OPERACYJNY ]'!important;font:700 9px Consolas,monospace;color:#a7655b;letter-spacing:.13em;margin-bottom:5px}
+#hud .goal{font-size:13px!important;line-height:1.35!important;max-width:100%;overflow-wrap:break-word}
+#hud #missionDetails{font-size:9px}
+#hud #stealthStatus{top:209px!important;left:20px!important;right:auto!important;font-size:10px!important}
+#hud #eventTag{top:220px!important;right:20px!important;text-align:right;font-size:10px}
+#hud #danger{top:248px!important;right:20px!important;left:auto!important;transform:none!important;max-width:340px;min-width:0;font-size:11px;animation:faultyIndicator 2.9s steps(1) infinite}
+#hud #fpsCounter{top:57px!important;right:20px!important}
+#hud #mapPanel{top:265px;right:20px;max-width:290px;z-index:6}
+#hud #fieldInventory{bottom:52px;left:20px;width:240px;max-width:40vw;padding:12px 15px;border-left:3px solid #5e251f!important;z-index:2}
+#hud #fieldInventory .f-inv-heading{font:700 9px Consolas,monospace;color:#ba9474;letter-spacing:.2em;margin-bottom:8px}
+#hud #fieldInventory .f-inv-main{display:flex;align-items:center;gap:10px;color:#f0d8bd;font:700 16px Consolas,monospace}
+#hud #fieldInventory .f-inv-main .ui-icon{width:21px;height:21px;color:#bf876e}
+#hud #fieldInventory .f-inv-bottom{color:#9c8871;font:700 10px Consolas,monospace;margin-top:7px;display:flex;gap:10px}
+#hud #fieldAction{bottom:52px;right:20px;width:220px;max-width:38vw;padding:12px 15px;border-right:3px solid #7c402c!important;text-align:right;z-index:2}
+#hud #fieldAction .f-action-title{color:#b29375;font:700 9px Consolas,monospace;letter-spacing:.16em}
+#hud #fieldAction .f-action-value{color:#e9d6b7;font:800 12px Consolas,monospace;line-height:1.3;margin-top:8px}
+#hud #interactHint{bottom:133px!important;right:20px!important;left:auto!important;top:auto!important;transform:none!important;max-width:340px;white-space:normal;text-align:right;font-size:11px!important;z-index:3}
+#hud #tipDesktop{bottom:3px;opacity:.65;font-size:9px}
+#hud #toast{top:20%;left:50%;transform:translateX(-50%);z-index:5}
+#hud #fieldInventory:before,#hud #fieldAction:before,#hud #hpWrap:before,#hud #staminaWrap:before,#hud .objective:after{
+ content:'';position:absolute;inset:0;pointer-events:none;z-index:0!important;
+ background:url('../assets/ui/blood-ui.png') center/100% 100% no-repeat,url('../assets/ui/grease-ui.png') center/cover no-repeat,url('../assets/ui/damage-ui.png') center/550px auto repeat!important;opacity:.39!important;
+}
+#hud #fieldInventory>* ,#hud #fieldAction>*,#hud #hpWrap>*,#hud #staminaWrap>*,#hud .objective>*{position:relative;z-index:1}
+/* Conspicuous smears on danger, not text */
+#hud #danger,#hud #interactHint,#hud #toast{border-color:rgba(138,40,30,.55)!important;background:linear-gradient(110deg,#1a0e0df0,#0b0d0cf1)!important}
+#hud #danger:after,#hud #interactHint:after,#hud #toast:after{background:url('../assets/ui/blood-ui.png') center/cover no-repeat;opacity:.36}
+#hud .chip,#hud #fieldInventory,#hud #fieldAction,#hud .objective,#hud #hpWrap,#hud #staminaWrap{
+ background-image:linear-gradient(180deg,rgba(18,17,15,.94),rgba(7,9,8,.96)),url('../assets/ui/damage-ui.png')!important;
+}
+/* Clipped, rusted control plates */
+button.primary,.settingsLaunch,.console-mini,#actionCluster>button{
+ border-color:rgba(143,102,68,.6)!important;border-radius:1px!important;
+ background:linear-gradient(180deg,#302921,#121412)!important;
+ text-shadow:0 1px 1px #000!important;
+}
+button.primary:focus-visible,.settingsLaunch:focus-visible,#actionCluster>button:focus-visible{outline:2px solid #d1aa7a;outline-offset:3px}
+#start .primary:not(:disabled):hover,.settingsLaunch:hover{box-shadow:inset 0 0 17px rgba(151,81,45,.20),0 0 13px rgba(129,36,28,.24)!important}
+/* CHRUM: oil/fat and old meatpacking stains over the grunge */
+body.pig-level #hud #fieldInventory:before,body.pig-level #hud #fieldAction:before,body.pig-level #hud #hpWrap:before,body.pig-level #hud #staminaWrap:before,body.pig-level #hud .objective:after{
+ background:url('../assets/ui/grease-ui.png') center/100% 100% no-repeat,url('../assets/ui/blood-ui.png') right center/70% auto no-repeat!important;opacity:.65!important
+}
+body.pig-level #hud .goal,body.pig-level #hud .f-inv-heading{color:#c4a05d!important}
+body.pig-level #hud #fieldInventory,body.pig-level #hud #fieldAction,body.pig-level #hud #staminaWrap,body.pig-level #hud .objective{border-color:#665a35!important}
+body.pig-level #hud #fieldInventory{border-left-color:#907634!important}
+body.pig-level::before{opacity:.6!important;background:radial-gradient(ellipse at center,transparent 45%,#0009),url('../assets/ui/grease-ui.png') center/100% auto no-repeat,url('../assets/ui/handprints-ui.png') right center/40vw auto no-repeat!important}
+body.pig-level #start .card:before,body.pig-level #pauseCard:before,body.pig-level #endCard:before{background:url('../assets/ui/grease-ui.png') center/cover no-repeat,url('../assets/ui/blood-ui.png') center/cover no-repeat!important}
+/* Devices: keep the entire game playable; don't cover the look zone or joystick */
+@media (pointer:coarse){
+ #hud #hpWrap{top:66px!important;left:10px!important;width:clamp(116px,26vw,188px)!important;padding:8px 9px}
+ #hud #staminaWrap{top:114px!important;left:10px!important;width:clamp(116px,26vw,188px)!important;padding:8px 9px}
+ #hud .objective{top:66px!important;right:10px!important;width:clamp(125px,35vw,215px)!important;min-width:0!important;padding:8px 9px}
+ #hud .goal{font-size:10px!important}
+ #hud #stealthStatus{top:162px!important;left:10px!important;font-size:8px!important}
+ #hud #eventTag{top:181px!important;right:10px!important;font-size:8px}
+ #hud #danger{top:205px!important;right:10px!important;font-size:9px}
+ #hud #fieldInventory{left:10px;bottom:clamp(171px,26vh,230px)!important;width:clamp(125px,30vw,195px)!important;padding:8px 9px}
+ #hud #fieldAction{right:10px;bottom:clamp(171px,26vh,230px)!important;width:clamp(125px,30vw,195px)!important;padding:8px 9px}
+ #hud #fieldInventory .f-inv-main{font-size:12px}
+ #hud #fieldAction .f-action-value{font-size:10px}
+ #hud #interactHint{right:10px!important;bottom:clamp(230px,33vh,285px)!important;max-width:190px}
+ #hud #tipDesktop{display:none!important}
+ #hud #toast{top:29%}
+ #hud #mapPanel{top:229px;right:9px}
+ #hud .topbar{padding:7px 10px}
+ #hud .logo{font-size:13px}
+ #hud #fpsCounter{top:46px!important;right:10px!important}
+}
+@media (pointer:coarse) and (max-height:490px){
+ #hud #fieldInventory,#hud #fieldAction{bottom:118px!important}
+ #hud #interactHint{bottom:183px!important}
+ #hud #danger{top:177px!important}
+ #hud #eventTag{top:148px!important}
+ #hud #hpWrap{top:55px!important}
+ #hud #staminaWrap{top:96px!important}
+ #hud .objective{top:55px!important}
+ #hud #stealthStatus{top:139px!important}
+ #hud #fieldInventory .f-inv-bottom{display:none}
+}
+@media (pointer:coarse) and (orientation:portrait){
+ #hud #fieldInventory,#hud #fieldAction{bottom:clamp(270px,37vh,390px)!important;max-width:47vw}
+ #hud #interactHint{bottom:clamp(325px,45vh,440px)!important}
+ #hud #toast{top:33%}
+}
+@media (prefers-reduced-motion:reduce){#noise,body:after,#danger{animation:none!important}}
+/* Final layout anchor: override inherited decorative position:relative. */
+#hud{position:fixed!important;inset:0!important;z-index:5!important;pointer-events:none!important}
+#hud .topbar{position:absolute!important}
+#hud .bottombar{display:contents!important}
+/* Restore positioning semantics for single-line readouts: previous UI skins
+   forced position:relative, which could stretch them across the viewport. */
+#hud #fpsCounter,#hud #stealthStatus,#hud #danger,#hud #eventTag,#hud #tipDesktop,#hud #interactHint,#hud #toast,#hud #mapPanel{position:absolute!important}
+#hud #fpsCounter{left:auto!important;right:20px!important;width:max-content!important;max-width:90px!important}
+#hud #stealthStatus{right:auto!important;width:max-content!important;max-width:270px!important}
+#hud #danger{left:auto!important;right:20px!important;width:max-content!important;max-width:min(340px,47vw)!important;animation:none!important}
+#hud #eventTag{left:auto!important;width:max-content!important;max-width:min(360px,50vw)!important}
+#hud #tipDesktop{left:50%!important;right:auto!important;transform:translateX(-50%)!important;width:max-content!important;max-width:calc(100vw - 16px)!important}
+#hud #toast{left:50%!important;right:auto!important;width:max-content;max-width:min(430px,85vw)}
+#hud #interactHint{left:auto!important;width:max-content!important}
+#hud #mapPanel{left:auto!important}
+@media(pointer:coarse){#hud #fpsCounter{right:10px!important}#hud #stealthStatus{max-width:180px!important}#hud #danger{right:10px!important}}
+/* Keep the optional rage toggle clear of the new health instruments. */
+@media(pointer:coarse){
+ #rageMobile{position:fixed!important;top:63px!important;left:50%!important;right:auto!important;bottom:auto!important;transform:translateX(-50%)!important;z-index:42!important;padding:8px 9px!important;font-size:9px!important;white-space:nowrap}
+}
+@media(pointer:coarse) and (max-height:430px){#rageMobile{top:58px!important}}

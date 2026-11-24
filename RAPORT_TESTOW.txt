@@ -1,0 +1,23 @@
+THE CATROOMS NORMAL / HARD - RAPORT TESTOW (2026-11-24)
+
+Testy automatyczne skladni: wszystkie skrypty w js/ przechodza node --check.
+
+Testy w Chromium z SYMULOWANYM WebGPU:
+- Inicjalizacja renderera i uruchomienie skryptow bez bledow JS.
+- Przeslanie warstw tekstur: 22 warstwy sprite (w tym 5 nowych napojow).
+- Przelacznik NORMAL/HARD, przycisk rozpoczecia, zmiana nazwy gracza.
+- Rozpoczecie HARD (level 6), mapa 89x89, 6 wariantow, 7 fizycznych przeciwnikow.
+- Wyswietlenie minimapy: canvas 440x440, zawartosc rysowana na ekranie.
+- Zolta anomalia: widzi gracza przy droznej linii wzroku; po zaslonieciu sciana nie spowalnia.
+- FAKE MONSTER: dokladnie jedna falszywa puszka; po podniesieniu spowolnienie na 15 s.
+- Ponowne uruchomienie NORMAL (level 1).
+- 65 seedow HARD: brak brakujacych celow, problemy osiagalnosci 0, dokladnie jeden fake na runde.
+- Losowe opoznienie zoltej anomalii: 30-90 sekund w testowanych seedach.
+- Poziomy 2, 3, 4, 5: odpowiednio 6, 8, 7, 6 osiagalnych celow; min. 3 napoje i jeden fake.
+- Brak bledow JS w przegladarce podczas testow.
+- Widok pionowy 390x844: scrollWidth=390, scrollHeight=844.
+- Widok poziomy 844x390: scrollWidth=844, scrollHeight=390; zawartosc menu mozna przewijac wewnetrznie (bez widocznego paska).
+
+UWAGA: Mock WebGPU potwierdza wywolania inicjalizacyjne i przesylanie danych, a nie
+rzeczywiste wykonanie shaderow WGSL ani finalny wyglad na natywnym GPU.
+Przegladarka w tym srodowisku nie udostepnia WebGPU. Test na komputerze z WebGPU jest nadal wymagany.

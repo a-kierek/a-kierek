@@ -1,0 +1,39 @@
+
+:root{--pixel-font:"Upheaval","Courier New",monospace}
+html,body,button,input,select,textarea,.logo,.goal,.chip,.barText,.settings-dialog,.dossierCard,.card,.pixel-hub,#adminConsole,#hud,#mapPanel{font-family:var(--pixel-font)!important;letter-spacing:.055em}
+button,input,select,textarea{font-size:max(15px,1em)}
+#start .pixel-shell, #start .pixel-shell *{font-family:var(--pixel-font)!important}
+#start .pixel-logo{letter-spacing:.06em!important}
+#start .pixel-level-button{font-size:clamp(19px,2.1vw,30px)!important}
+#start .pixel-nav-item{font-size:clamp(21px,2vw,32px)!important}
+#start .pixel-section-label{font-size:28px}
+#start .pixel-difficulty>span{font-size:22px}
+#start .difficulty-controls button{font-size:24px}
+#start .pixel-inline-scroll h3{font-size:23px}
+#start .pixel-inline-scroll .setting-slider,#start .pixel-inline-scroll .setting-check,#start .pixel-inline-scroll .setting-select{font-size:18px}
+#start .pixel-hub-head,#start .pixel-footer{font-size:18px}
+#start .pixel-records{font-size:19px}
+#start .pixel-profile label,#start .pixel-profile input{font-size:25px}
+#start .pixel-settings-note{font-size:18px}
+#start .pixel-shell:before{background-image:none!important}
+#start .pixel-shell{isolation:isolate}
+#start .pixel-shell:before{content:"";position:absolute;inset:0;background-image:none!important;z-index:1;pointer-events:none}
+#start .pixel-blood-decals{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+#start .pixel-blood-decals img{position:absolute;object-fit:contain;mix-blend-mode:multiply;filter:contrast(1.28) saturate(.76);opacity:.8}
+#start .pixel-hub,#start .pixel-splash{z-index:2}
+#start .pixel-side-nav:before{background-image:url('../assets/ui/menu-blood-handprint.png');opacity:.45}
+#versionBadge{position:fixed;bottom:max(8px,env(safe-area-inset-bottom));right:max(10px,env(safe-area-inset-right));z-index:100;color:#ba887a;font:20px "Upheaval",monospace;letter-spacing:.16em;pointer-events:none;text-shadow:1px 2px 0 #000;background:#0a0202c0;padding:3px 9px;border:1px solid #5a2321}
+body:has(#start.hidden) #versionBadge{z-index:9}
+#coinHud{position:fixed;left:max(14px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom));z-index:11;display:none;align-items:center;gap:8px;background:#140804e8;border:2px solid #9f7441;color:#f3df9e;padding:6px 12px;pointer-events:none;font:23px "Upheaval",monospace}
+body:has(#hud.show) #coinHud{display:flex}
+#coinHud img{width:29px;height:29px;object-fit:contain}
+#safeRoomLabel{position:fixed;top:45%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:6;color:#b2fac8;text-shadow:0 2px 10px #000;font:26px "Upheaval",monospace;display:none}
+body:has(#hud.show) #safeRoomLabel.visible{display:block}
+#hud .chip,#hud .goal,#hud .barText,#hud #toast,#hud #danger,#hud .signal{font-size:clamp(14px,1.3vw,23px)}
+#pauseCard,#endCard,.settings-dialog,.dossierCard,#adminConsole{background:linear-gradient(145deg,#1d0a0a,#090303 75%)!important;border:2px solid #74332d!important;box-shadow:inset 0 0 40px #350606b0,0 25px 80px #000d!important}
+#pauseCard h1,#endCard h1{font-size:clamp(43px,6vw,76px)}
+#pauseCard .primary,#endCard .primary,.dossierCard .primary{font-size:22px}
+#pauseCard,#endCard,.dossierCard,.settings-dialog{color:#eed8c3!important}
+#hud #interactHint{font-size:clamp(16px,1.4vw,24px)}
+#start .pixel-inline-scroll select{font-size:20px}
+@media(max-width:760px){#start .pixel-nav-item{font-size:20px!important}#start .pixel-level-button{font-size:18px!important}#start .pixel-hub-head,#start .pixel-footer{font-size:13px!important}#coinHud{bottom:120px;padding:3px 8px;font-size:17px}#versionBadge{font-size:16px}}

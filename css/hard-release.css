@@ -1,0 +1,32 @@
+
+/* HARD RELEASE: full-viewport menus; blood textures exclusively in main menu. */
+html,body{width:100%;height:100%;min-height:100dvh;margin:0;overflow:hidden}
+.modal:not(.hidden){position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;max-width:none!important;z-index:50;display:flex!important;align-items:center;justify-content:center;padding:0!important;background:#060807!important}
+#start .card,#pause .card,#ending .card{width:100vw!important;max-width:none!important;height:100dvh!important;min-height:100dvh!important;max-height:100dvh!important;margin:0!important;border-radius:0!important;border:0!important;overflow:auto!important;box-sizing:border-box}
+#start .card{display:grid!important;grid-template-columns:minmax(360px,54%) minmax(0,46%);align-items:stretch}
+#start .cardText{padding:clamp(18px,3vh,46px) clamp(22px,7vw,130px)!important;overflow-y:auto;max-height:100dvh;box-sizing:border-box}
+#start .faceSide{position:relative!important;inset:auto!important;width:100%!important;height:100dvh!important;opacity:1!important;display:flex!important;align-items:center;justify-content:center}
+#start .faceSide img{max-width:95%!important;max-height:92dvh!important;object-fit:contain!important}
+#pause .card,#ending .card{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:11px;padding:30px!important}
+#pause .card>*{max-width:560px}#ending .card>*{max-width:580px}
+#start .desc{display:none!important}
+/* No gore overlay on gameplay, HUD, pause, dossiers or settings. */
+body::before,body::after,#hud::before,#hud::after,.topbar::before,.bottombar::after{background-image:none!important;opacity:0!important;content:none!important}
+#hud #fieldInventory::before,#hud #fieldAction::before,#hud #hpWrap::before,#hud #staminaWrap::before,#hud .objective::after,#hud #danger::after,#hud #toast::after,#hud #interactHint::after,#hud #mapPanel::before,#hud .chip::after{background-image:none!important;opacity:0!important;content:none!important}
+#pause .card::before,#pause .card::after,#ending .card::before,#ending .card::after,.dossierCard::before,.dossierCard::after,.settingsCard::before,.settingsCard::after{background-image:none!important;opacity:0!important;content:none!important}
+#start .card::before{background:url('../assets/ui/blood-ui.png') left top/100% 100% no-repeat,url('../assets/ui/grease-ui.png') center/cover no-repeat!important;opacity:.62!important;content:''!important;display:block!important}
+#start .card::after{background:url('../assets/ui/handprints-ui.png') right center/50% 90% no-repeat!important;opacity:.34!important;content:''!important;display:block!important}
+#start:not(.hidden)::after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0 3px,#b9a79209 4px 5px);animation:crtShiver .25s steps(2,end) infinite;z-index:3}
+#start .cardText{position:relative;z-index:5}#start .faceSide{z-index:2}
+#start .primary,#start .settingsLaunch,#start .console-mini{position:relative;z-index:6}
+#noise,#grain{opacity:.03!important}#start:not(.hidden)~#noise{opacity:.25!important}
+#game{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;object-fit:fill}
+body.hard-level #hud .goal,body.hard-level #eventTag{color:#d69c89!important}
+#hardSlowBtn,#hardFreezeBtn{width:103px!important;height:43px!important;font-size:10px!important}
+#hardSlowBtn{right:116px!important;bottom:70px!important}#hardFreezeBtn{right:8px!important;bottom:70px!important}
+#hardSlowBtn[hidden],#hardFreezeBtn[hidden]{display:none!important}
+@media(max-width:700px){#start .card{grid-template-columns:1fr!important;display:block!important}#start .cardText{padding:19px!important;width:100%!important;max-height:100dvh!important}#start .faceSide{position:absolute!important;right:0!important;left:auto!important;top:0!important;width:48%!important;height:34vh!important;opacity:.28!important}#start .card h1{font-size:clamp(44px,12vw,72px)!important}#start .primary{font-size:10px}#pause .card,#ending .card{justify-content:center}#hardSlowBtn,#hardFreezeBtn{bottom:160px!important}}
+@media(prefers-reduced-motion:reduce){#start:not(.hidden)::after{animation:none}}
+
+#hardBtn{border-left:3px solid #892d2a!important;letter-spacing:.12em;transition:filter .14s ease}
+#hardBtn:not(:disabled):hover{filter:brightness(1.14) contrast(1.08)}
