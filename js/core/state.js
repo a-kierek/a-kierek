@@ -24,6 +24,10 @@ let customGameConfig={stage:1,size:65,difficulty:'normal',safeRooms:true,enemies
 const isHardMode=()=>gameSession.level>=6&&gameSession.level<=9||gameSession.level===11||gameSession.level===12||(gameSession.level===13&&customGameConfig?.difficulty==='hard');
 const hardStage=()=>gameSession.level===13?(customGameConfig?.stage||1):gameSession.level===12?(gameSession.bossRush?.stage||1):gameSession.level===11?5:isHardMode()?gameSession.level-5:0;
 const renderStage=()=>gameSession.level===13?(customGameConfig?.stage||1):gameSession.level===12?(gameSession.bossRush?.stage||1):gameSession.level===10?5:isHardMode()?hardStage():gameSession.level;
+function objectivePickupModel(item){
+ const stage=item.rushSector??renderStage();
+ return stage===1?'battery':stage===2?'card':null;
+}
 
 const BLOOD_DECAL_PNG='assets/decals/blood-realistic.png';
 const strangerImg=new Image();

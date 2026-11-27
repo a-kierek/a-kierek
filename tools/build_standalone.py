@@ -56,7 +56,7 @@ def combine(reader):
     return '\n;\n'.join('// SOURCE: '+path+'\n'+reader(path) for path in paths[:-1])+ready
 online = combine(script_source)
 (root/'js/game.bundle.js').write_text(online, encoding='utf-8')
-pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1\.2"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1\.2"></script>'
+pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1\.3"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1\.3"></script>'
 bundle = combine(lambda path: script_source(path, embed_assets=True))
 boot = script_source(paths[-1], embed_assets=True)
 text, count = re.subn(pattern, lambda _: '<script>\n'+bundle+'\n</script>\n<script>\n'+boot+'\n</script>', text)

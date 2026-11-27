@@ -56,6 +56,20 @@ check('diagonal walls and interaction target exceptions',()=>{
  run(fixture+`player.x=2.5;player.y=3.5;safeRoomFurniture=[{x:3.5,y:3.5,w:.69,d:.5,material:1}];interactables=[{type:'slot',x:3.5,y:3.5}];`);
  assert.equal(run('findInteractable().type'),'slot');
 });
+check('objective pickups require reach and clear sight, and keep their sector type',()=>{
+ run(fixture+`player={x:2.8,y:2.8,collected:0};world[2][3]=1;world[3][2]=1;
+  fuses=[{x:3.2,y:3.2}];GOAL=2;terminals=[];noiseEvents=[];`);
+ assert.equal(run('interact();Boolean(fuses[0].taken)'),false);
+ assert.equal(run('world[2][3]=0;world[3][2]=0;findInteractable().title'),'PICK UP CARD');
+ assert.equal(run('player.x=5;findInteractable()'),null);
+ assert.equal(run('player.x=2.8;pickupFacility();player.collected'),0);
+ assert.equal(run('interact();interact();player.collected'),1);
+ assert.equal(run('fuses[0].taken && UI.count.textContent===1'),true);
+ assert.equal(run(`level=12;bossRush={stage:2};objectivePickupModel({rushSector:1})`),'battery');
+ assert.equal(run('objectivePickupModel({rushSector:3})'),null);
+ run(fixture+`level=3;fuses=[{x:2.5,y:2.5}];player.collected=0;pickupFacility();`);
+ assert.equal(run('player.collected'),1);
+});
 check('shield and god mode, toxic damage, exact expiry, meltdown exception',()=>{
  run(fixture+`props=[{type:'hazard',x:2.5,y:2.5}];player.shieldUntil=12;elapsed=11.99;`);
  assert.equal(run('lose("cat")'),false);assert.equal(run('applyHazardsAndRegen(.02);player.hp'),100);

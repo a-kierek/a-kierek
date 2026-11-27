@@ -28,7 +28,7 @@
 <div id="loadingStatus">BOOTING...</div></div>
 </div>
 <canvas id="game"></canvas><div id="noise"></div><div id="grain"></div>
-<div id="graphicsDemoHint">GRAPHICS DEMO<span> · F TOGGLE LIGHT · E DOOR · ESC PAUSE</span></div>
+<div id="graphicsDemoHint">GRAPHICS DEMO<span> · F TOGGLE LIGHT · E INTERACT · ESC PAUSE</span></div>
 <div id="hud"><button aria-label="Show timer, hold M to enlarge the map" id="miniMapButton" type="button">MAP [M]</button>
 <div class="topbar"><div><div class="logo">THE <span>CATROOMS</span> <span style="font-size:11px;vertical-align:top">®</span></div><div class="sub"><span id="playerNameTag">PLAYER</span> · <span id="levelLabel">LEVEL 1 / YELLOW CORRIDORS</span></div></div><div class="hudRight"><div class="chip" title="Batteries"><span class="gem"><span aria-hidden="true" class="icon-slot" data-icon="battery"></span></span> <strong id="count">0</strong> / <span id="required">5</span></div><div class="chip" id="streakChip" title="Win streak"><span aria-hidden="true" class="icon-slot" data-icon="flame"></span> <strong id="streakCount">0</strong></div><div class="chip" id="seedChip" style="display:none">#<span id="seedText">0</span></div><div class="chip" id="timeChip"><span aria-hidden="true" class="icon-slot" data-icon="clock"></span> <span id="clock">00:00</span></div><button id="mapToggle" title="Map (M)"><span aria-hidden="true" class="icon-slot" data-icon="map"></span></button><button id="soundToggle" title="Sound"><span aria-hidden="true" class="icon-slot" data-icon="sound"></span></button><button aria-label="Settings" id="settingsHudBtn" title="Settings" type="button"><span aria-hidden="true" class="icon-slot" data-icon="settings"></span></button></div></div>
 <div class="coop-hud" id="coopHud" style="display:none"></div><div aria-label="Frames per second" id="fpsCounter" style="display:none">-- FPS</div><div class="crosshair"></div><div id="detectionWarning" role="status" aria-label="Detected" hidden><img alt="" src="assets/ui/detection-warning.png"/></div><div id="interactHint">[ E ] USE TERMINAL</div><div id="stealthStatus"><span aria-hidden="true" class="icon-slot" data-icon="dot"></span> UNDETECTED</div><div aria-live="polite" id="eventTag"></div><div id="danger"><span aria-hidden="true" class="icon-slot" data-icon="warning"></span> HE IS NEAR <span aria-hidden="true" class="icon-slot" data-icon="warning"></span></div><div id="toast"></div>
@@ -179,7 +179,7 @@
 <div class="player-profile pixel-profile"><label for="playerNameInput">PLAYER NAME</label><input aria-label="Player name" autocomplete="off" id="playerNameInput" maxlength="22" spellcheck="false" type="text" value="PLAYER"/></div>
 <div class="pixel-player-help">LOCAL PROFILE · CHANGES SAVE AUTOMATICALLY.</div><div id="profileStats" class="profile-grid"></div><div class="profile-detail"><h3>TIME RECORDS</h3><div id="profileRecords"></div><h3>ACHIEVEMENTS</h3><div id="profileAchievements"></div><h3>UNLOCKED CONTENT</h3><div id="profileUnlocks"></div><small>Activity totals are tracked from v1.6.2a. Existing campaign records and unlocks are retained.</small></div>
 </section>
-<section class="pixel-simple-panel" id="pixelCreditsPanel" hidden><div class="pixel-section-label">CREDITS</div><h2>THE CATROOMS / REFORGED!</h2><p>Original game and creative direction: THE CATROOMS project creator.</p><p>Custom WebGPU renderer · Reforged technical and interface updates.</p><p>Third-party assets are retained from the existing project.</p></section>
+<section class="pixel-simple-panel" id="pixelCreditsPanel" hidden><div class="pixel-section-label">CREDITS</div><h2>THE CATROOMS / REFORGED!</h2><p>Original game and creative direction: THE CATROOMS project creator.</p><p>Custom WebGPU renderer · Reforged technical and interface updates.</p><p><a href="https://sketchfab.com/3d-models/battery-4cab1d1dfcb54ab79230a0a8d44a087e">Battery</a> by hoschu, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Rescaled and converted for the game.</p></section>
 </main>
 </div>
 <footer class="pixel-footer" aria-hidden="true"></footer>
@@ -279,7 +279,7 @@ window.addEventListener('error', function(event){
   overlay.classList.add('load-failed');
 },true);
 </script>
-<script src="js/game.bundle.js?v=1.7.0-alpha.1.2"></script>
-<script src="js/core/boot.js?v=1.7.0-alpha.1.2"></script>
+<script src="js/game.bundle.js?v=1.7.0-alpha.1.3"></script>
+<script src="js/core/boot.js?v=1.7.0-alpha.1.3"></script>
 </body>
 </html>

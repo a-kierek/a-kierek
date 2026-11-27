@@ -5,4 +5,7 @@ const CATROOMS_MODEL_MESHES=Object.freeze({
  slot:'assets/models/slot-optimized.mesh',
  rock:'assets/models/rock-optimized.mesh',
  door:'assets/models/door-optimized.mesh',
+ battery:'assets/models/pickups/battery.mesh',
+ card:'assets/models/pickups/card.mesh',
 });
+const MODEL_BATTERY_ALBEDO='assets/models/pickups/battery-albedo.webp';

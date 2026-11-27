@@ -129,7 +129,7 @@ html body #pause #pauseCard,html body #ending #endCard{width:min(470px,100%)!imp
  letter-spacing: .08em;
 }
 .graphics-demo #hud { visibility: hidden; }
-.graphics-demo #hud.show #fpsCounter { visibility: visible; }
+.graphics-demo #hud.show #fpsCounter, .graphics-demo #hud.show #interactHint { visibility: visible; }
 .graphics-demo #coinHud, .graphics-demo #safeRoomLabel { display: none !important; }
 @media (pointer: coarse) {
  #graphicsDemoHint span { display: none; }

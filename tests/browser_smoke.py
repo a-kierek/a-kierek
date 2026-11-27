@@ -34,7 +34,7 @@ with sync_playwright() as p:
  page.wait_for_function("window.CatroomsGraphicsStatus?.backend==='webgpu' && typeof gameSession!=='undefined' && gameSession.world.length>0",timeout=15000)
  assert page.evaluate("window.CatroomsScriptsReady===true && !window.CatroomsStartupError && typeof bossRushVisible==='function' && typeof resetBossRush==='function'")
  assert page.evaluate("!document.getElementById('loadingScreen')?.classList.contains('load-failed')")
- assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===19 && !!gpuRenderer.modelMeshes.door && !!gpuRenderer.modelMeshes.rock")
+ assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===21 && ['door','rock','battery','card'].every(kind=>gpuRenderer.modelMeshes[kind]?.indexCount>0)")
  assert page.evaluate("gpuRenderer.loadedSpriteLayers[1].width>0 && gpuRenderer.loadedSpriteLayers[1].height>0")
  assert page.evaluate("$('bossRushBtn').hidden===!bossRushVisible()")
  # New v1.7.0-alpha.1 release UI and title music checks.
@@ -86,6 +86,28 @@ with sync_playwright() as p:
  gameSession.player.x=p.x+step[0];gameSession.player.y=p.y+step[1];gameSession.player.a=Math.atan2(-step[1],-step[0]);gameSession.resetInterpolation();gpuRenderer.render();const submitted=gpuRenderer.visibleDecor().some(q=>q===p)&&gpuRenderer.stats.triangles>=DECOR_MODELS[p.model].triangles;
  setState('menu');return submitted;})()""")
  print('PASS environment model render submission and shared shadow buffer')
+ assert page.evaluate("""(()=>{
+  for(const [level,model] of [[1,'battery'],[2,'card']]){
+   begin(level,{testRun:true});
+   const s=gameSession,item=s.fuses[0],player=s.player;
+   Object.assign(player,{x:item.x,y:item.y,a:0,pitch:-.75});
+   update(0);
+   if(item.taken||player.collected!==0)return false;
+   if($('interactHint').textContent!=='[ E ] PICK UP '+model.toUpperCase())return false;
+   s.resetInterpolation();
+   const visible=()=>gpuRenderer.visiblePickups(captureRenderCamera()).some(p=>p.item===item&&p.model===model);
+   if(!visible())return false;
+   gpuRenderer.render();
+   if(gpuRenderer.stats.triangles<gpuRenderer.modelMeshes[model].indexCount/3)return false;
+   if(level===1)window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'}));
+   else $('interactBtn').click();
+   if(!item.taken||player.collected!==1||visible()||Number(UI.count.textContent)!==1)return false;
+   if(level===1&&s.wakeAt!==s.elapsed+5)return false;
+   setState('menu');
+  }
+  return true;
+ })()""")
+ print('PASS 3D floor pickups, E and touch interaction, objective count and enemy wake timer')
  assert page.evaluate("""(()=>{begin(1,{testRun:true});const exp=gpuRenderer.worldGeometry;
  if(!exp.available||exp.enabled)return false;
  window.dispatchEvent(new KeyboardEvent('keydown',{code:'F8'}));gpuRenderer.render();

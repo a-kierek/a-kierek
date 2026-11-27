@@ -257,6 +257,10 @@ let customGameConfig={stage:1,size:65,difficulty:'normal',safeRooms:true,enemies
 const isHardMode=()=>gameSession.level>=6&&gameSession.level<=9||gameSession.level===11||gameSession.level===12||(gameSession.level===13&&customGameConfig?.difficulty==='hard');
 const hardStage=()=>gameSession.level===13?(customGameConfig?.stage||1):gameSession.level===12?(gameSession.bossRush?.stage||1):gameSession.level===11?5:isHardMode()?gameSession.level-5:0;
 const renderStage=()=>gameSession.level===13?(customGameConfig?.stage||1):gameSession.level===12?(gameSession.bossRush?.stage||1):gameSession.level===10?5:isHardMode()?hardStage():gameSession.level;
+function objectivePickupModel(item){
+ const stage=item.rushSector??renderStage();
+ return stage===1?'battery':stage===2?'card':null;
+}
 
 const BLOOD_DECAL_PNG='assets/decals/blood-realistic.png';
 const strangerImg=new Image();
@@ -1095,7 +1099,44 @@ function updateGuard(g,dt,idx=0){
 
 ;
 // SOURCE: js/gameplay/campaign.js
-function pickup(){for(let f of gameSession.fuses){if(f.taken)continue;if(Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)<.64&&lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y)){f.taken=true;gameSession.player.collected++;UI.count.textContent=gameSession.player.collected;playPickup();gameSession.flashUntil=gameSession.elapsed+.3;if(!gameSession.awake&&gameSession.wakeAt===Infinity){gameSession.wakeAt=gameSession.elapsed+5;showToast('⚡ BATTERY FOUND · SOMETHING WOKE UP',4)}else showToast('⚡ FOUND BATTERIES '+gameSession.player.collected+'/'+gameSession.GOAL);if(gameSession.player.collected>=gameSession.GOAL){UI.goal.textContent='FIND THE GREEN EXIT';showToast('✓ POWER RESTORED · ESCAPE!',5);playUnlock()}}}}
+function collectObjectivePickup(item){
+ item.taken=true;
+ playPickup();
+ if(gameSession.graphicsDemo)return;
+
+ const progress=++gameSession.player.collected;
+ UI.count.textContent=progress;
+ const total=gameSession.GOAL;
+ gameSession.flashUntil=gameSession.elapsed+(gameSession.level===1?.3:.22);
+ if(gameSession.level===1){
+  if(!gameSession.awake&&gameSession.wakeAt===Infinity){
+   gameSession.wakeAt=gameSession.elapsed+5;
+   showToast('⚡ BATTERY FOUND · SOMETHING WOKE UP',4);
+  }else showToast(`⚡ FOUND BATTERIES ${progress}/${total}`);
+  if(progress>=total){
+   UI.goal.textContent='FIND THE GREEN EXIT';
+   showToast('✓ POWER RESTORED · ESCAPE!',5);
+   playUnlock();
+  }
+  return;
+ }
+
+ const model=objectivePickupModel(item);
+ const label=model==='card'?'▣ CARD':model==='battery'?'⚡ BATTERY':gameSession.level===4?'FOOD':gameSession.level===10?'DOWODY':gameSession.level===5?'✧ FOUND':'✦ CORE';
+ showToast(`${label} ${progress}/${total}`,2.9);
+ addNoise(item.x,item.y,gameSession.level===3?8:5,'zbieranie');
+}
+
+const interactionLabels={
+ lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
+ door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR / 45 SECONDS'
+};
+function showInteractionHint(target,fallback='AKTYWUJ PANEL'){
+ gameSession.interactReady=target;
+ const hint=$('interactHint');
+ hint.style.display=target?'block':'none';
+ if(target)hint.textContent='[ E ] '+(target.type==='pickup'?target.title:interactionLabels[target.type]||fallback);
+}
 
 function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.textContent=formatTime(gameSession.clock);if(gameSession.elapsed>gameSession.toastTimeout)UI.toast.classList.remove('visible');if(!gameSession.awake&&gameSession.elapsed>=gameSession.wakeAt){gameSession.awake=true;showToast('⚠ IT HEARS YOU. KEEP MOVING.',4);playSting()}
  updateLevel1Tutorial();
@@ -1110,9 +1151,8 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  UI.stamina.style.width=staminaWidth();
  if(gameSession.player.moving){let t=dt*speed/Math.max(1,len);move(gameSession.player,(forward*dirX+strafe*sX)*t,(forward*dirY+strafe*sY)*t,.22);gameSession.walkPhase+=dt*(sprint?14:9);}else gameSession.walkPhase*=Math.max(0,1-dt*7);
  if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
- pickup();pickupCoins();updateCoinCounter();updateSeen();
- gameSession.interactReady=findInteractable();$('interactHint').style.display=gameSession.interactReady?'block':'none';
- if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='lockedExit'?'CHECK EXIT':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':'UZYJ');
+ pickupCoins();updateCoinCounter();updateSeen();
+ showInteractionHint(findInteractable(),'UZYJ');
  if(applyHazardsAndRegen(dt))return;
  if(gameSession.awake){updateGuard(gameSession.cat,dt,0);let distance=Math.hypot(gameSession.cat.x-gameSession.player.x,gameSession.cat.y-gameSession.player.y);gameSession.nearCat=distance;UI.danger.style.opacity=distance<5?String(clamp((5-distance)/2,0,1)):'0';if(distance<.67&&!isSafeRoomProtected()&&lineOfSight(gameSession.cat.x,gameSession.cat.y,gameSession.player.x,gameSession.player.y)&&lose())return;
  }else{gameSession.nearCat=Infinity;UI.danger.style.opacity=0}
@@ -1127,10 +1167,8 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
 
 function pickupFacility(){
   for(let f of gameSession.fuses){
-    if(f.taken||Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)>.66||!lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y))continue;
-    f.taken=true;gameSession.player.collected++;UI.count.textContent=gameSession.player.collected;playPickup();gameSession.flashUntil=gameSession.elapsed+.22;
-    showToast(gameSession.level===2?`▣ CARD ${gameSession.player.collected}/${gameSession.GOAL}`:gameSession.level===4?`FOOD ${gameSession.player.collected}/${gameSession.GOAL}`:gameSession.level===10?`DOWODY ${gameSession.player.collected}/${gameSession.GOAL}`:gameSession.level===5?`✧ FOUND ${gameSession.player.collected}/${gameSession.GOAL}`:`✦ CORE ${gameSession.player.collected}/${gameSession.GOAL}`,2.9);
-    addNoise(f.x,f.y,gameSession.level===3?8:5,'zbieranie');
+    if(f.taken||objectivePickupModel(f)||Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)>.66||!lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y))continue;
+    collectObjectivePickup(f);
   }
   for(let item of gameSession.bonusItems){
     if(item.taken||Math.hypot(gameSession.player.x-item.x,gameSession.player.y-item.y)>.67||!lineOfSight(gameSession.player.x,gameSession.player.y,item.x,item.y))continue;
@@ -1150,6 +1188,10 @@ function pickupFacility(){
 function findInteractable(){
   if(gameSession.player.hidden)return{type:'unhide',title:'LEAVE HIDING PLACE'};
   const all=[];
+  for(const item of gameSession.fuses){
+    const model=!item.taken&&objectivePickupModel(item);
+    if(model)all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:model==='battery'?'PICK UP BATTERY':'PICK UP CARD'});
+  }
   for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
   const exit=gameSession.exitCell;
   if(gameSession.world[exit.y]?.[exit.x]===3&&
@@ -1161,18 +1203,24 @@ function findInteractable(){
   all.sort((a,b)=>Math.hypot(gameSession.player.x-a.x,gameSession.player.y-a.y)-Math.hypot(gameSession.player.x-b.x,gameSession.player.y-b.y));
   return all.find(o=>{
     const gate=o.type==='door'||o.type==='lockedExit';
-    return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<(gate?1.65:1.4)&&
+    const range=o.type==='pickup'?1.1:gate?1.65:1.4;
+    return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<range&&
       lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:o.type==='slot'});
   })||null;
 }
 
 function interact(){
   if(gameSession.state!=='playing')return;
+  const target=findInteractable();
+  if(target?.type==='pickup'){
+    collectObjectivePickup(target.ref);
+    if(!gameSession.graphicsDemo&&gameSession.level!==1)updateObjectiveFacility();
+    return;
+  }
   if(gameSession.graphicsDemo){
     if(toggleGraphicsDemoDoor())playDoorMovement(gameSession.safeRoom.open);
     return;
   }
-  const target=findInteractable();
   if(target?.type==='safeDoor'){safeRoomInteraction(target.ref);return;}
   if(target?.type==='slot'){slotMachineSpin(target.ref);return;}
   if(target?.type==='lockedExit'){
@@ -1246,9 +1294,7 @@ function updateFacility(dt,finalMode){
   if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
   pickupFacility();updateCoinCounter();updateSeen();if(applyHazardsAndRegen(dt))return;
   gameSession.noiseEvents=gameSession.noiseEvents.filter(e=>e.expiry>gameSession.elapsed);
-  gameSession.interactReady=findInteractable();
-  $('interactHint').style.display=gameSession.interactReady?'block':'none';
-  if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':gameSession.interactReady.type==='lockedExit'?'CHECK EXIT':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='door'?'OPEN / CHECK GATE':gameSession.interactReady.type==='hide'?'HIDE':gameSession.interactReady.type==='unhide'?'WYJDZ':gameSession.interactReady.type==='stairs'?'TAKE STAIRS':gameSession.interactReady.type==='repair'?'REPAIR REACTOR / 45 SECONDS':'AKTYWUJ PANEL');
+  showInteractionHint(findInteractable());
   gameSession.guardSight=Math.max(0,gameSession.guardSight-dt);gameSession.guardNoise=Math.max(0,gameSession.guardNoise-dt);
   let closest=Infinity;
   for(let i=0;i<gameSession.guards.length;i++){
@@ -1409,7 +1455,10 @@ const CATROOMS_MODEL_MESHES=Object.freeze({
  slot:'assets/models/slot-optimized.mesh',
  rock:'assets/models/rock-optimized.mesh',
  door:'assets/models/door-optimized.mesh',
+ battery:'assets/models/pickups/battery.mesh',
+ card:'assets/models/pickups/card.mesh',
 });
+const MODEL_BATTERY_ALBEDO='assets/models/pickups/battery-albedo.webp';
 
 ;
 // SOURCE: js/graphics/decor-data.js
@@ -2422,12 +2471,12 @@ struct MeshVertexOut {
  let pixel=vec2i(floor(input.position.xy));
  if(any(pixel<vec2i(0))||any(pixel>=vec2i(frame.viewport.xy))){discard;}
  let wall=textureLoad(wallDistance,pixel,0).r*WALL_DEPTH_SCALE;
- // Wall-mounted decor can be thinner than the original mesh bias. Keep
- // only enough clearance for quantization of the half-float terrain depth.
- let bias=select(.025,max(.001,wall/2048.),input.kind==5u);
+ // Wall decor and floor pickups can be thinner than the original mesh bias.
+ // Keep only enough clearance for quantization of the half-float terrain depth.
+ let bias=select(.025,max(.001,wall/2048.),input.kind>=5u);
  if(input.depth>wall-bias){discard;}
  var base=input.tint;
- if(input.kind==1u||input.kind==3u||input.kind==5u){
+ if(input.kind==1u||input.kind==3u||input.kind==5u||input.kind==6u){
    base*=textureSampleLevel(slotAlbedo,albedoSampler,input.uv,0.).rgb;
  }
  if(input.kind==4u){base=mix(base,vec3f(.82,.74,.50),.45);} if(input.kind==4u&&input.unlocked>.5){base=mix(base,vec3f(.28,.72,.38),.72);}
@@ -2731,7 +2780,7 @@ class CatroomsPostProcessing {
 // SOURCE: js/graphics/webgpu.js
 // THE CATROOMS / WebGPU scene renderer.
 // This is a real GPU ray-caster: WGSL draws walls, floor, ceiling and ground decals.
-// Characters and pickups use a GPU instanced billboard pass; imported GLBs use
+// Characters and sprite items use a GPU instanced billboard pass; imported GLBs use
 // a separate textured triangular-mesh pass, with wall and mesh depth testing.
 
 
@@ -2748,6 +2797,8 @@ const GPU_WALL_H=256;
 const GPU_TILE_SIZE=64;
 const GPU_MAX_DECALS=256;
 const GPU_MAX_SPRITES=256;
+const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32};
+const PICKUP_MESH_KINDS={battery:6,card:7};
 // The order of the atlas is a single contract for upload and projection.
 function spriteLayerSources(){return [catImg,pigImg,personBImg,personAImg,fuseImg,keycardImg,foodImg,terminalImg,lockerArt,stairArt,staminaArt,shieldArt,extraPickupArt,coopAvatarArt,slowDeviceImg,freezeDeviceImg,...energyDrinkImgs,hardRockArt,coinSprite,slotMachineSprite,strangerImg];}
 const SPRITE_LAYER=Object.freeze({cat:0,pig:1,watcher:2,listener:3,terminal:7,hide:8,stairs:9,stamina:10,shield:11,key:12,coopAvatar:13,hardSlow:14,hardFreeze:15,rock:21,coin:22,slot:23,stranger:24});
@@ -2783,9 +2834,11 @@ class CatroomsWebGPURenderer {
       primitive:{topology:'triangle-list',cullMode:'none'},
       depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
     this.modelMeshes={};
-    this.rushPoseBuffers={slot:[],campfire:[],tree:[],rock:[],door:[],decor:[]};
-    for(const kind of ['slot','campfire','tree','rock','door','decor'])for(let index=0;index<(kind==='rock'||kind==='decor'?64:kind==='door'?16:4);index++)this.rushPoseBuffers[kind].push(device.createBuffer({
-      size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}));
+    this.rushPoseBuffers={};
+    for(const [kind,count] of Object.entries(MESH_POSE_COUNTS)){
+      this.rushPoseBuffers[kind]=Array.from({length:count},()=>device.createBuffer({
+        size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}));
+    }
     this.surfaceDetails=null;this.surfaceDetailError=null;this.hdMaterials=null;this.hdEnabled=false;this.hdError=null;this.materialRevision=0;
     this.lastWidth=0;this.lastHeight=0;this.needsRender=true;this.pendingFrames=0;
     this.frameData=new Float32Array(RENDER_FRAME.floats);this.lightingEnabled=true;this.wallShadowsEnabled=true;this.flashlightEnabled=true;this.flashlightState=null;
@@ -2844,28 +2897,26 @@ class CatroomsWebGPURenderer {
   async buildModels(){
     this.modelShadows=new CatroomsModelShadows(this.device);
     const shadowData=[];
-    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(DECOR_MODELS)]){
+    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(PICKUP_MESH_KINDS),...Object.keys(DECOR_MODELS)]){
       const mesh=await AssetManager.mesh(kind);
       const vertexBuffer=this.device.createBuffer({size:mesh.vertexData.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
       const indexBuffer=this.device.createBuffer({size:mesh.indexData.byteLength,usage:GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST});
       this.device.queue.writeBuffer(vertexBuffer,0,mesh.vertexData);
       this.device.queue.writeBuffer(indexBuffer,0,mesh.indexData);
       this.modelMeshes[kind]={vertexBuffer,indexBuffer,indexCount:mesh.indices};
-      if(kind!=='campfire')this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
+      if(kind!=='campfire'&&!PICKUP_MESH_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
     }
     this.modelShadows.initialize(shadowData);
-    const albedoImage=new Image();albedoImage.src=MODEL_SLOT_ALBEDO_PNG;
-    await albedoImage.decode();
-    this.modelAlbedoTexture=this.device.createTexture({size:[albedoImage.naturalWidth,albedoImage.naturalHeight],
-      format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
-    this.device.queue.copyExternalImageToTexture({source:albedoImage},
-      {texture:this.modelAlbedoTexture},[albedoImage.naturalWidth,albedoImage.naturalHeight,1]);
-    const rockImage=new Image();rockImage.src=MODEL_ROCK_ALBEDO;await rockImage.decode();
-    this.rockAlbedoTexture=this.device.createTexture({size:[rockImage.naturalWidth,rockImage.naturalHeight],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
-    this.device.queue.copyExternalImageToTexture({source:rockImage},{texture:this.rockAlbedoTexture},[rockImage.naturalWidth,rockImage.naturalHeight,1]);
-    const decorImage=new Image();decorImage.src=DECOR_ALBEDO;await decorImage.decode();
-    this.decorAlbedoTexture=this.device.createTexture({size:[decorImage.naturalWidth,decorImage.naturalHeight],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
-    this.device.queue.copyExternalImageToTexture({source:decorImage},{texture:this.decorAlbedoTexture},[decorImage.naturalWidth,decorImage.naturalHeight,1]);
+    this.meshAlbedoTextures={};
+    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO}).map(async ([kind,src])=>{
+      const image=new Image();
+      image.src=src;
+      await image.decode();
+      const size=[image.naturalWidth,image.naturalHeight];
+      const texture=this.device.createTexture({size,format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+      this.device.queue.copyExternalImageToTexture({source:image},{texture},[...size,1]);
+      this.meshAlbedoTextures[kind]=texture;
+    }));
   }
   toggleHdMaterials(){
     if(!this.hdMaterials)return false;
@@ -2906,20 +2957,23 @@ class CatroomsWebGPURenderer {
       {binding:4,resource:{buffer:this.spriteBuffer}},{binding:5,resource:{buffer:this.mapBuffer}},
       {binding:6,resource:{buffer:this.modelShadows.buffer}}
     ]});
-    this.rushMeshBinds={slot:[],campfire:[],tree:[],rock:[],door:[],decor:[]};
-    for(const kind of ['slot','campfire','tree','rock','door','decor'])for(let index=0;index<this.rushPoseBuffers[kind].length;index++)this.rushMeshBinds[kind].push(this.device.createBindGroup({
-      layout:this.meshPipeline.getBindGroupLayout(0),entries:[
-        {binding:0,resource:{buffer:this.frameBuffer}},
-        {binding:1,resource:{buffer:this.rushPoseBuffers[kind][index]}},
-        {binding:2,resource:(kind==='decor'?this.decorAlbedoTexture:kind==='rock'?this.rockAlbedoTexture:this.modelAlbedoTexture).createView()},
-        {binding:3,resource:this.spriteSampler},
-        {binding:4,resource:this.distanceTexture.createView()},{binding:5,resource:{buffer:this.mapBuffer}},
-        {binding:6,resource:{buffer:this.modelShadows.buffer}}
-      ]}));
+    this.rushMeshBinds={};
+    for(const [kind,buffers] of Object.entries(this.rushPoseBuffers)){
+      const albedo=(this.meshAlbedoTextures[kind]??this.meshAlbedoTextures.slot).createView();
+      this.rushMeshBinds[kind]=buffers.map(buffer=>this.device.createBindGroup({
+        layout:this.meshPipeline.getBindGroupLayout(0),entries:[
+          {binding:0,resource:{buffer:this.frameBuffer}},
+          {binding:1,resource:{buffer}},
+          {binding:2,resource:albedo},
+          {binding:3,resource:this.spriteSampler},
+          {binding:4,resource:this.distanceTexture.createView()},{binding:5,resource:{buffer:this.mapBuffer}},
+          {binding:6,resource:{buffer:this.modelShadows.buffer}}
+        ]}));
+    }
   }
   collectSprites(camera=captureRenderCamera()){
     const sprites=[];
-    for(const f of gameSession.fuses)if(!f.taken)sprites.push({kind:'fuse',x:f.x,y:f.y,phase:f.phase||0});
+    for(const f of gameSession.fuses)if(!f.taken&&!objectivePickupModel(f))sprites.push({kind:'fuse',x:f.x,y:f.y,phase:f.phase||0});
     if(gameSession.level===1&&gameSession.awake){const p=gameSession.renderPosition(gameSession.cat);sprites.push({kind:'cat',x:p.x,y:p.y,frozen:!!gameSession.cat.frozen});}
     for(const a of coop.avatarSprites())sprites.push({kind:'coopAvatar',x:a.x,y:a.y});
     for(const item of gameSession.bonusItems)if(!item.taken&&item.type==='coin')sprites.push({kind:'coin',x:item.x,y:item.y});
@@ -3071,6 +3125,18 @@ class CatroomsWebGPURenderer {
     return gameSession.props.filter(p=>p.type==='decor'&&Math.hypot(p.x-camera.x,p.y-camera.y)<28&&this.modelInView(p.x,p.y,(p.radius??DECOR_MODELS[p.model].radius)+.1,camera))
       .sort((a,b)=>Math.hypot(a.x-camera.x,a.y-camera.y)-Math.hypot(b.x-camera.x,b.y-camera.y)).slice(0,64);
   }
+  visiblePickups(camera){
+    const visible=[];
+    for(const item of gameSession.fuses){
+      if(item.taken)continue;
+      const model=objectivePickupModel(item);
+      if(!model||!this.modelMeshes[model]||Math.hypot(item.x-camera.x,item.y-camera.y)>28||
+         !this.modelInView(item.x,item.y,.35,camera))continue;
+      visible.push({item,model});
+      if(visible.length===MESH_POSE_COUNTS.pickup)break;
+    }
+    return visible;
+  }
   roomPose(room,kind){
     if(kind==='campfire')return [room.fireX,room.fireY,0,.68,1,0,0,0];
     const slot=kind==='slot';
@@ -3200,7 +3266,8 @@ class CatroomsWebGPURenderer {
     const rocks=this.visibleRocks(camera);
     const doors=this.doorPoses(camera);
     const decor=this.visibleDecor(camera);
-    const drawMeshes=!!((rooms.length||rocks.length||doors.length||decor.length)&&this.modelMeshes.slot&&this.modelMeshes.campfire&&this.modelMeshes.tree&&this.modelMeshes.rock&&this.modelMeshes.door);
+    const pickups=this.visiblePickups(camera);
+    const drawMeshes=!!((rooms.length||rocks.length||doors.length||decor.length||pickups.length)&&this.modelMeshes.slot&&this.modelMeshes.campfire&&this.modelMeshes.tree&&this.modelMeshes.rock&&this.modelMeshes.door);
     if(drawMeshes){
       for(let i=0;i<rooms.length;i++)for(const kind of ['slot','campfire','tree']){
         const pose=this.roomPose(rooms[i],kind);
@@ -3209,6 +3276,10 @@ class CatroomsWebGPURenderer {
       for(let i=0;i<rocks.length;i++)this.writePose('rock',i,this.rockPose(rocks[i]));
       for(let i=0;i<doors.length;i++)this.writePose('door',i,doors[i]);
       for(let i=0;i<decor.length;i++)this.writePose('decor',i,this.decorPose(decor[i]));
+      for(const [index,{item,model}] of pickups.entries()){
+        const angle=item.phase||0;
+        this.writePose('pickup',index,[item.x,item.y,0,1,Math.cos(angle),Math.sin(angle),PICKUP_MESH_KINDS[model],0]);
+      }
       const meshPass=encoder.beginRenderPass({label:'Imported world meshes',
         colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
         depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:'clear',depthClearValue:1,depthStoreOp:'store'}});
@@ -3234,6 +3305,13 @@ class CatroomsWebGPURenderer {
         const m=this.modelMeshes[p.model];
         if(meshKind!==p.model){meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');meshKind=p.model;}
         meshPass.setBindGroup(0,this.rushMeshBinds.decor[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
+      }
+      for(const [index,{model}] of pickups.entries()){
+        const mesh=this.modelMeshes[model];
+        meshPass.setBindGroup(0,this.rushMeshBinds.pickup[index]);
+        meshPass.setVertexBuffer(0,mesh.vertexBuffer);
+        meshPass.setIndexBuffer(mesh.indexBuffer,'uint32');
+        meshPass.drawIndexed(mesh.indexCount);this.stats.triangles+=mesh.indexCount/3;
       }
       meshPass.end();
     }
@@ -4950,6 +5028,8 @@ function updateGraphicsDemo(dt){
   gameSession.walkPhase+=dt*9;
   updateSeen();
  }
+ const target=findInteractable();
+ showInteractionHint(target?.type==='pickup'?target:null);
 }
 
 function graphicsDemoDoorInReach(scene=gameSession){

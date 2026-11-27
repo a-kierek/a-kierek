@@ -1,4 +1,41 @@
-function pickup(){for(let f of gameSession.fuses){if(f.taken)continue;if(Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)<.64&&lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y)){f.taken=true;gameSession.player.collected++;UI.count.textContent=gameSession.player.collected;playPickup();gameSession.flashUntil=gameSession.elapsed+.3;if(!gameSession.awake&&gameSession.wakeAt===Infinity){gameSession.wakeAt=gameSession.elapsed+5;showToast('⚡ BATTERY FOUND · SOMETHING WOKE UP',4)}else showToast('⚡ FOUND BATTERIES '+gameSession.player.collected+'/'+gameSession.GOAL);if(gameSession.player.collected>=gameSession.GOAL){UI.goal.textContent='FIND THE GREEN EXIT';showToast('✓ POWER RESTORED · ESCAPE!',5);playUnlock()}}}}
+function collectObjectivePickup(item){
+ item.taken=true;
+ playPickup();
+ if(gameSession.graphicsDemo)return;
+
+ const progress=++gameSession.player.collected;
+ UI.count.textContent=progress;
+ const total=gameSession.GOAL;
+ gameSession.flashUntil=gameSession.elapsed+(gameSession.level===1?.3:.22);
+ if(gameSession.level===1){
+  if(!gameSession.awake&&gameSession.wakeAt===Infinity){
+   gameSession.wakeAt=gameSession.elapsed+5;
+   showToast('⚡ BATTERY FOUND · SOMETHING WOKE UP',4);
+  }else showToast(`⚡ FOUND BATTERIES ${progress}/${total}`);
+  if(progress>=total){
+   UI.goal.textContent='FIND THE GREEN EXIT';
+   showToast('✓ POWER RESTORED · ESCAPE!',5);
+   playUnlock();
+  }
+  return;
+ }
+
+ const model=objectivePickupModel(item);
+ const label=model==='card'?'▣ CARD':model==='battery'?'⚡ BATTERY':gameSession.level===4?'FOOD':gameSession.level===10?'DOWODY':gameSession.level===5?'✧ FOUND':'✦ CORE';
+ showToast(`${label} ${progress}/${total}`,2.9);
+ addNoise(item.x,item.y,gameSession.level===3?8:5,'zbieranie');
+}
+
+const interactionLabels={
+ lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
+ door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR / 45 SECONDS'
+};
+function showInteractionHint(target,fallback='AKTYWUJ PANEL'){
+ gameSession.interactReady=target;
+ const hint=$('interactHint');
+ hint.style.display=target?'block':'none';
+ if(target)hint.textContent='[ E ] '+(target.type==='pickup'?target.title:interactionLabels[target.type]||fallback);
+}
 
 function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.textContent=formatTime(gameSession.clock);if(gameSession.elapsed>gameSession.toastTimeout)UI.toast.classList.remove('visible');if(!gameSession.awake&&gameSession.elapsed>=gameSession.wakeAt){gameSession.awake=true;showToast('⚠ IT HEARS YOU. KEEP MOVING.',4);playSting()}
  updateLevel1Tutorial();
@@ -13,9 +50,8 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  UI.stamina.style.width=staminaWidth();
  if(gameSession.player.moving){let t=dt*speed/Math.max(1,len);move(gameSession.player,(forward*dirX+strafe*sX)*t,(forward*dirY+strafe*sY)*t,.22);gameSession.walkPhase+=dt*(sprint?14:9);}else gameSession.walkPhase*=Math.max(0,1-dt*7);
  if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
- pickup();pickupCoins();updateCoinCounter();updateSeen();
- gameSession.interactReady=findInteractable();$('interactHint').style.display=gameSession.interactReady?'block':'none';
- if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='lockedExit'?'CHECK EXIT':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':'UZYJ');
+ pickupCoins();updateCoinCounter();updateSeen();
+ showInteractionHint(findInteractable(),'UZYJ');
  if(applyHazardsAndRegen(dt))return;
  if(gameSession.awake){updateGuard(gameSession.cat,dt,0);let distance=Math.hypot(gameSession.cat.x-gameSession.player.x,gameSession.cat.y-gameSession.player.y);gameSession.nearCat=distance;UI.danger.style.opacity=distance<5?String(clamp((5-distance)/2,0,1)):'0';if(distance<.67&&!isSafeRoomProtected()&&lineOfSight(gameSession.cat.x,gameSession.cat.y,gameSession.player.x,gameSession.player.y)&&lose())return;
  }else{gameSession.nearCat=Infinity;UI.danger.style.opacity=0}
@@ -30,10 +66,8 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
 
 function pickupFacility(){
   for(let f of gameSession.fuses){
-    if(f.taken||Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)>.66||!lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y))continue;
-    f.taken=true;gameSession.player.collected++;UI.count.textContent=gameSession.player.collected;playPickup();gameSession.flashUntil=gameSession.elapsed+.22;
-    showToast(gameSession.level===2?`▣ CARD ${gameSession.player.collected}/${gameSession.GOAL}`:gameSession.level===4?`FOOD ${gameSession.player.collected}/${gameSession.GOAL}`:gameSession.level===10?`DOWODY ${gameSession.player.collected}/${gameSession.GOAL}`:gameSession.level===5?`✧ FOUND ${gameSession.player.collected}/${gameSession.GOAL}`:`✦ CORE ${gameSession.player.collected}/${gameSession.GOAL}`,2.9);
-    addNoise(f.x,f.y,gameSession.level===3?8:5,'zbieranie');
+    if(f.taken||objectivePickupModel(f)||Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)>.66||!lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y))continue;
+    collectObjectivePickup(f);
   }
   for(let item of gameSession.bonusItems){
     if(item.taken||Math.hypot(gameSession.player.x-item.x,gameSession.player.y-item.y)>.67||!lineOfSight(gameSession.player.x,gameSession.player.y,item.x,item.y))continue;
@@ -53,6 +87,10 @@ function pickupFacility(){
 function findInteractable(){
   if(gameSession.player.hidden)return{type:'unhide',title:'LEAVE HIDING PLACE'};
   const all=[];
+  for(const item of gameSession.fuses){
+    const model=!item.taken&&objectivePickupModel(item);
+    if(model)all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:model==='battery'?'PICK UP BATTERY':'PICK UP CARD'});
+  }
   for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
   const exit=gameSession.exitCell;
   if(gameSession.world[exit.y]?.[exit.x]===3&&
@@ -64,18 +102,24 @@ function findInteractable(){
   all.sort((a,b)=>Math.hypot(gameSession.player.x-a.x,gameSession.player.y-a.y)-Math.hypot(gameSession.player.x-b.x,gameSession.player.y-b.y));
   return all.find(o=>{
     const gate=o.type==='door'||o.type==='lockedExit';
-    return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<(gate?1.65:1.4)&&
+    const range=o.type==='pickup'?1.1:gate?1.65:1.4;
+    return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<range&&
       lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:o.type==='slot'});
   })||null;
 }
 
 function interact(){
   if(gameSession.state!=='playing')return;
+  const target=findInteractable();
+  if(target?.type==='pickup'){
+    collectObjectivePickup(target.ref);
+    if(!gameSession.graphicsDemo&&gameSession.level!==1)updateObjectiveFacility();
+    return;
+  }
   if(gameSession.graphicsDemo){
     if(toggleGraphicsDemoDoor())playDoorMovement(gameSession.safeRoom.open);
     return;
   }
-  const target=findInteractable();
   if(target?.type==='safeDoor'){safeRoomInteraction(target.ref);return;}
   if(target?.type==='slot'){slotMachineSpin(target.ref);return;}
   if(target?.type==='lockedExit'){
@@ -149,9 +193,7 @@ function updateFacility(dt,finalMode){
   if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
   pickupFacility();updateCoinCounter();updateSeen();if(applyHazardsAndRegen(dt))return;
   gameSession.noiseEvents=gameSession.noiseEvents.filter(e=>e.expiry>gameSession.elapsed);
-  gameSession.interactReady=findInteractable();
-  $('interactHint').style.display=gameSession.interactReady?'block':'none';
-  if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':gameSession.interactReady.type==='lockedExit'?'CHECK EXIT':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='door'?'OPEN / CHECK GATE':gameSession.interactReady.type==='hide'?'HIDE':gameSession.interactReady.type==='unhide'?'WYJDZ':gameSession.interactReady.type==='stairs'?'TAKE STAIRS':gameSession.interactReady.type==='repair'?'REPAIR REACTOR / 45 SECONDS':'AKTYWUJ PANEL');
+  showInteractionHint(findInteractable());
   gameSession.guardSight=Math.max(0,gameSession.guardSight-dt);gameSession.guardNoise=Math.max(0,gameSession.guardNoise-dt);
   let closest=Infinity;
   for(let i=0;i<gameSession.guards.length;i++){

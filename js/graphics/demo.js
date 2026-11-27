@@ -85,6 +85,8 @@ function updateGraphicsDemo(dt){
   gameSession.walkPhase+=dt*9;
   updateSeen();
  }
+ const target=findInteractable();
+ showInteractionHint(target?.type==='pickup'?target:null);
 }
 
 function graphicsDemoDoorInReach(scene=gameSession){

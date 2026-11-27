@@ -5,6 +5,7 @@
 - **Offline** — otwórz plik `THE_CATROOMS_V1_7_ALPHA1.html` w aktualnym Chrome lub Edge z WebGPU. Plik zawiera grę i wszystkie potrzebne zasoby.
 - **Projekt** — rozpakuj cały katalog projektu. Uruchom `START_HOST_WINDOWS.bat`, `./START_HOST_MAC_LINUX.sh` lub `node server/server.js` i wejdź na `http://localhost:8765`. Endpoint `/health` zwraca wersję `1.7.0-alpha.1`.
 - Zapisy w przeglądarce zależą od ścieżki pliku offline lub adresu serwera. Aktualizacja projektu nie zmienia kluczy kampanii ani profilu.
+- Podejdź do baterii lub karty na podłodze i naciśnij `E`, aby ją podnieść. Na ekranie dotykowym użyj przycisku interakcji.
 
 ## Grafika i benchmark
 
