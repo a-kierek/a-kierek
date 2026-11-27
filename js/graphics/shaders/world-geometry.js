@@ -1,0 +1,56 @@
+// Rasterize the nearest world surface: forward depth, cell, surface tag.
+const WORLD_GEOMETRY_WGSL=/* wgsl */ `
+${FRAME_WGSL}
+${DEPTH_WGSL}
+${PROJECTION_WGSL}
+@group(0) @binding(0) var<uniform> frame:SceneFrame;
+struct WallVertex {
+ @builtin(position) position:vec4f,
+ @location(0) depth:f32,
+ @location(1) @interpolate(flat) cell:vec3f,
+};
+@vertex fn vertex(@location(0) point:vec3f,@location(1) cell:vec3f)->WallVertex {
+ let coords=cameraCoords(point,frame);
+ let depth=coords.z;
+ var out:WallVertex;
+ out.position=cameraClip(coords,frame);
+ out.depth=depth;out.cell=cell;
+ return out;
+}
+@fragment fn fragment(input:WallVertex)->@location(0) vec4f {
+ return vec4f(max(VIEW_NEAR,input.depth),input.cell);
+}
+`;
+// Reuse all the established surface materials and gameplay screen effects.
+// The alternate fragment has no grid traversal loop; rasterized surfaces
+// determine visibility. Evaluate exact horizontal plane depth for shading
+// instead of reconstructing UVs from quantized half-float depth.
+function geometryTerrainSource(){
+ const start=TERRAIN_WGSL.indexOf(' var cell=vec2i(floor(frame.player.xy));');
+ const end=TERRAIN_WGSL.indexOf(' let wallPoint=',start);
+ if(start<0||end<0)throw Error('Terrain shader contract changed');
+ const source='@group(0) @binding(11) var geometryHits:texture_2d<f32>;\n'+
+ TERRAIN_WGSL.slice(0,start)+` let rasterHit=textureLoad(geometryHits,vec2i(pixel.xy),0);
+ let hasSurface=rasterHit.x>0.;
+ let hasWall=hasSurface && rasterHit.w<1.5 && rasterHit.x<=surfaceDepth+max(.002,surfaceDepth*.0005);
+ let hasPlane=hasSurface && rasterHit.w>=1.5;
+ let cell=vec2i(rasterHit.yz);
+ let side=i32(rasterHit.w);
+ let hit=tileAt(cell.x,cell.y);
+ var distance=select(WALL_DEPTH_SCALE,rasterHit.x,hasWall);
+`+TERRAIN_WGSL.slice(end);
+ const oldResolve='result=sceneryAt(pixel.xy,ray3);\n   distance=surfaceDepth;';
+ if(!source.includes(oldResolve))throw Error('Terrain surface resolve contract changed');
+ return source.replace(oldResolve,`if(hasPlane){
+     let isFloor=rasterHit.w<2.5;
+     // Raster tag selects the actual visible quad; use exact depth for
+     // stable material coordinates, lighting and sprite occlusion.
+     distance=planeDepth(ray3);
+     result=scenerySurface(ray3,isFloor,distance);
+   }else{
+     // Preserve the classic distant fog/near clip fallback when no triangle
+     // covers the pixel (including views beyond VIEW_FAR).
+     result=sceneryAt(pixel.xy,ray3);
+     distance=surfaceDepth;
+   }`);
+}

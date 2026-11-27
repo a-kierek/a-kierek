@@ -3,6 +3,7 @@
 // BLYSK (watcher) and SZEPT (listener) use the supplied voice lines with distance attenuation.
 const SFX_FILES = {
   pickup: 'assets/audio/battery-charge.wav',
+  metalCrack: 'assets/audio/metal-crack.mp3',
   coinPickup: 'assets/audio/coin-pickup.mp3',
   coinSlot: 'assets/audio/coin-slot.wav',
   safeMusic: 'assets/audio/safe-room/lift-music.mp3',
@@ -23,7 +24,10 @@ const SFX_FILES = {
   blyskPijany: 'assets/audio/voices/blysk-pijany.mp3',
   appearScream: 'assets/audio/jumpscares/appear-scream-loud.wav',
   hardHeartbeat:'assets/audio/hard/heartbeat.mp3',
-  hardSqueal:'assets/audio/hard/pig-squeal-horror.mp3'
+  hardSqueal:'assets/audio/hard/pig-squeal-horror.mp3',
+  menuMusic:'assets/audio/music/menu-ambient.mp3',
+  gameMusic:'assets/audio/music/game-ambient.mp3',
+  chaseMusic:'assets/audio/music/chase-trailer.mp3'
 };
 const VOICE_LINES = Object.freeze({
   listener: ['szeptJadymy', 'szeptNieLubi', 'szeptVamos'],
@@ -33,6 +37,8 @@ const sfxTemplates = Object.create(null);
 const activeEnemySounds = [];
 let walkingAudio = null, walkingPlaying = false, lossScreamAudio = null, hardHeartbeatAudio = null, hardHeartbeatPlaying = false;
 const safeRoomTracks={music:null,fire:null};
+const bgTracks={menu:null,game:null,chase:null};
+let menuMusicUnlocked=false;
 const activeOneShots=new Set();
 function audioCategory(id){
  if(id==='appearScream')return 'jumpscare';
@@ -52,6 +58,7 @@ function refreshAudioMix(){
  for(const [kind,track] of Object.entries(safeRoomTracks))if(track){
    track.volume=clamp((track._baseVolume||0)*audioMix(kind==='music'?'ambient':'effects'),0,1);
  }
+ for(const [id,a] of Object.entries(bgTracks))if(a)a.volume=clamp((a._baseVolume||0)*audioMix(id==='chase'?'effects':'ambient'),0,1);
  for(const node of ambientNodes)node.gain.gain.value=node.baseGain*audioMix('ambient');
 }
 
@@ -62,7 +69,7 @@ function preloadGameSounds() {
   for (const [id, url] of Object.entries(SFX_FILES)) {
     if (sfxTemplates[id]) continue;
     const audio = new Audio();
-    audio.preload = 'auto';
+    audio.preload = ['menuMusic','gameMusic','chaseMusic','safeMusic','safeCrackle'].includes(id)?'none':'auto';
     audio.src = url;
     sfxTemplates[id] = audio;
   }
@@ -120,6 +127,7 @@ function stopWalkingSound() {
 }
 
 function stopGameSounds() {
+ for(const id of ['game','chase'])if(bgTracks[id])bgTracks[id].pause();
   stopSafeRoomTracks();
   if(hardHeartbeatAudio){hardHeartbeatAudio.pause();hardHeartbeatPlaying=false;}
   stopEnemySounds();
@@ -139,11 +147,11 @@ function initAudio() {
     }
     audioCtx.resume();
     if (ambientNodes.length) return;
-    for (const freq of (level === 3 ? [47.5, 71.5, 95.2] : level === 2 ? [41.2, 82.5, 125.1] : [59.9, 119.7, 60.3])) {
+    for (const freq of (gameSession.level === 3 ? [47.5, 71.5, 95.2] : gameSession.level === 2 ? [41.2, 82.5, 125.1] : [59.9, 119.7, 60.3])) {
       const o = audioCtx.createOscillator(), gain = audioCtx.createGain(), filter = audioCtx.createBiquadFilter();
       o.type = 'sine'; o.frequency.value = freq;
       filter.type = 'lowpass'; filter.frequency.value = 200;
-      const baseGain=level === 3 ? (freq < 60 ? .026 : .013) : level === 2 ? (freq < 50 ? .023 : .012) : (freq < 60 ? .018 : .01);
+      const baseGain=gameSession.level === 3 ? (freq < 60 ? .026 : .013) : gameSession.level === 2 ? (freq < 50 ? .023 : .012) : (freq < 60 ? .018 : .01);
       gain.gain.value=baseGain*audioMix('ambient');
       o.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination); o.start();
       ambientNodes.push({o,gain,baseGain});
@@ -164,11 +172,8 @@ function sound(freq = 320, dur = .13, type = 'sine', volume = .11, slide = 0) {
   o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + dur + .01);
 }
 
-// Footsteps are handled by syncWalkingAudio() each frame, not replayed as long 4s clips.
-function playStep() {}
-
 function syncWalkingAudio() {
-  if (state !== 'playing' || muted || !player.moving || player.hidden) {
+  if (gameSession.state !== 'playing' || muted || !gameSession.player.moving || gameSession.player.hidden) {
     stopWalkingSound(); return;
   }
   if (!walkingAudio) {
@@ -177,9 +182,9 @@ function syncWalkingAudio() {
     walkingAudio.loop = true;
     walkingAudio.preload = 'auto';
   }
-  const running = !crouching && !!(keys.ShiftLeft || keys.ShiftRight || touchRun);
-  walkingAudio.playbackRate = crouching ? .72 : running ? 1.42 : 1;
-  walkingAudio._baseVolume = crouching ? .16 : running ? .33 : .26;
+  const running = !gameSession.crouching && !!(keys.ShiftLeft || keys.ShiftRight || touchRun);
+  walkingAudio.playbackRate = gameSession.crouching ? .72 : running ? 1.42 : 1;
+  walkingAudio._baseVolume = gameSession.crouching ? .16 : running ? .33 : .26;
   walkingAudio.volume = clamp(walkingAudio._baseVolume*audioMix('effects'),0,1);
   if (!walkingPlaying) {
     walkingPlaying = true;
@@ -189,7 +194,7 @@ function syncWalkingAudio() {
 }
 
 function playPickup() {
-  if (!createGameSample('pickup', .64)) sound(430, .18, 'triangle', .12, 260);
+  if (!createGameSample('pickup', .16)) sound(430, .18, 'triangle', .06, 260);
 }
 function playHurt(){ if(!createGameSample('hurt', .72, 1)) sound(180,.22,'square',.18,-70); }
 function playUnlock() { sound(380, .6, 'sawtooth', .08, 500); }
@@ -200,17 +205,17 @@ function playWin() { sound(550, .25, 'triangle', .16, 200); setTimeout(() => sou
 // Volume falls smoothly from near distance to silence beyond maxRange;
 // a wall between player and monster dampens the sound further.
 function enemyAudibility(monster, maxRange = 19) {
-  const dx = monster.x - player.x, dy = monster.y - player.y;
+  const dx = monster.x - gameSession.player.x, dy = monster.y - gameSession.player.y;
   const dist = Math.hypot(dx, dy);
   if (dist >= maxRange) return 0;
   const normalized = clamp((maxRange - dist) / (maxRange - 1.5), 0, 1);
   let gain = Math.pow(normalized, 1.65);
-  if (dist > 3 && !lineOfSight(monster.x, monster.y, player.x, player.y)) gain *= .57;
+  if (dist > 3 && !lineOfSight(monster.x, monster.y, gameSession.player.x, gameSession.player.y)) gain *= .57;
   return clamp(gain, 0, 1);
 }
 
 function playEnemySample(id, monster, volume, rate, maxRange = 19, isVoice = false) {
-  if (!monster || muted || state !== 'playing') return false;
+  if (!monster || muted || gameSession.state !== 'playing') return false;
   if (isVoice && activeEnemySounds.some(s => s.monster === monster && s.isVoice && !s.audio.ended)) return false;
   const audibility = enemyAudibility(monster, maxRange);
   if (audibility < .012 || activeEnemySounds.length >= 8) return false;
@@ -221,7 +226,7 @@ function playEnemySample(id, monster, volume, rate, maxRange = 19, isVoice = fal
 }
 
 function updateEnemyAudio(dt) {
-  if (muted || state !== 'playing') { stopGameSounds(); return; }
+  if (muted || gameSession.state !== 'playing') { stopGameSounds(); return; }
   for (let i = activeEnemySounds.length - 1; i >= 0; i--) {
     const s = activeEnemySounds[i];
     if (s.audio.ended || s.audio.error) { s.audio.pause(); activeOneShots.delete(s.audio); activeEnemySounds.splice(i, 1); continue; }
@@ -232,24 +237,24 @@ function updateEnemyAudio(dt) {
       s.audio.pause(); activeOneShots.delete(s.audio); activeEnemySounds.splice(i, 1);
     }
   }
-  const monsters = level === 1 ? (awake ? [cat] : []) : guards;
+  const monsters = gameSession.level === 1 ? [...(gameSession.awake ? [gameSession.cat] : []),...gameSession.guards] : gameSession.guards;
   for (const monster of monsters) {
     const lines = VOICE_LINES[monster.kind];
     if (lines) {
       // The three lines of each character play in a shuffled starting order,
       // then rotate. No doubling up while a longer line is still playing.
       if (monster._voiceCursor === undefined) monster._voiceCursor = Math.floor(Math.random() * lines.length);
-      if (monster._nextVoiceAt === undefined) monster._nextVoiceAt = elapsed + 1.5 + Math.random() * 3;
-      if (elapsed >= monster._nextVoiceAt) {
+      if (monster._nextVoiceAt === undefined) monster._nextVoiceAt = gameSession.elapsed + 1.5 + Math.random() * 3;
+      if (gameSession.elapsed >= monster._nextVoiceAt) {
         const voiceId = lines[monster._voiceCursor % lines.length];
         const playing = activeEnemySounds.some(s => s.monster === monster && s.isVoice && !s.audio.ended);
         if (!playing) {
           if (playEnemySample(voiceId, monster, monster.kind === 'listener' ? .64 : .67, 1, 23, true)) {
             monster._voiceCursor++;
-            monster._nextVoiceAt = elapsed + (monster.state === 'chase' ? 8.5 : 13) + Math.random() * 3.5;
+            monster._nextVoiceAt = gameSession.elapsed + (monster.state === 'chase' ? 8.5 : 13) + Math.random() * 3.5;
           } else {
             // Retest soon after the player approaches the sound's radius.
-            monster._nextVoiceAt = elapsed + 2;
+            monster._nextVoiceAt = gameSession.elapsed + 2;
           }
         }
       }
@@ -264,11 +269,11 @@ function updateEnemyAudio(dt) {
         if(isHardMode()&&monster.kind==='pig')playEnemySample('hardSqueal',monster,.68,1.0,32);
         playEnemySample('beast', monster, monster.kind === 'pig' ? .72 : .52,
           monster.kind === 'pig' ? .73 : 1.16, 22);
-        monster._nextVoiceAt = elapsed + (monster.kind === 'pig' ? 2.3 : 3.0);
+        monster._nextVoiceAt = gameSession.elapsed + (monster.kind === 'pig' ? 2.3 : 3.0);
       }
     }
-    if (monster._nextVoiceAt === undefined) monster._nextVoiceAt = elapsed + 1.5 + Math.random() * 2.8;
-    if (elapsed < monster._nextVoiceAt) continue;
+    if (monster._nextVoiceAt === undefined) monster._nextVoiceAt = gameSession.elapsed + 1.5 + Math.random() * 2.8;
+    if (gameSession.elapsed < monster._nextVoiceAt) continue;
     if (monster.kind === 'pig') {
       // Low grunts/oinks while patrolling; piercing squeal when hunting.
       if (chasing) playEnemySample('pigSqueal', monster, .61, .85, 18);
@@ -277,7 +282,7 @@ function updateEnemyAudio(dt) {
       playEnemySample(chasing ? 'catVeryAngry' : 'catAngry', monster,
         chasing ? .58 : .41, chasing ? 1.06 : 1.12, chasing ? 19 : 14);
     }
-    monster._nextVoiceAt = elapsed + (chasing ? 5.2 : 7.4) + Math.random() * 2.6;
+    monster._nextVoiceAt = gameSession.elapsed + (chasing ? 5.2 : 7.4) + Math.random() * 2.6;
   }
 }
 
@@ -288,8 +293,8 @@ function playPigSnort(monster) {
 
 
 function syncHardHeartbeat(){
- const active=isHardMode()&&(guards.some(g=>g.state==='chase'&&!g.frozen)||!!hardEmergency);
- if(!active||muted||state!=='playing'){
+ const active=isHardMode()&&(gameSession.guards.some(g=>g.state==='chase'&&!g.frozen&&(gameSession.level!==12||g.rushSector===gameSession.bossRush?.stage))||!!gameSession.hardEmergency);
+ if(!active||muted||gameSession.state!=='playing'){
   if(hardHeartbeatAudio){hardHeartbeatAudio.pause();hardHeartbeatPlaying=false;}return;
  }
  if(!hardHeartbeatAudio){
@@ -297,7 +302,7 @@ function syncHardHeartbeat(){
   hardHeartbeatAudio=sfxTemplates.hardHeartbeat.cloneNode(true);
   hardHeartbeatAudio.loop=true;hardHeartbeatAudio.preload='auto';
  }
- const chase=guards.some(g=>g.state==='chase'&&!g.frozen);
+ const chase=gameSession.guards.some(g=>g.state==='chase'&&!g.frozen&&(gameSession.level!==12||g.rushSector===gameSession.bossRush?.stage));
  hardHeartbeatAudio._baseVolume=chase?.24:.15;
  hardHeartbeatAudio.volume=clamp(hardHeartbeatAudio._baseVolume*audioMix('effects'),0,1);
  if(!hardHeartbeatPlaying){
@@ -315,11 +320,11 @@ function stopSafeRoomTracks(){
   for(const track of Object.values(safeRoomTracks))if(track)track.pause();
 }
 function syncSafeRoomAudio(dt){
-  if(!safeRoom||state!=='playing'||muted){stopSafeRoomTracks();return;}
-  const room=safeRoom;
-  const inside=player.x>room.left&&player.x<room.left+room.side-1&&player.y>room.top&&player.y<room.top+room.side-1;
-  const doorDist=Math.hypot(player.x-room.doorX-.5,player.y-room.doorY-.5);
-  const fireDist=Math.hypot(player.x-room.fireX,player.y-room.fireY);
+  const room=bossRushNearestRoom();
+  if(!room||gameSession.state!=='playing'||muted){stopSafeRoomTracks();return;}
+  const inside=gameSession.player.x>room.left&&gameSession.player.x<room.left+room.side-1&&gameSession.player.y>room.top&&gameSession.player.y<room.top+room.side-1;
+  const doorDist=Math.hypot(gameSession.player.x-room.doorX-.5,gameSession.player.y-room.doorY-.5);
+  const fireDist=Math.hypot(gameSession.player.x-room.fireX,gameSession.player.y-room.fireY);
   const musicTarget=inside?.20:room.open?.055*Math.max(0,1-doorDist/7):0;
   let fireTarget=.51*Math.pow(Math.max(0,1-fireDist/10),1.5);
   if(!inside&&!room.open)fireTarget*=.08;
@@ -341,12 +346,47 @@ function syncSafeRoomAudio(dt){
 }
 
 function syncGameAudio(dt) {
-  if (state !== 'playing' || muted) { stopGameSounds(); return; }
+  syncBackgroundTracks(dt);
+  if (gameSession.state !== 'playing' || muted) { stopGameSounds(); return; }
   syncWalkingAudio();
   updateEnemyAudio(dt);
   syncHardHeartbeat();
   syncSafeRoomAudio(dt);
 }
 
-function playCoinPickup(){createGameSample('coinPickup',.55,1);}
-function playCoinSlot(){createGameSample('coinSlot',.70,1);}
+function playCoinPickup(){createGameSample('coinPickup',.16,1);}
+function playCoinSlot(){createGameSample('coinSlot',.49,1);}
+
+
+function unlockMenuMusic(){
+ menuMusicUnlocked=true;preloadGameSounds();
+ for(const track of Object.values(bgTracks))if(track)track._autoplayBlocked=false;
+ syncBackgroundTracks(.16);
+}
+function syncBackgroundTracks(dt=.04){
+ if(!menuMusicUnlocked)return;
+ const chase=gameSession.state==='playing'&&(gameSession.guards.some(g=>g.state==='chase'&&!g.frozen&&g.variant!=='gray'&&
+   (gameSession.level!==12||g.rushSector===gameSession.bossRush?.stage))||(gameSession.level===1&&gameSession.awake&&gameSession.cat?.state==='chase'));
+ const targets={
+  menu:gameSession.state==='menu'?.25:0,
+  game:gameSession.state==='playing'?(chase?.055:.23):0,
+  chase:chase?.35:0
+ };
+ for(const [id,key,category] of [['menu','menuMusic','ambient'],['game','gameMusic','ambient'],['chase','chaseMusic','effects']]){
+   let a=bgTracks[id];
+   if(!a&&sfxTemplates[key]&&!muted&&targets[id]>.002){
+     a=sfxTemplates[key].cloneNode(true);a.loop=true;a.preload='auto';a._baseVolume=0;
+     bgTracks[id]=a;
+   }
+   if(!a)continue;
+   const target=muted?0:targets[id];
+   a._baseVolume+=(target-a._baseVolume)*Math.min(1,Math.max(dt,.016)*3.3);
+   a.volume=clamp(a._baseVolume*audioMix(category),0,1);
+   if(target>.002&&a.paused&&!a._playPending&&!a._autoplayBlocked){
+     a._playPending=true;
+     try{Promise.resolve(a.play()).catch(()=>{a._autoplayBlocked=true;}).finally(()=>{a._playPending=false;});}
+     catch(e){a._playPending=false;a._autoplayBlocked=true;}
+   }
+   if(target<=.002&&a._baseVolume<.008&&!a.paused)a.pause();
+ }
+}

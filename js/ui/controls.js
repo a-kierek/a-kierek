@@ -1,25 +1,31 @@
 // Mouse, keyboard and touch controls
 personAImg.src=PERSON_A_PNG;
 personBImg.src=PERSON_B_PNG;
-window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(state==='playing')pause();else if(state==='paused')resume()}if(state==='playing'){if(e.code==='KeyM')toggleMap();if(e.code==='KeyR')toggleRage();if(e.code==='KeyE'){if(coop.role==='guest')coop.sendAction('interact');else interact();}if(e.code==='KeyF'){player.flash=!player.flash;showToast(player.flash?'LATARKA WLACZONA':'LATARKA WYLACZONA',1)} }});
-window.addEventListener('keyup',e=>{keys[e.code]=false});
-window.addEventListener('blur',()=>{keys={};if(state==='playing'&&!isCoarse)pause()});
+window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(gameSession.state==='playing')pause();else if(gameSession.state==='paused')resume()}if(gameSession.state==='playing'){if(e.code==='KeyM')beginMapHold();if(e.code==='KeyV')rearPeek=true;if(e.code==='KeyE'){if(coop.role==='guest')coop.sendAction('interact');else interact();}if(e.code==='KeyF'){gameSession.player.flash=!gameSession.player.flash;showToast(gameSession.player.flash?'FLASHLIGHT ON':'FLASHLIGHT OFF',1)} }});
+window.addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='KeyM')endMapHold();if(e.code==='KeyV')rearPeek=false;});
+window.addEventListener('blur',()=>{keys={};rearPeek=false;endMapHold(true);if(gameSession.state==='playing'&&!isCoarse)pause()});
 // Mouse-look: unrestricted yaw, clamped pitch (no upside-down camera).
+let pointerLockBegan=-10000;
 document.addEventListener('mousemove',e=>{
- if(state==='playing' && document.pointerLockElement===C)
-   setCameraLook(e.movementX*.0028*gameSettings.mouseSensitivity,-e.movementY*.00235*gameSettings.mouseSensitivity);
+ if(gameSession.state!=='playing'||document.pointerLockElement!==C)return;
+ // Some browsers inject a large fake delta when pointer lock starts/returns.
+ if(performance.now()-pointerLockBegan<120)return;
+ const dx=e.movementX,dy=e.movementY;
+ if(!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)>260||Math.abs(dy)>260)return;
+ setCameraLook(clamp(dx,-85,85)*.0028*gameSettings.mouseSensitivity,-clamp(dy,-85,85)*.00235*gameSettings.mouseSensitivity);
 });
-document.addEventListener('pointerlockchange',()=>{});
+document.addEventListener('pointerlockchange',()=>{pointerLockBegan=performance.now();});
 C.addEventListener('click',()=>{
- if(state==='playing'&&!isCoarse&&document.pointerLockElement!==C)C.requestPointerLock?.();
+ if(gameSession.state==='playing'&&!isCoarse&&document.pointerLockElement!==C)requestGamePointerLock();
 });
-$('rageMobile').addEventListener('click',toggleRage);
+$('rageMobile').addEventListener('click',()=>{});
 $('startBtn').addEventListener('click',()=>{if(coop.role!=='solo'){coop.openLobby();return;}begin(1)});
 $('nextBtn').addEventListener('click',()=>transitionToLevel2());
 $('menuBtn').addEventListener('click',()=>{setState('menu');refreshLevelButton()});
 $('resumeBtn').addEventListener('click',resume);
-$('againBtn').addEventListener('click',()=>begin(level));
+$('againBtn').addEventListener('click',()=>begin(gameSession.level,{testRun:gameSession.runTestEntry}));
 $('mapToggle').addEventListener('click',toggleMap);
+$('miniMapButton').addEventListener('click',toggleMap);
 $('soundToggle').addEventListener('click',()=>{muted=!muted;setUIIcon($('soundToggle'),muted?'mute':'sound');$('soundToggle').setAttribute('aria-label',muted?'Wlacz dzwiek':'Wycisz dzwiek');if(muted){stopHum();stopGameSounds();stopLossScream()}else initAudio()});
 // Mobile: two simultaneous fingers. Left thumb for movement; right thumb for camera.
 let touchCrouch=false;
@@ -30,25 +36,25 @@ function resetMobileInputs(){
  $('runBtn').classList.remove('pressed');
 }
 function toggleMobileCrouch(){
- if(state!=='playing')return;
+ if(gameSession.state!=='playing')return;
  touchCrouch=!touchCrouch;
  const el=$('crouchBtn');el.classList.toggle('pressed',touchCrouch);
  el.setAttribute('aria-pressed',String(touchCrouch));
- el.textContent=touchCrouch?'CICHO ✓':'CICHO';
+ el.textContent=touchCrouch?'CICHO ✓':'SNEAK';
 }
 $('interactBtn').addEventListener('click',()=>{if(coop.role==='guest')coop.sendAction('interact');else interact();});
 $('crouchBtn').addEventListener('click',toggleMobileCrouch);
 $('flashMobileBtn').addEventListener('click',()=>{
- if(state!=='playing')return;
- player.flash=!player.flash;showToast(player.flash?'LATARKA WLACZONA':'LATARKA WYLACZONA',1.5);
- $('flashMobileBtn').setAttribute('aria-pressed',String(!!player.flash));
+ if(gameSession.state!=='playing')return;
+ gameSession.player.flash=!gameSession.player.flash;showToast(gameSession.player.flash?'FLASHLIGHT ON':'FLASHLIGHT OFF',1.5);
+ $('flashMobileBtn').setAttribute('aria-pressed',String(!!gameSession.player.flash));
 });
-$('pauseMobileBtn').addEventListener('click',()=>{if(state==='playing')pause()});
+$('pauseMobileBtn').addEventListener('click',()=>{if(gameSession.state==='playing')pause()});
 
 const pad=$('pad'),stick=$('stick'),lookZone=$('lookZone');
 let joyId=null,lookId=null,lookLastX=0,lookLastY=0;
 pad.addEventListener('pointerdown',e=>{
- if(state!=='playing'||joyId!==null)return;
+ if(gameSession.state!=='playing'||joyId!==null)return;
  e.preventDefault();e.stopPropagation();joyId=e.pointerId;
  pad.setPointerCapture(e.pointerId);moveJoy(e);
 });
@@ -70,7 +76,7 @@ function moveJoy(e){
  touchX=nx;touchY=ny;stick.style.transform=`translate(${x}px,${y}px)`;
 }
 function startLook(e){
- if(!isCoarse||state!=='playing'||lookId!==null)return;
+ if(!isCoarse||gameSession.state!=='playing'||lookId!==null)return;
  e.preventDefault();e.stopPropagation();
  lookId=e.pointerId;lookLastX=e.clientX;lookLastY=e.clientY;
  e.currentTarget.setPointerCapture(e.pointerId);
@@ -92,7 +98,7 @@ for(const surface of [lookZone,C]){
 }
 const runButton=$('runBtn');
 runButton.addEventListener('pointerdown',e=>{
- if(state!=='playing')return;e.preventDefault();
+ if(gameSession.state!=='playing')return;e.preventDefault();
  touchRun=true;runButton.classList.add('pressed');runButton.setPointerCapture(e.pointerId);
 });
 function stopRun(){touchRun=false;runButton.classList.remove('pressed');}
@@ -101,9 +107,19 @@ window.addEventListener('blur',resetMobileInputs);
 
 $('pigLevelBtn').addEventListener('click',()=>{if(selectedDifficulty==='hard'?hardUnlocked[4]:unlocked4)openDossier(4)});
 $('level5Btn').addEventListener('click',()=>{if(selectedDifficulty==='hard'?hardUnlocked[5]:unlocked5)openDossier(5)});
-$('proceduralBtn').addEventListener('click',()=>begin(5));
+if($('proceduralBtn'))$('proceduralBtn').addEventListener('click',()=>begin(5));
+$('bossRushBtn').addEventListener('click',()=>{if(bossRushVisible())begin(12);});
+$('customStartBtn').addEventListener('click',()=>{readCustomGameForm();begin(13);});
 
 for(const id of ['controlsHintToggle','controlsHintTogglePause']){const el=$(id);if(el){el.checked=showControlHints;el.addEventListener('change',e=>setControlsHintsPreference(e.target.checked));}}
 
 $('hardSlowBtn').addEventListener('click',()=>useHardSlow());
 $('hardFreezeBtn').addEventListener('click',()=>useHardFreeze());
+
+// Mobile hold-to-peek: view only, does not invert movement or enemy perception.
+for(const eventName of ['pointerdown'])$('rearPeekMobile').addEventListener(eventName,e=>{
+ if(gameSession.state!=='playing')return;
+ e.preventDefault();rearPeek=true;
+ e.currentTarget.setPointerCapture?.(e.pointerId);
+});
+for(const eventName of ['pointerup','pointercancel','lostpointercapture'])$('rearPeekMobile').addEventListener(eventName,()=>{rearPeek=false;});

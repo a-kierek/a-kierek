@@ -12,97 +12,124 @@ function adminToggle(force){
  const open=typeof force==='boolean'?force:!adminOpen;
  if(open===adminOpen)return;
  if(open){
-  adminResume=state==='playing';if(adminResume)pause();
+  adminResume=gameSession.state==='playing';if(adminResume)pause();
   adminPanel.classList.add('open');adminOpen=true;
   adminInput.focus();adminInput.select();
  }else{
   adminOpen=false;adminPanel.classList.remove('open');adminInput.blur();
-  if(adminResume&&state==='paused')resume();adminResume=false;
+  if(adminResume&&gameSession.state==='paused')resume();adminResume=false;
  }
 }
-function adminUsed(){runCheated=true}
+function adminUsed(){gameSession.runCheated=true;if(typeof gpuRenderer!=='undefined'&&gpuRenderer)gpuRenderer.needsRender=true;}
 function adminRun(text){
  const args=text.trim().split(/\s+/),cmd=(args.shift()||'').toLowerCase(),arg=args[0]?.toLowerCase();
  if(!cmd)return;
  if(coop.role==='guest'){adminPrint('Komendy administratora sa dostepne wylacznie u hosta.');return;}
  adminPrint('> '+text);
  const commands={
-  help:'help · status · god on/off · heal · reveal · give all · open doors · enemies clear · spawn pig · level 1..11 · hard 1..5 · unlock all · coins ILE · tp safe/exit · seed LICZBA · hardseed SEED [ETAP] · streak reset · rage',
-  status:`Level ${level} | stan ${state} | przedmioty ${player.collected||0}/${GOAL} | wrogowie ${guards.length} | seria ${winStreak} (rekord ${bestStreak}) | grosze ${player.coins||0} | bezpieczny pokoj ${safeRoom?'TAK':'BRAK'} | seed ${(isHardMode()?hardSeed:proceduralSeed)>>>0}`
+  help:'help · status · ai · sprites · perf · engine · bossrush [SEED] (test) · god on/off · heal · reveal · give all · open doors · enemies clear · spawn pig · level 1..11 · hard 1..5 · unlock all · coins ILE · tp safe/exit · seed LICZBA · hardseed SEED [ETAP] · streak reset · rage',
+  status:`Level ${gameSession.level} | stan ${gameSession.state} | przedmioty ${gameSession.player.collected||0}/${gameSession.GOAL} | wrogowie ${gameSession.guards.length} | seria ${winStreak} (rekord ${bestStreak}) | grosze ${gameSession.player.coins||0} | bezpieczny pokoj ${gameSession.safeRoom?'TAK':'NONE'} | seed ${(gameSession.level===12?gameSession.bossRush?.seed:isHardMode()||gameSession.level===13?hardSeed:proceduralSeed)>>>0} | tarcza ${Math.max(0,Math.ceil((gameSession.player.shieldUntil||0)-gameSession.elapsed))} s`
  };
  if(cmd==='help'||cmd==='status'){adminPrint(commands[cmd]);return}
+ if(cmd==='engine'){
+  adminPrint(JSON.stringify({generation:gameSession.generation,mode:modeFor(gameSession.level).name,level:gameSession.level,state:gameSession.state,hz:Math.round(1/simulationClock.step),totalTicks:simulationClock.ticks,droppedSeconds:Number(simulationClock.droppedSeconds.toFixed(3)),alpha:Number(simulationClock.alpha.toFixed(3)),clock:Number(gameSession.clock.toFixed(3))}));return;
+ }
+ if(cmd==='perf'){
+  const r=typeof gpuRenderer!=='undefined'?gpuRenderer:null;
+  if(!r){adminPrint('Renderer not ready');return;}
+  adminPrint(JSON.stringify(r.stats));return;
+ }
+ if(cmd==='sprites'){
+  const r=typeof gpuRenderer!=='undefined'?gpuRenderer:null;
+  if(!r){adminPrint('Renderer not ready');return;}
+  r.collectSprites();adminPrint('Chrum atlas layer: '+JSON.stringify(r.loadedSpriteLayers?.[1]));
+  for(const d of r.spriteDiagnostics)adminPrint(`${d.kind} | layer ${d.layer??'-'} | depth ${d.depth.toFixed(2)} | ${d.reason}`);
+  return;
+ }
+ if(cmd==='ai'){
+  adminPrint(`Player: (${gameSession.player.x?.toFixed(2)}, ${gameSession.player.y?.toFixed(2)}) | flash ${!!gameSession.player.flash} | crouch ${!!gameSession.crouching} | hidden ${!!gameSession.player.hidden} | safe ${isSafeRoomProtected()}`);
+  const enemies=gameSession.level===1?[...(gameSession.awake?[gameSession.cat]:[]),...gameSession.guards]:gameSession.guards;
+  enemies.filter(g=>g&&Number.isFinite(g.x)).forEach((g,i)=>{
+   const d=Math.hypot(g.x-gameSession.player.x,g.y-gameSession.player.y),angle=Math.atan2(gameSession.player.y-g.y,gameSession.player.x-g.x),delta=Math.abs(Math.atan2(Math.sin(angle-g.a),Math.cos(angle-g.a)));
+   adminPrint(`#${i+1} ${g.kind} / ${g.variant||'classic'} | ${g.state} | ${d.toFixed(2)} m | angle ${(delta*180/PI).toFixed(0)} deg | LOS ${lineOfSight(g.x,g.y,gameSession.player.x,gameSession.player.y)} | path ${g.path?.length||0} | frozen ${!!g.frozen}${gameSession.level===12?' | sector '+g.rushSector:''}`);
+  });return;
+ }
+ if(cmd==='bossrush'){if(arg!=null&&!Number.isFinite(+arg)){adminPrint('Usage: bossrush [SEED]');return;}if(arg!=null)requestedSeed=(+arg)|0;adminToggle(false);begin(12,{testRun:true});adminPrint('BOSS RUSH (RUNDA TESTOWA)');return;}
  if(cmd==='god'){
-  if(!['on','off'].includes(arg)){adminPrint('Uzycie: god on | god off');return}
+  if(!['on','off'].includes(arg)){adminPrint('Usage: god on | god off');return}
   godMode=arg==='on';adminUsed();adminPrint('Niezniszczalnosc: '+(godMode?'WLACZONA':'WYLACZONA'));return;
  }
- if(cmd==='heal'){player.stamina=100;UI.stamina.style.width='100%';adminUsed();adminPrint('Wytrzymalosc uzupelniona.');return}
+ if(cmd==='heal'){gameSession.player.stamina=staminaMax();UI.stamina.style.width=staminaWidth();adminUsed();adminPrint('Wytrzymalosc uzupelniona.');return}
  if(cmd==='reveal'||cmd==='map'){
-  seen=Array.from({length:N},()=>Array(N).fill(true));mapOn=true;UI.map.classList.add('visible');drawMap();adminUsed();adminPrint('Odkryto mape.');return;
+  gameSession.seen=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(true));gameSession.mapOn=true;UI.map.classList.add('visible');drawMap();adminUsed();adminPrint('Odkryto mape.');return;
  }
  if(cmd==='give'&&arg==='all'){
-  for(const f of fuses)f.taken=true;player.collected=GOAL;UI.count.textContent=GOAL;
-  for(const t of terminals)t.used=true;updateObjectiveFacility();adminUsed();
+  for(const f of gameSession.fuses)f.taken=true;gameSession.player.collected=gameSession.GOAL;UI.count.textContent=gameSession.GOAL;
+  for(const t of gameSession.terminals)t.used=true;updateObjectiveFacility();adminUsed();
   adminPrint('Przedmioty i panele zaliczone. Idz do wyjscia.');return;
  }
  if(cmd==='open'&&arg==='doors'){
-  for(const d of doors){d.open=true;world[d.y][d.x]=0}
+  for(const d of gameSession.doors){d.open=true;gameSession.world[d.y][d.x]=0}markWorldChanged();
   adminUsed();adminPrint('Wszystkie bramy otwarte.');return;
  }
  if(cmd==='enemies'&&arg==='clear'){
-  guards=[];awake=false;nearCat=Infinity;adminUsed();adminPrint('Usunieto przeciwnikow.');return;
+  gameSession.guards=[];gameSession.awake=false;gameSession.nearCat=Infinity;adminUsed();adminPrint('Usunieto przeciwnikow.');return;
  }
  if(cmd==='spawn'&&arg==='pig'){
-  const points=[];for(let y=1;y<N-1;y++)for(let x=1;x<N-1;x++){
-   if(world[y][x]===0&&Math.hypot(player.x-x-.5,player.y-y-.5)>4&&Math.hypot(player.x-x-.5,player.y-y-.5)<8)points.push({x:x+.5,y:y+.5})
+  const points=[];for(let y=1;y<gameSession.N-1;y++)for(let x=1;x<gameSession.N-1;x++){
+   if(gameSession.world[y][x]===0&&Math.hypot(gameSession.player.x-x-.5,gameSession.player.y-y-.5)>4&&Math.hypot(gameSession.player.x-x-.5,gameSession.player.y-y-.5)<8)points.push({x:x+.5,y:y+.5})
   }
   const p=points[Math.floor(Math.random()*points.length)];if(!p){adminPrint('Brak wolnego pola.');return}
-  guards.push(makeGuard(p.x,p.y,'pig'));adminUsed();adminPrint('CHRUM pojawil sie na mapie.');return;
+  gameSession.guards.push(makeGuard(p.x,p.y,'pig'));adminUsed();adminPrint('CHRUM pojawil sie na mapie.');return;
  }
  if(cmd==='unlock'&&arg==='all'){
   unlocked2=unlocked3=unlocked4=unlocked5=true;
   for(let k=2;k<=5;k++){progressWrite('catroomsUnlocked'+k,'1');hardUnlocked[k]=true;progressWrite('catroomsHardUnlocked'+k,'1');}
-  refreshLevelButton();adminUsed();adminPrint('Odblokowano NORMAL i HARD: poziomy 2, 3, 4 i 5.');
-  if(state==='menu')setState('menu');
+  // Level access is not the same as completion. Grant Boss Rush explicitly so
+  // `unlock all` really includes the final secret mode and survives reloads.
+  progressWrite('catroomsBossRushUnlocked','1');
+  refreshLevelButton();adminUsed();
+  adminPrint('Unlocked NORMAL 1-5, HARD 1-5 and BOSS RUSH. Available under PLAY.');
+  if(gameSession.state==='menu')setState('menu');
   return;
  }
  if(cmd==='level'||cmd==='hard'){
   const target=Number(arg);
   const n=cmd==='hard'?(target===5?11:target+5):target;
-  if(!Number.isInteger(target)||(cmd==='hard'&&(target<1||target>5))||(cmd==='level'&&(n<1||n>11))){adminPrint('Uzycie: level 1..11 | hard 1..5');return}
-  unlocked2=unlocked3=unlocked4=unlocked5=true;for(let k=2;k<=5;k++)hardUnlocked[k]=true;
-  adminToggle(false);begin(n);adminUsed();adminPrint('Uruchomiono '+(n===11?'HARD 5':n>=6&&n<=9?'HARD '+(n-5):n===10?'SEKTOR 05':'Level '+n)+' (runda testowa).');return;
+  if(!Number.isInteger(target)||(cmd==='hard'&&(target<1||target>5))||(cmd==='level'&&(n<1||n>11))){adminPrint('Usage: level 1..11 | hard 1..5');return}
+  adminToggle(false);begin(n,{testRun:true});adminPrint('Uruchomiono '+(n===11?'HARD 5':n>=6&&n<=9?'HARD '+(n-5):n===10?'SEKTOR 05':'Level '+n)+' (runda testowa).');return;
  }
  if(cmd==='coins'){
-  const amount=Number(arg);if(!Number.isInteger(amount)||amount<0||amount>999){adminPrint('Uzycie: coins 10 (0..999)');return}
-  player.coins=amount;updateCoinCounter();adminUsed();adminPrint('Grosze: '+amount);return;
+  const amount=Number(arg);if(!Number.isInteger(amount)||amount<0||amount>999){adminPrint('Usage: coins 10 (0..999)');return}
+  gameSession.player.coins=amount;updateCoinCounter();adminUsed();adminPrint('Grosze: '+amount);return;
  }
  if(cmd==='tp'&&arg==='safe'){
-  if(!safeRoom){adminPrint('Brak bezpiecznego pokoju na mapie.');return}
-  player.x=safeRoom.centerX;player.y=safeRoom.centerY;adminUsed();updateCoinCounter();adminPrint('Przeniesiono do bezpiecznego pokoju.');return;
+  if(!gameSession.safeRoom){adminPrint('No safe room on this map.');return}
+  gameSession.player.x=gameSession.safeRoom.centerX;gameSession.player.y=gameSession.safeRoom.centerY;adminUsed();updateCoinCounter();adminPrint('Teleported to the safe room.');return;
  }
  if(cmd==='tp'&&arg==='exit'){
-  player.x=exitCell.x+.5;player.y=exitCell.y+.5;
-  adminUsed();adminPrint('Przeniesiono pod wyjscie.');return;
+  gameSession.player.x=gameSession.exitCell.x+.5;gameSession.player.y=gameSession.exitCell.y+.5;
+  adminUsed();adminPrint('Teleported near the exit.');return;
  }
  if(cmd==='seed'){
-  if(arg==null||!Number.isFinite(+arg)){adminPrint('Uzycie: seed 123456');return}
-  requestedSeed=(+arg)|0;adminToggle(false);begin(5);adminUsed();
+  if(arg==null||!Number.isFinite(+arg)){adminPrint('Usage: seed 123456');return}
+  requestedSeed=(+arg)|0;adminToggle(false);begin(5,{testRun:true});
   adminPrint('Wczytano proceduralny seed '+(proceduralSeed>>>0)+'.');return;
  }
  if(cmd==='hardseed'){
-  if(arg==null||!Number.isFinite(+arg)){adminPrint('Uzycie: hardseed 123456');return}
-  const stage=args[1]==null?1:Number(args[1]);if(!Number.isInteger(stage)||stage<1||stage>5){adminPrint('Uzycie: hardseed 123456 [1..5]');return}
-  requestedSeed=(+arg)|0;for(let k=2;k<=5;k++)hardUnlocked[k]=true;adminToggle(false);begin(stage===5?11:stage+5);adminUsed();
+  if(arg==null||!Number.isFinite(+arg)){adminPrint('Usage: hardseed 123456');return}
+  const stage=args[1]==null?1:Number(args[1]);if(!Number.isInteger(stage)||stage<1||stage>5){adminPrint('Usage: hardseed 123456 [1..5]');return}
+  requestedSeed=(+arg)|0;adminToggle(false);begin(stage===5?11:stage+5,{testRun:true});
   adminPrint('Wczytano HARD etap '+stage+' · seed '+(hardSeed>>>0)+'.');return;
  }
  if(cmd==='streak'&&arg==='reset'){
-  winStreak=0;progressWrite('catroomsWinStreak','0');streakRender();adminUsed();adminPrint('Wyzerowano biezaca serie. Rekord zachowany.');return;
+  winStreak=0;progressWrite('catroomsWinStreak','0');streakRender();adminUsed();adminPrint('Current streak reset. Best record kept.');return;
  }
  if(cmd==='rage'){
-  if(state==='paused'){adminPrint('Wlacz / wylacz rage po zamknieciu konsoli (R).');return}
+  if(gameSession.state==='paused'){adminPrint('Rage mode has been removed.');return}
   toggleRage();adminUsed();return;
  }
- adminPrint('Nieznana komenda. Wpisz help.');
+ adminPrint('Unknown command. Type help.');
 }
 
 document.addEventListener('keydown',e=>{
@@ -119,4 +146,4 @@ $('adminForm').addEventListener('submit',e=>{e.preventDefault();const v=adminInp
 $('adminClose').addEventListener('click',()=>adminToggle(false));
 
 $('adminMenuBtn').addEventListener('click',()=>adminToggle(true));
-$('adminPauseBtn').addEventListener('click',()=>adminToggle(true));
+

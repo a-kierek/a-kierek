@@ -1,31 +1,48 @@
+// Browsers can reject pointer lock synchronously or as a promise. A denied
+// request must not abort the round; clicking the game surface can retry.
+function requestGamePointerLock(){try{C.requestPointerLock?.()?.catch?.(()=>{});}catch(error){/* no user activation or unsupported */}}
+function graphicsReadyForPlay(){const backend=window.CatroomsGraphicsStatus?.backend;return !backend||backend==='webgpu';}
 function showToast(s,d=2.5){
- const icon= /TOKSYCZ|RADIOAKTYW|HP/.test(s)?'toxic':/UWAGA|WYKRY|ALARM|RAGE|ZLA|ZAGROZ|CHRU/.test(s)?'warning':/KARTA|BATER|PRZEDMIOT|KARM|RDZEN|ZNALEZ/.test(s)?'battery':/WYJSCIE|UCIEKAJ|OTWART/.test(s)?'exit':/SAMOUCZEK/.test(s)?'info':'signal';
+ const icon= /TOKSYCZ|RADIOAKTYW|HP/.test(s)?'toxic':/UWAGA|WYKRY|ALARM|RAGE|ZLA|ZAGROZ|CHRU/.test(s)?'warning':/KARTA|BATER|PRZEDMIOT|KARM|RDZEN|ZNALEZ/.test(s)?'battery':/EXIT|UCIEKAJ|OTWART/.test(s)?'exit':/SAMOUCZEK/.test(s)?'info':'signal';
  UI.toast.replaceChildren(makeUIIcon(icon),document.createTextNode(String(s).replace(/^[⚡🔥🌽🐖🎧🔒☣⚠⛔🔑☠🌐⚙▦♫◷▣✦✧◈⛨⌘⌂↻▶✓●]+\s*/u,'')));
- UI.toast.classList.add('visible');toastTimeout=elapsed+d}
+ UI.toast.classList.add('visible');gameSession.toastTimeout=gameSession.elapsed+d}
 
+
+function clearModeClasses(){document.body.classList.remove('boss-rush-level','level2','final-level','pig-level','procedural-level','hard-level','hard-stage-1','hard-stage-2','hard-stage-3','hard-stage-4','hard-stage-5','hard-detected','sector-five','custom-level');}
 
 function setState(next){
+ const previous=gameSession.state;
+ if(previous!==next&&typeof profileCheckpoint==='function')profileCheckpoint();
+ if(previous!==next){
+  resetSimulationClock();
+  if(previous==='playing'){keys={};resetMobileInputs();}
+  if(previous==='jumpscare'){sessionTimers.clear('death');$('jump').classList.remove('show');}
+ }
+ if(next==='menu')cancelTransition();
  if(next!=='playing')stopGameSounds();
  if(next==='menu')stopLossScream();
- state=next;UI.hud.classList.toggle('show',next==='playing');
+ gameSession.state=next;document.body.classList.toggle('menu-scene',next==='menu');if(typeof updateRoundInterface==='function')updateRoundInterface(next);UI.hud.classList.toggle('show',next==='playing');
+ if(typeof syncBackgroundTracks==='function')syncBackgroundTracks(0);
  updateTutorialVisibility();
  UI.start.classList.toggle('hidden',next!=='menu');UI.pause.classList.toggle('hidden',next!=='paused');
  UI.ending.classList.toggle('hidden',next!=='end');$('dossier').classList.toggle('hidden',next!=='dossier');
  UI.mobile.classList.toggle('playing',next==='playing');
- if(next==='menu')document.body.classList.remove('level2','final-level','pig-level','procedural-level','hard-level','hard-stage-1','hard-stage-2','hard-stage-3','hard-stage-4','hard-stage-5','hard-detected','sector-five');
+ if(next!=='playing'){rearPeek=false;endMapHold();}
+ if(next==='menu'){clearModeClasses();if(previous!=='menu')window.CatroomsPixelMenu?.backToTitle();}
  if(next!=='playing'&&document.pointerLockElement===C)document.exitPointerLock?.();
 }
 
 function openDossier(n){
+ if(n>=2&&n<=5){begin(n===5?(selectedDifficulty==='hard'?11:10):n);return;} // Go straight into the level, no descriptive dossier.
  if((n===2&&!(selectedDifficulty==='hard'?hardUnlocked[2]:unlocked2))||(n===3&&!(selectedDifficulty==='hard'?hardUnlocked[3]:unlocked3))||(n===4&&!(selectedDifficulty==='hard'?hardUnlocked[4]:unlocked4))||(n===5&&!(selectedDifficulty==='hard'?hardUnlocked[5]:unlocked5)))return;
  dossierLevel=n;
- const t={2:['AKTA 02 / ZALANY KOMPLEKS','NIE JESTES <em>SAM.</em>','Poznaj dwoch wrogow. Zdobadz 6 kart, aktywuj 3 panele i omijaj toksyczne rozlewiska.','6 KART · 3 PANELE · DLUGI SZLAK'],
- 3:['AKTA 03 / CZERWONA STREFA','WSZYSCY <em>CZEKAJA.</em>','Trzech przesladowcow, osiem rdzeni i cztery reaktory, ktore musisz uruchomic po kolei.','8 RDZENI · 4 REAKTORY · ROZLEGLY OBIEKT'],
- 4:['AKTA 04 / SEKTOR CHRUM','NIE <em>CHRUMKAJ.</em>','Swinia CHRUM patroluje wieksza chlewnie. Zbierz 7 puszek karmy, aktywuj 3 dzwignie i unikaj zracego plynu.','7 PUSZEK KARMY · 3 DZWIGNIE · 1 CHRUM'],
- 5:['AKTA 05 / OSTATNIE SPOTKANIE','DWA <em>ZAGROZENIA.</em>','W nowym sektorze poluja CHRUM oraz Nieznajomy ze zdjecia. Zbierz wymagane zasoby, uruchom trzy panele i uciekaj.','8 PRZEDMIOTOW · 3 PANELE · CHRUM + NIEZNAJOMY']};
+ const t={2:['AKTA 02 / FLOODED COMPLEX','YOU ARE <em>NOT ALONE.</em>','Meet two enemies. Collect 6 cards, activate 3 panels and avoid toxic spills.','6 KART · 3 PANELS · DLUGI SZLAK'],
+ 3:['AKTA 03 / BLOODY ZONE','WSZYSCY <em>CZEKAJA.</em>','Three stalkers, eight cores and four reactors to activate in order.','8 CORES · 4 REACTORS · ROZLEGLY OBIEKT'],
+ 4:['AKTA 04 / CHRUM SECTOR','DO NOT <em>OINK.</em>','CHRUM patrols the bigger barn. Collect 7 food cans, activate 3 levers and avoid acid.','7 PUSZEK KARMY · 3 DZWIGNIE · 1 CHRUM'],
+ 5:['AKTA 05 / LAST ENCOUNTER','DWA <em>ZAGROZENIA.</em>','CHRUM and Nieznajomy hunt in this sector. Find resources, activate three panels and escape.','8 ITEMS · 3 PANELS · CHRUM + NIEZNAJOMY']};
  const [k,heading,description,mission]=t[n];
  const h=selectedDifficulty==='hard';
- const displayDescription=h?'KAMPANIA HARD / wiekszy proceduralny poziom, zaawansowane AI, championy, skaly i 45-sekundowe awarie. '+description:description;
+ const displayDescription=h?'HARD CAMPAIGN / larger procedural levels, advanced AI, champions, rocks and timed 45-second emergencies. '+description:description;
  $('dossierKicker').textContent=h?'HARD / '+k:k;$('dossierTitle').innerHTML=heading;$('dossierDesc').textContent=displayDescription;
  $('dossierMission').textContent=mission;$('dossierLevelName').textContent=(h?'HARD ':'LEVEL ')+n;
  $('dossier').classList.toggle('final-theme',n>=3);
@@ -39,138 +56,157 @@ function openDossier(n){
 }
 
 function transitionToLevel2(){
- const next=(isHardMode()?hardStage():level)+1;if(next>5)return;
+ const next=(isHardMode()?hardStage():gameSession.level)+1;if(next>5)return;
  const open=selectedDifficulty==='hard'?!!hardUnlocked[next]:next===2?unlocked2:next===3?unlocked3:next===4?unlocked4:unlocked5;
  if(!open)return;
  transit(()=>openDossier(next),'ODKODOWANO '+(selectedDifficulty==='hard'?'HARD ':'LEVEL ')+next);
 }
 
+let transitionExecuting=false;
+function cancelTransition(){sessionTimers.clear('transition');sessionTimers.clear('transition-close');$('transition').classList.remove('active');}
 function transit(fn,message){
- const t=$('transition');$('transitionText').textContent=message;t.classList.add('active');
- setTimeout(()=>{fn();setTimeout(()=>t.classList.remove('active'),400)},700);
+ cancelTransition();const t=$('transition'),generation=gameSession.generation,phase=gameSession.state;
+ $('transitionText').textContent=message;t.classList.add('active');
+ sessionTimers.defer('transition',700,()=>{
+  if(gameSession.generation!==generation||gameSession.state!==phase){cancelTransition();return;}
+  transitionExecuting=true;
+  try{fn();}finally{transitionExecuting=false;sessionTimers.defer('transition-close',400,()=>t.classList.remove('active'));}
+ });
 }
 
-function begin(targetLevel=1){
- stopGameSounds();stopLossScream();
- const stage=targetLevel===10||targetLevel===11?5:targetLevel>=6&&targetLevel<=9?targetLevel-5:targetLevel;
- const goHard=targetLevel===11||(targetLevel>=6&&targetLevel<=9)||(selectedDifficulty==='hard'&&stage>=1&&stage<=4);
- if(stage>=2&&stage<=5){
-  const unlocked=goHard?!!hardUnlocked[stage]:stage===2?unlocked2:stage===3?unlocked3:stage===4?unlocked4:unlocked5;
-  if(!unlocked)return;
+function begin(targetLevel=1,{testRun=false}={}){
+ if(!graphicsReadyForPlay())return false;
+ const entry=resolveRunEntry(targetLevel,selectedDifficulty,targetLevel===13?customGameConfig.stage||1:1);
+ if(!entry)return false;
+ const {id,stage,hard}=entry;
+ if(id===12&&!bossRushCompleted()&&!testRun)return false;
+ if(id!==13&&stage>=2&&stage<=5){
+  const unlocked=hard?!!hardUnlocked[stage]:stage===2?unlocked2:stage===3?unlocked3:stage===4?unlocked4:unlocked5;
+  if(!unlocked&&!testRun)return false;
  }
- stopHum();resetRage();prepareRun();level=goHard?(stage===5?11:stage+5):targetLevel;
- if(isHardMode())resetHard();
- else if(level===5)resetProcedural();
- else if(level===10)resetLevel5();
- else if(level===4)resetLevel4();
- else if(level===3)resetLevel3();
- else if(level===2)resetLevel2();
- else {document.body.classList.remove('level2','final-level','pig-level','procedural-level');resetBase()}
- setupSafeRoomAndCoins();
- hardSlowUntil=0;hardPulseUntil=0;
- if(!isHardMode()){player.inventory={energy:[],slow:0,freeze:0};player.slowCharges=0;player.freezeCharges=0;}
- $('seedChip').style.display=level>=5?'block':'none';
- $('missionDetails').style.display=level===1?'none':'block';
- $('eventTag').style.display=level===1?'none':'block';
- $('decoyBtn').style.display=level===1?'none':'';
+ if(!transitionExecuting)cancelTransition();
+ if(typeof unlockMenuMusic==='function')unlockMenuMusic();
+ if(typeof profileCheckpoint==='function')profileCheckpoint();
+ stopGameSounds();stopLossScream();stopHum();resetRage();prepareRun();
+ gameSession.runCheated=testRun;gameSession.runTestEntry=testRun;gameSession.level=id;
+ if(id===13&&Number.isInteger(customGameConfig.fixedSeed))requestedSeed=customGameConfig.fixedSeed;
+ reset();
+ if(gameSession.level===13)gameSession.runCheated=true;
+ gameSession.hardSlowUntil=0;gameSession.hardPulseUntil=0;
+ if(!isHardMode()){gameSession.player.inventory={energy:[],slow:0,freeze:0};gameSession.player.slowCharges=0;gameSession.player.freezeCharges=0;}
+ if(id===13&&typeof applyCustomOptions==='function')applyCustomOptions();
+ if(typeof profileRunStarted==='function')profileRunStarted();
+ $('seedChip').style.display=gameSession.level>=5?'block':'none';
+ $('missionDetails').style.display=gameSession.level===1?'none':'block';
+ $('eventTag').style.display=gameSession.level===1?'none':'block';
  for(const id of ['hardSlowBtn','hardFreezeBtn'])$(id).hidden=true;
  $('activeInventory').classList.toggle('hard-equipped',isHardMode());
  updateInventoryUI();
- player.pitch=0;touchCrouch=false;resetMobileInputs();
- $('crouchBtn').classList.remove('pressed');$('crouchBtn').textContent='CICHO';
- started=true;setState('playing');updateTutorialVisibility();lastTime=performance.now();initAudio();playSting(false);
- if(!isCoarse){const lock=C.requestPointerLock?.();lock?.catch?.(()=>{});}
+ gameSession.player.pitch=0;rearPeek=false;touchCrouch=false;keys={};resetMobileInputs();
+ $('crouchBtn').classList.remove('pressed');$('crouchBtn').textContent='SNEAK';
+ setState('playing');setMapVisibility(true);mapClockVisible=false;$('mapClock').hidden=true;if($('mapRunDetails'))$('mapRunDetails').hidden=true;updateTutorialVisibility();resetSimulationClock();initAudio();playSting(false);
+ if(!isCoarse)requestGamePointerLock();
+ return true;
 }
-function reset(){
- if(isHardMode())resetHard();else if(level===5)resetProcedural();else if(level===10)resetLevel5();else if(level===4)resetLevel4();
- else if(level===3)resetLevel3();else if(level===2)resetLevel2();else resetBase();
- setupSafeRoomAndCoins();
-}
-function update(dt){if(level===3)updateFacility(dt,true);else if(isHardMode())updateHard(dt);else if(level>=2)updateFacility(dt,false);else updateBase(dt)}
+function pause(){if(gameSession.state!=='playing')return;setState('paused');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:true});if(coop.role==='guest')coop.send({type:'input',data:{forward:0,strafe:0,angle:gameSession.player.a,pitch:gameSession.player.pitch||0,sprint:0,crouch:0,flash:Number(!!gameSession.player.flash)}});}
 
-function pause(){if(state!=='playing')return;setState('paused');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:true});if(coop.role==='guest')coop.send({type:'input',data:{forward:0,strafe:0,angle:player.a,pitch:player.pitch||0,sprint:0,crouch:0,flash:Number(!!player.flash)}});}
-
-function resume(){if(state!=='paused')return;if(coop.role==='guest'&&coop.hostPaused){showToast('POCZEKAJ, AZ HOST WZNOWI GRE',2);return;}setState('playing');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:false});lastTime=performance.now();if(!isCoarse){const lock=C.requestPointerLock?.();lock?.catch?.(()=>{});}}
+function resume(){if(gameSession.state!=='paused'||!graphicsReadyForPlay())return;if(coop.role==='guest'&&coop.hostPaused){showToast('WAIT FOR THE HOST TO RESUME',2);return;}setState('playing');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:false});resetSimulationClock();if(!isCoarse)requestGamePointerLock();}
 
 function finish(good){
- if(good){
-  if(isHardMode()&&hardStage()<5){const next=hardStage()+1;hardUnlocked[next]=true;progressWrite('catroomsHardUnlocked'+next,'1');}
-  if(level===1){unlocked2=true;progressWrite('catroomsUnlocked2','1');tutorialCompleted=true;progressWrite('catroomsTutorialDone','1');if(!controlsHintsTouched){showControlHints=false;progressWrite('catroomsShowControls','0');}updateTutorialVisibility();}
-  if(level===2){unlocked3=true;progressWrite('catroomsUnlocked3','1')}
-  if(level===3){unlocked4=true;progressWrite('catroomsUnlocked4','1')}
-  if(level===4){unlocked5=true;progressWrite('catroomsUnlocked5','1')}
+ if(gameSession.state!=='playing'&&gameSession.state!=='jumpscare')return;
+ const previousBest=readBestTime(gameSession.level);
+ if(typeof profileRunFinished==='function')profileRunFinished(good);
+ if(good&&qualifiesForProgress()){
+  if(gameSession.level===12)progressWrite('catroomsBossRushWon','1');
+  if(isHardMode()&&gameSession.level!==12&&gameSession.level!==13&&!gameSession.runCheated){const stage=hardStage();progressWrite('catroomsHardCompleted'+stage,'1');}
+  if(isHardMode()&&gameSession.level!==12&&gameSession.level!==13&&hardStage()<5){const next=hardStage()+1;hardUnlocked[next]=true;progressWrite('catroomsHardUnlocked'+next,'1');}
+  if(gameSession.level===1){unlocked2=true;progressWrite('catroomsUnlocked2','1');tutorialCompleted=true;progressWrite('catroomsTutorialDone','1');if(!controlsHintsTouched){showControlHints=false;progressWrite('catroomsShowControls','0');}updateTutorialVisibility();}
+  if(gameSession.level===2){unlocked3=true;progressWrite('catroomsUnlocked3','1')}
+  if(gameSession.level===3){unlocked4=true;progressWrite('catroomsUnlocked4','1')}
+  if(gameSession.level===4){unlocked5=true;progressWrite('catroomsUnlocked5','1')}
  }
  streakResult(good);setState('end');refreshLevelButton();
- const actor=ACTORS[deathBy]||ACTORS.cat;
+ const actor=ACTORS[gameSession.deathBy]||ACTORS.cat;
  $('endCard').classList.toggle('deathPanel',!good);
- $('endFace').src=good?(level===4||level===10?PIG_PNG:level===2?PERSON_A_PNG:CAT_PNG):actor.image;
- $('endFace').alt=good?'Zwyciestwo':'Przeciwnik: '+actor.name;
- $('endKicker').textContent=good?(isHardMode()?'HARD LEVEL '+hardStage()+' UKONCZONY':level===5?'TRYB PROCEDURALNY UKONCZONY':level===10?'SEKTOR 05 UKONCZONY':level===4?'SEKTOR 05 ODBLOKOWANY':level===3?'LEVEL 4 ODBLOKOWANY!':'NOWY POZIOM ODBLOKOWANY!'):'ZAPIS OSTATNICH SEKUND';
- $('endTitle').innerHTML=good?(isHardMode()?'HARD <em>PRZETRWANY!</em>':level===5?'RUNDA <em>WYGRANA!</em>':level===4?'UCIEKLES <em>CHRUMOWI!</em>':'STREFA <em>ODKRYTA!</em>'):deathBy==='meltdown'?'AWARIA <em>REAKTORA.</em>':deathBy==='hazard'?'HP SPADLO DO <em>ZERA.</em>':'ZLAPAL <em>CIE.</em>';
- $('endDesc').textContent=good?(isHardMode()?'Ukonczyles etap '+hardStage()+' kampanii HARD. Nastepny sektor odblokowano, jesli jest dostepny.':level===5?'Udalo Ci sie przetrwac losowy uklad, zebrac przedmioty i znalezc wyjscie.':level===10?'CHRUM i Nieznajomy pozostali w sektorze 05. Ukonczyles kampanie NORMAL.':level===4?'Swinia CHRUM zostala z tylu. Odkryles piaty sektor.':level===1?'Ukonczyles samouczek i odblokowales dalsza kampanie':'Ukonczyles Level '+level+'. Odblokowano kolejna strefe.'):deathBy==='meltdown'?'Nie naprawiles reaktora w ciagu 45 sekund.':deathBy==='hazard'?'TOKSYCZNY PLYN wypalil cale Twoje HP. Unikaj radioaktywnych kaluz i poczekaj na regeneracje.':`POKONAL CIE: ${actor.name} · ${actor.alias}. Sprobuj innej drogi i uzyj wabikow.`;
- $('endKiller').innerHTML=good?'':uiIcon('skull')+' '+(deathBy==='hazard'?'TOKSYCZNY PLYN · 50 HP obrazen co 5 sekund':actor.name.toUpperCase()+' · '+actor.skill);
+ $('endFace').src=good?(gameSession.level===4||gameSession.level===10?PIG_PNG:gameSession.level===2?PERSON_A_PNG:CAT_PNG):actor.image;
+ $('endFace').alt=good?'Zwyciestwo':'Enemy: '+actor.name;
+ $('endKicker').textContent=good&&!qualifiesForProgress()?'TEST / NO CAMPAIGN PROGRESS':good?(gameSession.level===12?'BOSS RUSH UKONCZONY':isHardMode()?'HARD LEVEL '+hardStage()+' UKONCZONY':gameSession.level===5?'TRYB PROCEDURALNY UKONCZONY':gameSession.level===10?'SECTOR 05 COMPLETED':gameSession.level===4?'SECTOR 05 UNLOCKED':gameSession.level===3?'LEVEL 4 UNLOCKED!':'NEW LEVEL UNLOCKED!'):'LAST MOMENTS RECORDED';
+ $('endTitle').innerHTML=good?(gameSession.level===12?'BOSS RUSH <em>UKONCZONY!</em>':isHardMode()?'HARD <em>SURVIVED!</em>':gameSession.level===5?'RUNDA <em>WYGRANA!</em>':gameSession.level===4?'YOU ESCAPED <em>CHRUM!</em>':'ZONE <em>DISCOVERED!</em>'):gameSession.deathBy==='meltdown'?'REACTOR <em>FAILURE.</em>':gameSession.deathBy==='hazard'?'HP SPADLO DO <em>ZERA.</em>':'YOU WERE <em>CAUGHT.</em>';
+ $('endDesc').textContent=good&&!qualifiesForProgress()?'Round completed. Test and custom games do not change campaign progress.':good?(gameSession.level===12?'You survived five sectors and eighteen bosses without HP regeneration.':isHardMode()?'You completed stage '+hardStage()+' of the HARD campaign. The next sector is now available.':gameSession.level===5?'You survived a random layout, collected items and found the exit.':gameSession.level===10?'You escaped CHRUM and Nieznajomy in Sector 05. NORMAL completed.':gameSession.level===4?'You left CHRUM behind. The fifth sector is unlocked.':gameSession.level===1?'You finished the tutorial and unlocked the campaign':'You completed Level '+gameSession.level+'. The next zone is unlocked.'):gameSession.deathBy==='meltdown'?'You failed to repair the reactor in 45 seconds.':gameSession.deathBy==='hazard'?'Toxic liquid depleted your HP. Avoid radioactive puddles.':`DEFEATED BY: ${actor.name} · ${actor.alias}. Try another path and stay out of sight.`;
+ $('endKiller').innerHTML=good?'':uiIcon('skull')+' '+(gameSession.deathBy==='hazard'?'TOKSYCZNY PLYN · 50 HP obrazen co 5 sekund':actor.name.toUpperCase()+' · '+actor.skill);
  $('endKiller').style.display=good?'none':'block';
  $('endCard').style.setProperty('--killer-accent',good?'#bde8b3':actor.color);
- $('nextBtn').style.display=good&&(isHardMode()?hardStage()<5:(level<4||level===4))?'inline-block':'none';
- setUIIconText($('nextBtn'),'play',(isHardMode()?'HARD ':'LEVEL ')+(isHardMode()?hardStage()+1:level+1)+' · DALEJ');
- $('endTime').textContent='CZAS '+formatTime(clock);
- setUIIconText($('endItems'),level===1?'battery':level===4?'feed':isHardMode()?'skull':level===5?'spark':'archive',player.collected+'/'+GOAL);
- let best=+progressRead('catroomsBest'+level,'0')||0;
- if(good&&!runCheated&&(!best||clock<best)){best=clock;progressWrite('catroomsBest'+level,best)}
- $('bestTime').textContent=best?'REKORD '+formatTime(best):runCheated?'ADMIN / BEZ REKORDU':'';
- if(coop.role==='host')coop.roundEnd(good,deathBy);else if(coop.role==='guest')coop.guestEnd();
+ $('nextBtn').style.display=good&&qualifiesForProgress()&&gameSession.level!==12&&gameSession.level!==13&&(isHardMode()?hardStage()<5:(gameSession.level<4||gameSession.level===4))?'inline-block':'none';
+ setUIIconText($('nextBtn'),'play',(isHardMode()?'HARD ':'LEVEL ')+(isHardMode()?hardStage()+1:gameSession.level+1)+' · DALEJ');
+ $('endTime').textContent='TIME '+formatTime(gameSession.clock);
+ setUIIconText($('endItems'),gameSession.level===1?'battery':gameSession.level===4?'feed':isHardMode()?'skull':gameSession.level===5?'spark':'archive',gameSession.player.collected+'/'+gameSession.GOAL);
+ let best=readBestTime(gameSession.level);
+ if(good&&qualifiesForProgress()&&(!best||gameSession.clock<best)){best=gameSession.clock;progressWrite('catroomsBest'+gameSession.level,best)}
+ $('bestTime').textContent=!qualifiesForProgress()?'TEST / BEZ REKORDU':best?'REKORD '+formatTime(best):'';
+ if(typeof renderRoundSummary==='function')renderRoundSummary(good,previousBest);
+ if(coop.role==='host')coop.roundEnd(good,gameSession.deathBy);else if(coop.role==='guest')coop.guestEnd();
  stopHum();
 }
 
-function win(){playWin();finish(true)}
+function win(){if(gameSession.state==='playing'){playWin();finish(true)}}
 
 function lose(killerId='cat'){
- if(godMode){
-  if(elapsed>lastShieldToast+2){showToast('ADMIN GOD MODE · NIEWRAZLIWOSC',1.8);lastShieldToast=elapsed}
-  return;
- }
- deathBy=ACTORS[killerId]?killerId:'cat';state='jumpscare';const actor=ACTORS[deathBy];
+ if(gameSession.state!=='playing'||damageBlocked(killerId))return false;
+ gameSession.deathBy=ACTORS[killerId]?killerId:'cat';setState('jumpscare');const actor=ACTORS[gameSession.deathBy];
  $('jump').querySelector('img').src=actor.image;
- $('jump').style.background=deathBy==='watcher'?'#032732':deathBy==='listener'?'#42111f':deathBy==='pig'?'#54301e':deathBy==='hazard'?'#1d4720':'#4c0909';
- $('jumpName').textContent=(deathBy==='hazard'?'WYKONCZYL CIE: ':'ZLAPAL CIE: ')+actor.name;
+ $('jump').style.background=gameSession.deathBy==='watcher'?'#032732':gameSession.deathBy==='listener'?'#42111f':gameSession.deathBy==='pig'?'#54301e':gameSession.deathBy==='hazard'?'#1d4720':'#4c0909';
+ $('jumpName').textContent=(gameSession.deathBy==='hazard'?'WYKONCZYL CIE: ':'CAUGHT BY: ')+actor.name;
  UI.hud.classList.remove('show');UI.mobile.classList.remove('playing');$('jump').classList.add('show');
  stopGameSounds();stopHum();playLossScream();if(document.pointerLockElement===C)document.exitPointerLock?.();
- setTimeout(()=>{$('jump').classList.remove('show');if(state==='jumpscare')finish(false)},930);
+ const generation=gameSession.generation;
+ sessionTimers.defer('death',930,()=>{if(gameSession.generation===generation&&gameSession.state==='jumpscare'){ $('jump').classList.remove('show');finish(false); }});
+ return true;
 }
 
-let fpsWindowStart=0,fpsWindowFrames=0;
-function tick(time){requestAnimationFrame(tick);
- if(!fpsWindowStart)fpsWindowStart=time;
- fpsWindowFrames++;
- if(time-fpsWindowStart>=650){const fps=Math.round(fpsWindowFrames*1000/(time-fpsWindowStart));const el=$('fpsCounter');if(el)el.textContent=fps+' FPS';fpsWindowStart=time;fpsWindowFrames=0;}
- let dt=Math.max(0,Math.min(.045,(time-lastTime)/1000||.016));lastTime=time;if(state==='playing'){if(coop.role==='guest'){coop.guestFrame(dt)}else{update(dt);coop.hostFrame(dt)}}syncGameAudio(dt);if(state==='playing'||state==='menu'||state==='paused'){render()}if(state==='menu')elapsed+=dt*.25}
+let mapClockVisible=false,mapHoldTimer=null;
+function setMapVisibility(visible){gameSession.mapOn=!!visible;UI.map.classList.toggle('visible',gameSession.mapOn);if(gameSession.mapOn)drawMap();}
+function toggleMap(){
+ if(gameSession.state!=='playing')return;
+ setMapVisibility(true);
+ mapClockVisible=!mapClockVisible;
+ const clockEl=$('mapClock');if(clockEl){clockEl.hidden=!mapClockVisible;clockEl.textContent=formatTime(gameSession.clock);}
+ const details=$('mapRunDetails');if(details)details.hidden=!mapClockVisible;
+ if(typeof syncDetectionHUD==='function')syncDetectionHUD();
+}
+function beginMapHold(){
+ if(gameSession.state!=='playing')return;
+ toggleMap();
+ clearTimeout(mapHoldTimer);
+ mapHoldTimer=setTimeout(()=>{if(keys.KeyM&&gameSession.state==='playing'){UI.map.classList.add('expanded');}},170);
+}
+function endMapHold(){clearTimeout(mapHoldTimer);mapHoldTimer=null;UI.map.classList.remove('expanded');}
 
-function toggleMap(){mapOn=!mapOn;UI.map.classList.toggle('visible',mapOn);if(mapOn)drawMap()}
 
 function refreshLevelButton(){
+ const rushBtn=$('bossRushBtn');if(rushBtn)rushBtn.hidden=!bossRushVisible();
  const hard=selectedDifficulty==='hard';
  const availability={2:hard?hardUnlocked[2]:unlocked2,3:hard?hardUnlocked[3]:unlocked3,4:hard?hardUnlocked[4]:unlocked4,5:hard?hardUnlocked[5]:unlocked5};
- const names={1:'ZOLTE KORYTARZE',2:'ZALANY KOMPLEKS',3:'CZERWONA STREFA',4:'SEKTOR CHRUM',5:'OSTATNIE SPOTKANIE'};
+ const names={1:'YELLOW CORRIDORS',2:'FLOODED COMPLEX',3:'BLOODY ZONE',4:'CHRUM SECTOR',5:'LAST ENCOUNTER'};
  for(const [n,id] of [[2,'level2Btn'],[3,'finalBtn'],[4,'pigLevelBtn'],[5,'level5Btn']]){
   const b=$(id);b.disabled=!availability[n];
-  b.textContent=availability[n]?names[n]:names[n]+' · ZABLOKOWANE';
+  b.textContent=availability[n]?names[n]:names[n]+' · LOCKED';
  }
  const count=1+Number(availability[2])+Number(availability[3])+Number(availability[4])+Number(availability[5]);
- $('progressText').textContent=(hard?'HARD · ':'')+'ODKRYTO '+count+'/5 POZIOMOW';
+ $('progressText').textContent=(hard?'HARD · ':'')+'UNLOCKED '+count+'/5 LEVELS';
  for(let k=1;k<=5;k++){
-  const best=+progressRead('catroomsBest'+(hard?(k===5?11:k+5):(k===5?10:k)),'0');
-  const el=$('record'+k);if(el)el.textContent=best?names[k]+': '+formatTime(best):names[k]+': BRAK REKORDU';
+  const best=readBestTime(hard?(k===5?11:k+5):(k===5?10:k));
+  const el=$('record'+k);if(el)el.textContent=best?names[k]+': '+formatTime(best):names[k]+': NO RECORD';
  }
- streakRender();
+ streakRender();if(typeof syncSectorSelection==='function')syncSectorSelection();
 }
 
 function toggleRage(){
- if(state!=='playing')return;if(coop.role==='guest'){showToast('RAGE MODE MOZE WLACZYC TYLKO HOST',2);return;}
+ if(gameSession.state!=='playing')return;if(coop.role==='guest'){showToast('RAGE MODE MOZE WLACZYC TYLKO HOST',2);return;}
  rageMode=!rageMode;
  document.body.classList.toggle('rage-active',rageMode);
- setUIIconText($('rageMobile'),'skull',rageMode?'WYLACZ RAGE':'RAGE');
- showToast(rageMode?'☠ RAGE MODE: WROGOWIE SA BARDZIEJ CZUJNI!':'RAGE MODE WYLACZONY',3);
- if(rageMode){playSting();if(level===1&&!awake){awake=true;wakeAt=0}}
+ setUIIconText($('rageMobile'),'skull',rageMode?'DISABLE RAGE':'RAGE');
+ showToast(rageMode?'☠ RAGE MODE: ENEMIESIE SA BARDZIEJ CZUJNI!':'RAGE MODE WYLACZONY',3);
+ if(rageMode){playSting();if(gameSession.level===1&&!gameSession.awake){gameSession.awake=true;gameSession.wakeAt=0}}
 }
 
 function resetRage(){rageMode=false;document.body.classList.remove('rage-active');setUIIconText($('rageMobile'),'skull','RAGE')}

@@ -2,373 +2,14 @@
 // This is a real GPU ray-caster: WGSL draws walls, floor, ceiling and ground decals.
 // Characters and pickups use a GPU instanced billboard pass; imported GLBs use
 // a separate textured triangular-mesh pass, with wall and mesh depth testing.
-const TERRAIN_WGSL = /* wgsl */ `
-struct SceneFrame {
- player:vec4f,      // xy position, heading, clock
- viewport:vec4f,    // width,height,map size,level
- progress:vec4f,    // items owned, goal, panel count, total panels
- visuals:vec4f,     // flashlight, health fraction, nearby enemy, pickup flash
- weather:vec4f,     // blackout, fog, rage, pitch horizon offset
- camera:vec4f,      // horizontal camera plane scale (FOV)
-};
-@group(0) @binding(0) var<uniform> frame:SceneFrame;
-@group(0) @binding(1) var<storage,read> worldTiles:array<u32>;
-@group(0) @binding(2) var wallTex:texture_2d_array<f32>;
-@group(0) @binding(3) var wallSampler:sampler;
-@group(0) @binding(4) var floorTex:texture_2d_array<f32>;
-@group(0) @binding(5) var floorSampler:sampler;
-@group(0) @binding(6) var<storage,read> decalCells:array<u32>;
-@group(0) @binding(7) var<storage,read> decalData:array<vec4f>;
-@group(0) @binding(8) var decalTex:texture_2d_array<f32>;
-@group(0) @binding(9) var decalSampler:sampler;
-struct RoomBox{ lower:vec4f,upper:vec4f };
-@group(0) @binding(10) var<storage,read> roomObjects:array<RoomBox>;
 
-struct PixelOut {
- @location(0) color:vec4f,
- @location(1) distance:vec4f,
-};
-@vertex fn vert(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
- let p=array<vec2f,6>(vec2f(-1.,-1.),vec2f(1.,-1.),vec2f(-1.,1.),
-                      vec2f(-1.,1.),vec2f(1.,-1.),vec2f(1.,1.));
- return vec4f(p[i],0.,1.);
-}
-fn tileAt(x:i32,y:i32)->u32 {
- if(x<0 || y<0 || x>=i32(frame.viewport.z) || y>=i32(frame.viewport.z)){return 1u;}
- let tile=worldTiles[u32(y)*128u+u32(x)];return select(tile,0u,tile==5u);
-}
-fn levelWall()->i32 {
- if(frame.viewport.w==2.){return 1;}
- if(frame.viewport.w==3. || frame.viewport.w==5. || frame.viewport.w==6.){return 2;}
- if(frame.viewport.w==4.){return 3;}
- return 0;
-}
-fn floorLayers()->i32 {
- if(frame.viewport.w==2.){return 2;}
- if(frame.viewport.w==3. || frame.viewport.w==5. || frame.viewport.w==6.){return 4;}
- if(frame.viewport.w==4.){return 6;}
- return 0;
-}
-fn sceneryAt(frag:vec2f,ray:vec2f)->vec4f {
- let h=frame.viewport.y;
- let horizon=h*(.5+frame.weather.w);
- let isFloor=frag.y>=horizon;
- let rd=h*.52/max(0.5,abs(frag.y-horizon));
- let worldPt=frame.player.xy+ray*rd;
- let layer=floorLayers()+select(1,0,isFloor);
- let uv=fract(worldPt);
- var color=textureSampleLevel(floorTex,floorSampler,uv,layer,0.).rgb;
- var c=color;
- if(frame.viewport.w==2.){
-   if(isFloor){ c=vec3f(0.075+c.r*.20,0.15+c.g*.45,0.19+c.b*.50); }
-   else {c=vec3f(.17+c.r*.36,.26+c.g*.44,.30+c.b*.46);}
- } else if(frame.viewport.w==3. || frame.viewport.w==5. || frame.viewport.w==6.){
-   if(isFloor){c=vec3f(.15+c.r*.43,.083+c.g*.27,.12+c.b*.35);}
-   else{c=vec3f(.19+c.r*.42,.10+c.g*.23,.18+c.b*.35);}
- } else if(frame.viewport.w==4.) {
-   if(isFloor){c=vec3f(.22+c.r*.48,.13+c.g*.27,.12+c.b*.20);}
-   else{c=vec3f(.3+c.r*.45,.23+c.g*.33,.17+c.b*.21);}
- }
- // Keep the familiar tiled floors, grout seams and rectangular fluorescent lights.
- let seams=uv.x<.017 || uv.y<.017;
- if(seams){c*=.80;}
- if(!isFloor){
-   let cell=vec2i(floor(worldPt));
-   if((cell.x+100)%5==2 && (cell.y+100)%4==1 && uv.x>.19 && uv.x<.82 && uv.y>.22 && uv.y<.68){
-     c=mix(c,vec3f(1.,.95,.73),.75);
-   }
- } else {
-   let cell=vec2i(floor(worldPt));
-   if(cell.x>=0 && cell.y>=0 && cell.x<i32(frame.viewport.z) && cell.y<i32(frame.viewport.z)) {
-     let id=decalCells[u32(cell.y)*128u+u32(cell.x)];
-     if(id>0u && id<=256u){
-       let d=decalData[id-1u];
-       let radius=max(.1,d.z*.67);
-       let local=(worldPt-d.xy)/(radius*2.)+.5;
-       if(all(local>=vec2f(0.)) && all(local<=vec2f(1.))){
-         let decal=textureSampleLevel(decalTex,decalSampler,local,i32(d.w),0.);
-         let fade=smoothstep(.0,.12,local.x)*smoothstep(.0,.12,local.y)*
-           smoothstep(.0,.12,1.-local.x)*smoothstep(.0,.12,1.-local.y);
-         let alpha=decal.a*fade*select(.80,.92,d.w>.5);
-         c=mix(c,c*decal.rgb*1.15,clamp(alpha,0.,1.));
-         if(d.w>.5){c+=decal.rgb*alpha*.12;}
-       }
-     }
-   }
- }
- let fog=clamp((rd-2.)/29.,0.,.90);
- return vec4f(mix(c,vec3f(.10,.105,.09),fog),1.);
-}
-@fragment fn fragment(@builtin(position) pixel:vec4f)->PixelOut {
- let uv=pixel.xy/frame.viewport.xy;
- let dx=cos(frame.player.z);let dy=sin(frame.player.z);
- let plane=vec2f(-dy,dx)*frame.camera.x;
- let ray=vec2f(dx,dy)+plane*(uv.x*2.-1.);
- var cell=vec2i(floor(frame.player.xy));
- let delta=vec2f(1.)/max(abs(ray),vec2f(.00001));
- let gridStep=vec2i(select(1,-1,ray.x<0.),select(1,-1,ray.y<0.));
- var tMax=vec2f(0.);
- if(ray.x<0.){tMax.x=(frame.player.x-f32(cell.x))*delta.x;}
- else{tMax.x=(f32(cell.x)+1.-frame.player.x)*delta.x;}
- if(ray.y<0.){tMax.y=(frame.player.y-f32(cell.y))*delta.y;}
- else{tMax.y=(f32(cell.y)+1.-frame.player.y)*delta.y;}
- var side=0;
- var hit=1u;
- for(var i:i32=0;i<190;i++){
-   if(tMax.x<tMax.y){tMax.x+=delta.x;cell.x+=gridStep.x;side=0;}
-   else{tMax.y+=delta.y;cell.y+=gridStep.y;side=1;}
-   hit=tileAt(cell.x,cell.y);
-   if(hit!=0u){break;}
- }
- var distance:f32;
- if(side==0){distance=(f32(cell.x)-frame.player.x+(1.-f32(gridStep.x))*.5)/select(ray.x,.00001,abs(ray.x)<.00001);}
- else {distance=(f32(cell.y)-frame.player.y+(1.-f32(gridStep.y))*.5)/select(ray.y,.00001,abs(ray.y)<.00001);}
- distance=max(.09,abs(distance));
- let wallH=frame.viewport.y/distance;
- let top=(frame.viewport.y-wallH)*.5+frame.viewport.y*frame.weather.w;
- var result=vec4f(0.);
- if(pixel.y>=top && pixel.y<=top+wallH){
-   var texX=select(frame.player.x+distance*ray.x,frame.player.y+distance*ray.y,side==0);
-   texX=fract(texX);
-   if((side==0 && ray.x>0.) || (side==1 && ray.y<0.)){texX=1.-texX;}
-   var layer=levelWall();
-   if(hit==8u){
-     // Safe-room walls: damp dark brick, rust streaks, tiled grout.
-     let uvWall=vec2f(texX,clamp((pixel.y-top)/wallH,0.,1.));
-     let row=floor(uvWall.y*6.);
-     let brick=fract(uvWall.x*4.+select(0.,.5,u32(row)%2u==1u));
-     let mortar=step(brick,.035)+step(fract(uvWall.y*6.),.055);
-     let fleck=fract(sin(dot(vec2f(f32(cell.x),f32(cell.y))+uvWall*17.,vec2f(31.17,77.9)))*12345.);
-     var c=vec3f(.18,.19,.16)*(1.+fleck*.22);
-     c*=1.-min(1.,mortar)*.35;
-     c*=1.-pow(max(0.,sin(uvWall.x*47.+f32(cell.y)*.7)),18.)*uvWall.y*.32;
-     result=vec4f(c,1.);
-   }else{
-     if(hit==3u){layer=select(5,4,frame.progress.x>=frame.progress.y && frame.progress.z>=frame.progress.w);}
-     else if(hit==4u){layer=6;}
-     result=textureSampleLevel(wallTex,wallSampler,vec2f(texX,clamp((pixel.y-top)/wallH,0.,1.)),layer,0.);
-   }
-   if(frame.camera.y>.5){
-     let wallUV=vec2f(texX,clamp((pixel.y-top)/wallH,0.,1.));
-     let scratches=pow(abs(sin(texX*130.+f32(cell.y)*4.7)),19.)*.075;
-     let grime=sin(wallUV.y*29.+f32(cell.x)*.6)*sin(texX*61.+f32(cell.y)*2.3)*.13;
-     let drip=pow(max(0.,sin(texX*79.+f32(cell.x)*3.)),35.)*wallUV.y*.25;
-     let c=result.rgb*vec3f(.73,.69,.64)*(1.-scratches+grime-drip);
-     result=vec4f(c,1.);
-   }
-   let fog=clamp((distance-1.5)/32.,0.,.88);
-   result=vec4f(mix(result.rgb,vec3f(.10,.10,.09),fog),1.);
-   if(side==1){result=vec4f(result.rgb*.83,1.);}
- }else{
-   result=sceneryAt(pixel.xy,ray);
- }
- // Static 3D boxes are ray-traced against the actual wall distance. These
- // objects stay put when the camera turns, unlike screen-facing billboards.
- let horizon=frame.viewport.y*(.5+frame.weather.w);
- let ray3=vec3f(ray,(horizon-pixel.y)/frame.viewport.y);
- let origin3=vec3f(frame.player.xy,.5);
- var best=distance;
- var furnitureHit=false;
- var furnitureColor=vec3f(0.);
- for(var k:u32=0u;k<min(u32(frame.camera.w),64u);k=k+1u){
-   let object=roomObjects[k];
-   let inv=vec3f(1.)/select(ray3,vec3f(.000001),abs(ray3)<vec3f(.000001));
-   let t0=(object.lower.xyz-origin3)*inv;
-   let t1=(object.upper.xyz-origin3)*inv;
-   let tNear=max(max(min(t0.x,t1.x),min(t0.y,t1.y)),min(t0.z,t1.z));
-   let tFar=min(min(max(t0.x,t1.x),max(t0.y,t1.y)),max(t0.z,t1.z));
-   if(tNear>.02&&tNear<tFar&&tNear<best){
-     let local=(origin3+ray3*tNear-object.lower.xyz)/max(object.upper.xyz-object.lower.xyz,vec3f(.0001));
-     let face=max(abs(ray3.x),abs(ray3.y));
-     let typ=i32(object.lower.w);
-     var col=vec3f(.30,.23,.18);
-     if(typ==1){ // solid metal slot-machine cabinet
-       col=vec3f(.24,.067,.055);
-       if(local.z>.82){col=vec3f(.63,.44,.20);}
-       if(fract(local.z*11.)<.10){col*=1.45;}
-     }else if(typ==2){ // front panel and 777 reels
-       col=vec3f(.12,.09,.07);
-       if(local.z>.18&&local.z<.87){
-         let section=fract(local.x*3.);
-         col=select(vec3f(.75,.63,.34),vec3f(.16,.10,.08),section<.10||section>.91);
-         if(abs(fract(local.z*4.)-.49)<.12){col=vec3f(.13,.07,.06);}
-       }
-     }else if(typ==3||typ==4){ // chair seat, backrest and legs
-       col=vec3f(.24,.13,.07)*(1.+fract(sin(local.x*37.+local.y*14.)*72.)*.18);
-     }else if(typ==5){ // fire-ring of dark rocks
-       col=vec3f(.18,.18,.16)*(1.+fract(sin(local.x*32.+local.y*31.)*44.)*.16);
-       if(local.x>.20&&local.x<.80&&local.y>.20&&local.y<.80){col=vec3f(.54,.17,.07);}
-     }else if(typ==6){ // volumetric flame block with flicker
-       let flicker=.65+.35*sin(frame.player.w*17.+local.x*15.);
-       col=mix(vec3f(.63,.09,.02),vec3f(1.,.77,.18),local.z)*flicker;
-       if(local.z>.70){col*=.60;}
-     }else if(typ==7||typ==8){ // fixed warning posters on the wall
-       col=select(vec3f(.16,.32,.29),vec3f(.51,.12,.10),typ==7);
-       let stripe=fract(local.z*8.);
-       if(stripe>.27&&stripe<.35){col=vec3f(.93,.80,.54);}
-       if(local.x<.08||local.x>.92||local.z<.08||local.z>.92){col=vec3f(.08,.06,.05);}
-     }
-     let sideShade=select(.79,1.,local.z<.04||local.z>.96);
-     furnitureColor=col*sideShade;
-     best=tNear;
-     furnitureHit=true;
-   }
- }
- if(furnitureHit){
-   let haze=clamp((best-1.5)/32.,0.,.88);
-   result=vec4f(mix(furnitureColor,vec3f(.10,.10,.09),haze),1.);
-   distance=best;
- }
- let center=uv-vec2f(.5,.52);
- let vignette=clamp(length(center*vec2f(1.15,1.02))*.96,0.,1.);
- var shade=1.-vignette*.47;
- if(frame.visuals.x<.5){shade*=.67;}
- if(frame.weather.x>.5){shade*=.26;}
- let flicker=1.+.018*sin(frame.player.w*19.)-.012*sin(frame.player.w*7.3);
- var color=result.rgb*shade*flicker;
- if(frame.weather.y>.5){color=mix(color,vec3f(.27,.23,.28),.19);}
- if(frame.weather.z>.5){color=mix(color,vec3f(.24,.08,.07),.16);}
- if(frame.visuals.z<4.){color=mix(color,vec3f(.6,.08,.055),clamp((4.-frame.visuals.z)/4.*.18,0.,.18));}
- if(frame.camera.y>.5){color*=vec3f(.91,.85,.80);}
- if(frame.camera.z>.5){
-   let peripheral=clamp(length((uv-vec2f(.5,.5))*vec2f(1.30,1.0))/.68,0.,1.);
-   let pulse=.65+.35*sin(frame.player.w*7.8);
-   color=mix(color,vec3f(.38,.025,.019),clamp(peripheral*.30*pulse,0.,.4));
- }
- if(frame.visuals.w>0.){color=mix(color,vec3f(1.,.89,.63),frame.visuals.w*.40);}
- // Subtle grain, dithered at the subpixel level, without the blocky CPU rays.
- let grain=fract(sin(dot(pixel.xy+vec2f(frame.player.w*97.,frame.player.w*33.),vec2f(12.9898,78.233)))*43758.5453);
- color+=vec3f((grain-.5)*.018);
- var out:PixelOut;
- out.color=vec4f(clamp(color,vec3f(0.),vec3f(1.)),1.);
- out.distance=vec4f(clamp(distance/256.,0.,1.),0.,0.,1.);
- return out;
-}
-`;
 
-const SPRITES_WGSL = /* wgsl */ `
-struct Frame { player:vec4f, viewport:vec4f, progress:vec4f,visuals:vec4f,weather:vec4f };
-struct Sprite { rect:vec4f, data:vec4f };
-@group(0) @binding(0) var<uniform> frame:Frame;
-@group(0) @binding(1) var wallDistance:texture_2d<f32>;
-@group(0) @binding(2) var images:texture_2d_array<f32>;
-@group(0) @binding(3) var imageSampler:sampler;
-@group(0) @binding(4) var<storage,read> sprites:array<Sprite>;
-struct VOut{
- @builtin(position) position:vec4f,
- @location(0) uv:vec2f,
- @location(1) data:vec4f,
-};
-@vertex fn vertex(@builtin(vertex_index) index:u32,@builtin(instance_index) instance:u32)->VOut {
- let v=array<vec2f,6>(vec2f(0.,0.),vec2f(1.,0.),vec2f(0.,1.),
-                       vec2f(0.,1.),vec2f(1.,0.),vec2f(1.,1.));
- let unit=v[index];
- let item=sprites[instance];
- let pos=item.rect.xy+unit*item.rect.zw;
- var out:VOut;
- out.position=vec4f(pos/frame.viewport.xy*vec2f(2.,-2.)+vec2f(-1.,1.),0.,1.);
- out.uv=unit;
- out.data=item.data;
- return out;
-}
-@fragment fn fragment(input:VOut)->@location(0) vec4f {
- let p=vec2i(floor(input.position.xy));
- if(any(p<vec2i(0)) || any(p>=vec2i(frame.viewport.xy))){discard;}
- let depth=textureLoad(wallDistance,p,0).r*256.;
- if(input.data.y>=depth-.065){discard;}
- let c=textureSampleLevel(images,imageSampler,input.uv,i32(input.data.x),0.);
- if(c.a<.025){discard;}
- let fog=clamp((input.data.y-8.)/36.,0.,.72);
- let alpha=c.a*(1.-fog*.48);
- var rgb=mix(c.rgb,vec3f(.10,.10,.09),fog);
- // Input z = variant index: 0 classic, 1 red, 2 green, 3 yellow, 4 gray, 5 pink.
- if(input.data.z>0.5 && input.data.z<1.5){rgb=mix(rgb,vec3f(.90,.09,.075),.56);}
- else if(input.data.z<2.5 && input.data.z>1.5){rgb=mix(rgb,vec3f(.12,.81,.18),.50);}
- else if(input.data.z<3.5 && input.data.z>2.5){rgb=mix(rgb,vec3f(.91,.79,.13),.49);}
- else if(input.data.z<4.5 && input.data.z>3.5){rgb=mix(rgb,vec3f(.50,.51,.54),.80);}
- else if(input.data.z<5.5 && input.data.z>4.5){rgb=mix(rgb,vec3f(.97,.31,.64),.58);}
- if(input.data.w>.5){rgb=mix(rgb,vec3f(.55,.86,1.),.78);rgb+=vec3f(.07,.11,.14)*sin(input.position.y*.16+frame.player.w*2.);}
 
- if(frame.visuals.x<.5){rgb*=.66;}
- if(frame.weather.x>.5){rgb*=.35;}
- return vec4f(rgb,alpha);
-}
-`;
 
 // Meshes are preprocessed from the supplied GLB files; no Babylon/Three required.
 const MODEL_SLOT_ALBEDO_PNG='assets/models/slot-albedo.webp';
-const MODEL_WGSL = /* wgsl */ `
-struct SceneFrame {
- player:vec4f,
- viewport:vec4f,
- progress:vec4f,
- visuals:vec4f,
- weather:vec4f,
- camera:vec4f,
-};
-struct ModelPose { world:vec4f, rotation:vec4f };
-@group(0) @binding(0) var<uniform> frame:SceneFrame;
-@group(0) @binding(1) var<uniform> pose:ModelPose;
-@group(0) @binding(2) var slotAlbedo:texture_2d<f32>;
-@group(0) @binding(3) var albedoSampler:sampler;
-@group(0) @binding(4) var wallDistance:texture_2d<f32>;
-struct MeshVertexOut {
- @builtin(position) position:vec4f,
- @location(0) normal:vec3f,
- @location(1) uv:vec2f,
- @location(2) tint:vec3f,
- @location(3) depth:f32,
- @location(4) @interpolate(flat) kind:u32,
-};
-@vertex fn vertex(
- @location(0) inPos:vec3f,
- @location(1) inNormal:vec3f,
- @location(2) inUV:vec2f,
- @location(3) inColor:vec3f
-)->MeshVertexOut {
- let rotated=vec3f(inPos.x*pose.rotation.x-inPos.y*pose.rotation.y,
-                   inPos.x*pose.rotation.y+inPos.y*pose.rotation.x,inPos.z);
- let point=pose.world.xyz+rotated*pose.world.w;
- let direction=vec2f(cos(frame.player.z),sin(frame.player.z));
- let right=vec2f(-direction.y,direction.x);
- let delta=point.xy-frame.player.xy;
- let depth=dot(delta,direction);
- let horizontal=dot(delta,right);
- let near=0.04;
- let far=140.0;
- var result:MeshVertexOut;
- result.position=vec4f(horizontal/max(.05,frame.camera.x),
-   (point.z-.5)*2.-2.*frame.weather.w*depth,
-   (far/(far-near))*depth-near*far/(far-near),depth);
- result.normal=normalize(vec3f(inNormal.x*pose.rotation.x-inNormal.y*pose.rotation.y,
-    inNormal.x*pose.rotation.y+inNormal.y*pose.rotation.x,inNormal.z));
- result.uv=vec2f(inUV.x,1.-inUV.y);
- result.tint=inColor;
- result.depth=depth;
- result.kind=u32(pose.rotation.z);
- return result;
-}
-@fragment fn fragment(input:MeshVertexOut)->@location(0) vec4f {
- let pixel=vec2i(floor(input.position.xy));
- if(any(pixel<vec2i(0))||any(pixel>=vec2i(frame.viewport.xy))){discard;}
- let wall=textureLoad(wallDistance,pixel,0).r*256.;
- if(input.depth>wall-.025){discard;}
- var base=input.tint;
- if(input.kind==1u){
-   base*=textureSampleLevel(slotAlbedo,albedoSampler,input.uv,0.).rgb;
- }
- var light=clamp(.46+.47*dot(normalize(input.normal),normalize(vec3f(.40,-.15,.88))),.30,1.);
- if(input.kind==0u&&input.tint.r>.85){
-    // Ember and flame parts keep their original low-poly mesh geometry.
-    light=1.05+.14*sin(frame.player.w*13.+input.uv.x*10.);
- }
- var rgb=base*light;
- let fog=clamp((input.depth-2.)/34.,0.,.78);
- rgb=mix(rgb,vec3f(.10,.10,.09),fog);
- if(frame.visuals.x<.5){rgb*=.68;}
- return vec4f(rgb,1.);
-}
-`;
+const MODEL_ROCK_ALBEDO='assets/models/rock-albedo.webp';
+
 
 const GPU_SPRITE_SIZE=256;
 const GPU_WALL_W=128;
@@ -376,40 +17,53 @@ const GPU_WALL_H=256;
 const GPU_TILE_SIZE=64;
 const GPU_MAX_DECALS=256;
 const GPU_MAX_SPRITES=256;
+// The order of the atlas is a single contract for upload and projection.
+function spriteLayerSources(){return [catImg,pigImg,personBImg,personAImg,fuseImg,keycardImg,foodImg,terminalImg,lockerArt,stairArt,staminaArt,shieldArt,extraPickupArt,coopAvatarArt,slowDeviceImg,freezeDeviceImg,...energyDrinkImgs,hardRockArt,coinSprite,slotMachineSprite,strangerImg];}
+const SPRITE_LAYER=Object.freeze({cat:0,pig:1,watcher:2,listener:3,terminal:7,hide:8,stairs:9,stamina:10,shield:11,key:12,coopAvatar:13,hardSlow:14,hardFreeze:15,rock:21,coin:22,slot:23,stranger:24});
+const SPRITE_ENEMY_KINDS=new Set(['cat','pig','watcher','listener','stranger']);
 
 class CatroomsWebGPURenderer {
-  constructor(device,context,format){
-    this.device=device;this.context=context;this.format=format;
-    this.frameBuffer=device.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  constructor(device,context,format,post=null){
+    this.device=device;this.context=context;this.format=format;this.post=post;this.sceneFormat=post?'rgba16float':format;
+    this.frameBuffer=device.createBuffer({size:RENDER_FRAME.bytes,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     this.mapBuffer=device.createBuffer({size:128*128*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
     this.decalCellsBuffer=device.createBuffer({size:128*128*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
     this.decalDataBuffer=device.createBuffer({size:GPU_MAX_DECALS*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
     this.spriteBuffer=device.createBuffer({size:GPU_MAX_SPRITES*32,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
     this.furnitureBuffer=device.createBuffer({size:64*32,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
-    this.wallTexture=device.createTexture({size:[GPU_WALL_W,GPU_WALL_H,7],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+    this.wallTexture=device.createTexture({size:[GPU_WALL_W,GPU_WALL_H,12],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
     this.floorTexture=device.createTexture({size:[GPU_TILE_SIZE,GPU_TILE_SIZE,8],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
     this.decalTexture=device.createTexture({size:[GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,2],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
-    this.spriteTexture=device.createTexture({size:[GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,26],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+    this.spriteTexture=device.createTexture({size:[GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,25],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
     this.sampler=device.createSampler({magFilter:'linear',minFilter:'linear',mipmapFilter:'linear',addressModeU:'repeat',addressModeV:'repeat'});
     this.spriteSampler=device.createSampler({magFilter:'linear',minFilter:'linear',addressModeU:'clamp-to-edge',addressModeV:'clamp-to-edge'});
     this.terrainShader=device.createShaderModule({label:'Catrooms terrain WGSL',code:TERRAIN_WGSL});
     this.spriteShader=device.createShaderModule({label:'Catrooms sprite WGSL',code:SPRITES_WGSL});
     this.meshShader=device.createShaderModule({label:'Catrooms imported GLB mesh WGSL',code:MODEL_WGSL});
-    this.terrainPipeline=device.createRenderPipeline({label:'Catrooms walls and floor',layout:'auto',vertex:{module:this.terrainShader,entryPoint:'vert'},fragment:{module:this.terrainShader,entryPoint:'fragment',targets:[{format:this.format},{format:'rgba16float'}]},primitive:{topology:'triangle-list'}});
-    this.spritePipeline=device.createRenderPipeline({label:'Catrooms transparent billboards',layout:'auto',vertex:{module:this.spriteShader,entryPoint:'vertex'},fragment:{module:this.spriteShader,entryPoint:'fragment',targets:[{format:this.format,blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}}}]},primitive:{topology:'triangle-list'}});
+    this.terrainPipeline=device.createRenderPipeline({label:'Catrooms walls and floor',layout:'auto',vertex:{module:this.terrainShader,entryPoint:'vert'},fragment:{module:this.terrainShader,entryPoint:'fragment',targets:[{format:this.sceneFormat},{format:'rgba16float'}]},primitive:{topology:'triangle-list'}});
+    this.spritePipeline=device.createRenderPipeline({label:'Catrooms transparent billboards',layout:'auto',vertex:{module:this.spriteShader,entryPoint:'vertex'},fragment:{module:this.spriteShader,entryPoint:'fragment',targets:[{format:this.sceneFormat,blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}}}]},primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less'}});
     this.meshPipeline=device.createRenderPipeline({label:'Catrooms static GLB geometry',layout:'auto',
       vertex:{module:this.meshShader,entryPoint:'vertex',buffers:[{arrayStride:44,stepMode:'vertex',attributes:[
         {shaderLocation:0,offset:0,format:'float32x3'},
         {shaderLocation:1,offset:12,format:'float32x3'},
         {shaderLocation:2,offset:24,format:'float32x2'},
         {shaderLocation:3,offset:32,format:'float32x3'}]}]},
-      fragment:{module:this.meshShader,entryPoint:'fragment',targets:[{format:this.format}]},
+      fragment:{module:this.meshShader,entryPoint:'fragment',targets:[{format:this.sceneFormat}]},
       primitive:{topology:'triangle-list',cullMode:'none'},
       depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
-    this.modelPoseBuffers={};this.modelMeshes={};
-    for(const type of ['campfire','slot'])this.modelPoseBuffers[type]=device.createBuffer({
-      size:32,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    this.lastWidth=0;this.lastHeight=0;
+    this.modelMeshes={};
+    this.rushPoseBuffers={slot:[],campfire:[],tree:[],rock:[],door:[],decor:[]};
+    for(const kind of ['slot','campfire','tree','rock','door','decor'])for(let index=0;index<(kind==='rock'||kind==='decor'?64:kind==='door'?16:4);index++)this.rushPoseBuffers[kind].push(device.createBuffer({
+      size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}));
+    this.hdMaterials=null;this.hdEnabled=false;this.hdError=null;this.materialRevision=0;
+    this.lastWidth=0;this.lastHeight=0;this.needsRender=true;
+    this.frameData=new Float32Array(RENDER_FRAME.floats);this.lightingEnabled=true;this.wallShadowsEnabled=true;this.flashlightEnabled=true;this.flashlightState=null;
+    this.tilesData=new Uint32Array(128*128);this.gpuTilesData=new Uint32Array(128*128);this.mapSource=null;this.mapRevision=-1;this.mapSize=0;
+    this.furnitureData=new Float32Array(64*8);this.furnitureSource=null;this.furnitureLength=-1;this.furnitureCount=0;
+    this.decalGridData=new Uint32Array(128*128);this.decalData=new Float32Array(GPU_MAX_DECALS*4);this.decalScratch=new Float32Array(GPU_MAX_DECALS*4);this.decalCount=-1;this.decalWorld=null;
+    this.spriteData=new Float32Array(GPU_MAX_SPRITES*8);
+    this.spriteDiagnostics=[];this.stats={mapUploads:0,furnitureUploads:0,decalUploads:0,staticBytes:0,frames:0,triangles:0,sprites:0};
+    this.poseCache=new Map();this.doorAnimations=new WeakMap();this.doorLayout=[];
   }
   uploadCanvasLayer(texture,source,width,height,layer){
     const off=document.createElement('canvas');off.width=width;off.height=height;
@@ -418,10 +72,25 @@ class CatroomsWebGPURenderer {
     this.device.queue.copyExternalImageToTexture({source:off},{texture,origin:[0,0,layer]},[width,height,1]);
   }
   async buildTextures(){
-    const images=[catImg,pigImg,personBImg,personAImg,fuseImg,keycardImg,foodImg,terminalImg,lockerArt,stairArt,staminaArt,shieldArt,extraPickupArt,decoyArt,coopAvatarArt,slowDeviceImg,freezeDeviceImg,...energyDrinkImgs,hardRockArt,coinSprite,slotMachineSprite,strangerImg];
-    await Promise.all(images.map(async img=>{if(img instanceof HTMLImageElement && !img.complete){try{await img.decode();}catch(e){/* fallback art below */}}}));
+    const images=spriteLayerSources();
+    // complete alone does not guarantee a decoded image. Never silently replace an enemy with a pickup.
+    const required=new Map([[0,'Marmur'],[1,'Chrum'],[2,'Blysk'],[3,'Szept'],[24,'Nieznajomy']]);
+    const resolved=await Promise.all(images.map(async (img,i)=>{
+      if(!(img instanceof HTMLImageElement))return img;
+      try{await img.decode();if(img.naturalWidth&&img.naturalHeight)return img;}catch(e){}
+      if(required.has(i)){
+        const retry=new Image();retry.src=img.src;
+        try{await retry.decode();if(retry.naturalWidth&&retry.naturalHeight)return retry;}catch(e){}
+        throw new Error('Enemy texture failed: '+required.get(i));
+      }
+      return img.fallback||extraPickupArt;
+    }));
+    this.spriteAspects=resolved.map(img=>(img.naturalWidth||img.width||1)/(img.naturalHeight||img.height||1));
+    this.loadedSpriteLayers=resolved.map((img,i)=>({layer:i,width:img.naturalWidth||img.width,height:img.naturalHeight||img.height}));
+    await Promise.all(SAFE_ROOM_POSTER_IMAGES.map(async img=>{if(!img.complete){try{await img.decode();}catch(e){/* draw fallback poster */}}}));
     const walls=[wallTexture,metalTexture,finalWallTexture,pigWallTexture,doorOpenTexture,doorTexture,doorShutImg];
     walls.forEach((tex,i)=>this.uploadCanvasLayer(this.wallTexture,tex,GPU_WALL_W,GPU_WALL_H,i));
+    SAFE_ROOM_POSTER_IMAGES.forEach((img,index)=>{const off=document.createElement('canvas');off.width=GPU_WALL_W;off.height=GPU_WALL_H;const g=off.getContext('2d');g.fillStyle='#080506';g.fillRect(0,0,off.width,off.height);if(img&&img.complete&&img.naturalWidth){const ratio=Math.max(off.width/img.naturalWidth,off.height/img.naturalHeight);const w=img.naturalWidth*ratio,h=img.naturalHeight*ratio;g.drawImage(img,(off.width-w)/2,(off.height-h)/2,w,h)}else{g.fillStyle='#7b5a4b';g.fillRect(0,0,off.width,off.height)}this.device.queue.copyExternalImageToTexture({source:off},{texture:this.wallTexture,origin:[0,0,7+index]},[off.width,off.height,1]);});
     const tmp=document.createElement('canvas');tmp.width=GPU_TILE_SIZE;tmp.height=GPU_TILE_SIZE;const g=tmp.getContext('2d');
     for(let i=0;i<8;i++){
       let pixels=g.createImageData(GPU_TILE_SIZE,GPU_TILE_SIZE);
@@ -436,31 +105,18 @@ class CatroomsWebGPURenderer {
     }
     if(bloodArt instanceof HTMLImageElement && !bloodArt.complete){try{await bloodArt.decode();}catch(e){}}
     this.uploadCanvasLayer(this.decalTexture,bloodArt.naturalWidth?bloodArt:(bloodArt.fallback||bloodArt),GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,0);
-    this.uploadCanvasLayer(this.decalTexture,hazardArt,GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,1);
-    images.forEach((img,i)=>{
-      let source=img;
-      if(img instanceof HTMLImageElement && !img.naturalWidth){source=img.fallback||extraPickupArt;}
-      this.uploadCanvasLayer(this.spriteTexture,source,GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,i);
-    });
+    if(hazardArt instanceof HTMLImageElement){try{await hazardArt.decode();}catch(e){}}
+    this.uploadCanvasLayer(this.decalTexture,hazardArt.naturalWidth?hazardArt:(hazardArt.fallback||hazardArt),GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,1);
+    resolved.forEach((source,i)=>this.uploadCanvasLayer(this.spriteTexture,source,GPU_SPRITE_SIZE,GPU_SPRITE_SIZE,i));
   }
   async buildModels(){
-    const decodeBase64=value=>{
-      const decoded=atob(value),bytes=new Uint8Array(decoded.length);
-      for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);
-      return bytes;
-    };
-    for(const kind of ['campfire','slot']){
-      const bytes=decodeBase64(CATROOMS_MODEL_MESHES[kind]);
-      const view=new DataView(bytes.buffer);
-      if(String.fromCharCode(...bytes.subarray(0,4))!=='CRM2')throw new Error('Bledny format modelu: '+kind);
-      const vertices=view.getUint32(4,true),indices=view.getUint32(8,true);
-      const offset=12,vLen=vertices*44,iLen=indices*4;
-      if(offset+vLen+iLen!==bytes.length)throw new Error('Uszkodzony model '+kind);
-      const vertexBuffer=this.device.createBuffer({size:vLen,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
-      const indexBuffer=this.device.createBuffer({size:iLen,usage:GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST});
-      this.device.queue.writeBuffer(vertexBuffer,0,bytes.subarray(offset,offset+vLen));
-      this.device.queue.writeBuffer(indexBuffer,0,bytes.subarray(offset+vLen));
-      this.modelMeshes[kind]={vertexBuffer,indexBuffer,indexCount:indices};
+    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(DECOR_MODELS)]){
+      const mesh=await AssetManager.mesh(kind);
+      const vertexBuffer=this.device.createBuffer({size:mesh.vertexData.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
+      const indexBuffer=this.device.createBuffer({size:mesh.indexData.byteLength,usage:GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST});
+      this.device.queue.writeBuffer(vertexBuffer,0,mesh.vertexData);
+      this.device.queue.writeBuffer(indexBuffer,0,mesh.indexData);
+      this.modelMeshes[kind]={vertexBuffer,indexBuffer,indexCount:mesh.indices};
     }
     const albedoImage=new Image();albedoImage.src=MODEL_SLOT_ALBEDO_PNG;
     await albedoImage.decode();
@@ -468,7 +124,27 @@ class CatroomsWebGPURenderer {
       format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
     this.device.queue.copyExternalImageToTexture({source:albedoImage},
       {texture:this.modelAlbedoTexture},[albedoImage.naturalWidth,albedoImage.naturalHeight,1]);
+    const rockImage=new Image();rockImage.src=MODEL_ROCK_ALBEDO;await rockImage.decode();
+    this.rockAlbedoTexture=this.device.createTexture({size:[rockImage.naturalWidth,rockImage.naturalHeight],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+    this.device.queue.copyExternalImageToTexture({source:rockImage},{texture:this.rockAlbedoTexture},[rockImage.naturalWidth,rockImage.naturalHeight,1]);
+    const decorImage=new Image();decorImage.src=DECOR_ALBEDO;await decorImage.decode();
+    this.decorAlbedoTexture=this.device.createTexture({size:[decorImage.naturalWidth,decorImage.naturalHeight],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+    this.device.queue.copyExternalImageToTexture({source:decorImage},{texture:this.decorAlbedoTexture},[decorImage.naturalWidth,decorImage.naturalHeight,1]);
   }
+  toggleHdMaterials(){
+    if(!this.hdMaterials)return false;
+    this.hdEnabled=!this.hdEnabled;this.materialRevision++;this.needsRender=true;
+    this.terrainBind=this.device.createBindGroup({layout:this.terrainPipeline.getBindGroupLayout(0),entries:this.terrainBindings()});
+    return this.hdEnabled;
+  }
+  terrainBindings(){return [
+      {binding:0,resource:{buffer:this.frameBuffer}},{binding:1,resource:{buffer:this.mapBuffer}},
+      {binding:2,resource:(this.hdEnabled?this.hdMaterials.wall:this.wallTexture).createView({dimension:'2d-array'})},{binding:3,resource:this.sampler},
+      {binding:4,resource:(this.hdEnabled?this.hdMaterials.floor:this.floorTexture).createView({dimension:'2d-array'})},{binding:5,resource:this.sampler},
+      {binding:6,resource:{buffer:this.decalCellsBuffer}},{binding:7,resource:{buffer:this.decalDataBuffer}},
+      {binding:8,resource:this.decalTexture.createView({dimension:'2d-array'})},{binding:9,resource:this.spriteSampler},
+      {binding:10,resource:{buffer:this.furnitureBuffer}}
+    ];}
   resize(){
     const dpr=Math.min(window.devicePixelRatio||1,1.35)*gameSettings.quality;
     // Apply a single uniform scale to both dimensions. Independent width/height
@@ -477,147 +153,295 @@ class CatroomsWebGPURenderer {
     W=Math.max(1,Math.round(innerWidth*scale));
     H=Math.max(1,Math.round(innerHeight*scale));
     if(W===this.lastWidth && H===this.lastHeight)return;
-    this.lastWidth=W;this.lastHeight=H;
+    this.lastWidth=W;this.lastHeight=H;this.needsRender=true;
     C.width=W;C.height=H;
     this.context.configure({device:this.device,format:this.format,alphaMode:'opaque'});
+    this.post?.resize(W,H);
     if(this.distanceTexture)this.distanceTexture.destroy();
     this.distanceTexture=this.device.createTexture({size:[W,H],format:'rgba16float',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING});
     if(this.meshDepthTexture)this.meshDepthTexture.destroy();
     this.meshDepthTexture=this.device.createTexture({size:[W,H],format:'depth24plus',usage:GPUTextureUsage.RENDER_ATTACHMENT});
-    this.terrainBind=this.device.createBindGroup({layout:this.terrainPipeline.getBindGroupLayout(0),entries:[
-      {binding:0,resource:{buffer:this.frameBuffer}},{binding:1,resource:{buffer:this.mapBuffer}},
-      {binding:2,resource:this.wallTexture.createView({dimension:'2d-array'})},{binding:3,resource:this.sampler},
-      {binding:4,resource:this.floorTexture.createView({dimension:'2d-array'})},{binding:5,resource:this.sampler},
-      {binding:6,resource:{buffer:this.decalCellsBuffer}},{binding:7,resource:{buffer:this.decalDataBuffer}},
-      {binding:8,resource:this.decalTexture.createView({dimension:'2d-array'})},{binding:9,resource:this.spriteSampler},
-      {binding:10,resource:{buffer:this.furnitureBuffer}}
-    ]});
+    this.terrainBind=this.device.createBindGroup({layout:this.terrainPipeline.getBindGroupLayout(0),entries:this.terrainBindings()});
     this.spriteBind=this.device.createBindGroup({layout:this.spritePipeline.getBindGroupLayout(0),entries:[
       {binding:0,resource:{buffer:this.frameBuffer}},{binding:1,resource:this.distanceTexture.createView()},
       {binding:2,resource:this.spriteTexture.createView({dimension:'2d-array'})},{binding:3,resource:this.spriteSampler},
-      {binding:4,resource:{buffer:this.spriteBuffer}}
+      {binding:4,resource:{buffer:this.spriteBuffer}},{binding:5,resource:{buffer:this.mapBuffer}}
     ]});
-    this.meshBinds={};
-    for(const kind of ['campfire','slot'])this.meshBinds[kind]=this.device.createBindGroup({
+    this.rushMeshBinds={slot:[],campfire:[],tree:[],rock:[],door:[],decor:[]};
+    for(const kind of ['slot','campfire','tree','rock','door','decor'])for(let index=0;index<this.rushPoseBuffers[kind].length;index++)this.rushMeshBinds[kind].push(this.device.createBindGroup({
       layout:this.meshPipeline.getBindGroupLayout(0),entries:[
         {binding:0,resource:{buffer:this.frameBuffer}},
-        {binding:1,resource:{buffer:this.modelPoseBuffers[kind]}},
-        {binding:2,resource:this.modelAlbedoTexture.createView()},
+        {binding:1,resource:{buffer:this.rushPoseBuffers[kind][index]}},
+        {binding:2,resource:(kind==='decor'?this.decorAlbedoTexture:kind==='rock'?this.rockAlbedoTexture:this.modelAlbedoTexture).createView()},
         {binding:3,resource:this.spriteSampler},
-        {binding:4,resource:this.distanceTexture.createView()}
-      ]});
+        {binding:4,resource:this.distanceTexture.createView()},{binding:5,resource:{buffer:this.mapBuffer}}
+      ]}));
   }
-  collectSprites(){
+  collectSprites(camera=captureRenderCamera()){
     const sprites=[];
-    for(const f of fuses)if(!f.taken)sprites.push({kind:'fuse',x:f.x,y:f.y,phase:f.phase||0});
-    if(level===1&&awake)sprites.push({kind:'cat',x:cat.x,y:cat.y,frozen:!!cat.frozen});
+    for(const f of gameSession.fuses)if(!f.taken)sprites.push({kind:'fuse',x:f.x,y:f.y,phase:f.phase||0});
+    if(gameSession.level===1&&gameSession.awake){const p=gameSession.renderPosition(gameSession.cat);sprites.push({kind:'cat',x:p.x,y:p.y,frozen:!!gameSession.cat.frozen});}
     for(const a of coop.avatarSprites())sprites.push({kind:'coopAvatar',x:a.x,y:a.y});
-    for(const item of bonusItems)if(!item.taken&&item.type==='coin')sprites.push({kind:'coin',x:item.x,y:item.y});
+    for(const item of gameSession.bonusItems)if(!item.taken&&item.type==='coin')sprites.push({kind:'coin',x:item.x,y:item.y});
     // Slot machine is static 3D world geometry, never a camera-facing sprite.
-    if(level>=2){
-      for(const guard of guards)sprites.push({kind:guard.kind,x:guard.x,y:guard.y,phase:guard.x,variant:guard.variant||'classic',frozen:!!guard.frozen,size:guard.sizeMultiplier||1});
-      for(const t of terminals)sprites.push({kind:'terminal',x:t.x,y:t.y});
-      for(const item of interactables)if(item.type==='hide'||item.type==='stairs')sprites.push({kind:item.type,x:item.x,y:item.y});
-      for(const item of bonusItems)if(!item.taken)sprites.push({kind:item.type,x:item.x,y:item.y,phase:item.phase,energySprite:item.energySprite});
-      for(const item of decoys)sprites.push({kind:'decoy',x:item.x,y:item.y});
-      for(const rock of props)if(rock.type==='rock')sprites.push({kind:'rock',x:rock.x,y:rock.y,size:rock.size||1});
-      if(isHardMode()&&hardEmergency)sprites.push({kind:'terminal',x:hardEmergency.x,y:hardEmergency.y});
+    for(const guard of gameSession.guards){const p=gameSession.renderPosition(guard);sprites.push({kind:guard.kind,x:p.x,y:p.y,phase:guard.x,variant:guard.variant||'classic',frozen:!!guard.frozen,size:guard.sizeMultiplier||1});}
+    if(gameSession.level>=2){
+      for(const t of gameSession.terminals)sprites.push({kind:'terminal',x:t.x,y:t.y});
+      for(const item of gameSession.interactables)if(item.type==='hide'||item.type==='stairs')sprites.push({kind:item.type,x:item.x,y:item.y});
+      for(const item of gameSession.bonusItems)if(!item.taken&&item.type!=='coin')sprites.push({kind:item.type,x:item.x,y:item.y,phase:item.phase,energySprite:item.energySprite});
+      if(isHardMode()&&gameSession.hardEmergency)sprites.push({kind:'terminal',x:gameSession.hardEmergency.x,y:gameSession.hardEmergency.y});
     }
-    const layers={cat:0,pig:1,watcher:2,listener:3,fuse:renderStage()===1?4:renderStage()===4?6:5,terminal:7,hide:8,stairs:9,stamina:10,shield:11,key:12,decoy:13,coopAvatar:14,hardSlow:15,hardFreeze:16,rock:22,coin:23,slot:24,stranger:25};
-    const scales={cat:1.19,pig:1.07,watcher:1.38,listener:1.38,fuse:renderStage()===4?.76:.58,terminal:.73,hide:.9,stairs:.78,stamina:.43,shield:.43,key:.42,decoy:.4,coopAvatar:.94,hardSlow:.54,hardFreeze:.58,rock:.89,coin:.43,slot:.86,stranger:1.36};
-    const sourceAspect=[catImg,pigImg,personBImg,personAImg,fuseImg,keycardImg,foodImg,terminalImg,lockerArt,stairArt,staminaArt,shieldArt,extraPickupArt,decoyArt,coopAvatarArt,slowDeviceImg,freezeDeviceImg,...energyDrinkImgs,hardRockArt,coinSprite,slotMachineSprite,strangerImg].map(img=>(img.naturalWidth||img.width||1)/(img.naturalHeight||img.height||1));
-    const dirX=Math.cos(player.a),dirY=Math.sin(player.a),planeX=-dirY*cameraPlaneScale(),planeY=dirX*cameraPlaneScale(),inv=1/(planeX*dirY-dirX*planeY);
-    const order=[];
+    const fuseLayer=renderStage()===1?4:renderStage()===4?6:5;
+    const scales={cat:1.19,pig:1.07,watcher:1.38,listener:1.38,fuse:renderStage()===4?.76:.58,terminal:.73,hide:.9,stairs:.78,stamina:.43,shield:.43,key:.42,coopAvatar:.94,hardSlow:.54,hardFreeze:.58,rock:.89,coin:.43,slot:.86,stranger:1.36};
+    const sourceAspect=this.spriteAspects||(this.spriteAspects=spriteLayerSources().map(img=>(img.naturalWidth||img.width||1)/(img.naturalHeight||img.height||1)));
+    camera=resolveRenderCamera(camera);
+    const order=[];this.spriteDiagnostics=[];
     for(const s of sprites){
-      const vx=s.x-player.x,vy=s.y-player.y;
-      const tx=inv*(dirY*vx-dirX*vy),ty=inv*(-planeY*vx+planeX*vy);
-      if(ty<=.16||ty>125)continue;
-      const layer=s.kind==='stamina'?17+(s.energySprite||0):layers[s.kind];if(layer==null)continue;
-      const scale=scales[s.kind]*(s.size||1);
-      const center=W*.5*(1+tx/ty),height=H/ty*scale,width=height*sourceAspect[layer];
-      const bob=(s.kind==='fuse'?(.07+Math.sin(elapsed*2.2+(s.phase||0))*.08):s.kind==='cat'?Math.sin(elapsed*8)*.03:0);
-      const vertical=(s.kind==='fuse'?bob:s.kind==='decoy'?.13:s.kind==='stamina'||s.kind==='shield'||s.kind==='key'||s.kind==='hardSlow'||s.kind==='hardFreeze'?.15:0);
-      const bottom=H*.5+H*viewPitchOffset()+H/(2*ty)-vertical*H/ty;
-      const left=center-width*.5,top=bottom-height;
-      if(left>W||left+width<0||top>H||bottom<0)continue;
-      order.push({layer,ty,left,top,width,height,variant:({red:1,green:2,yellow:3,gray:4,pink:5})[s.variant]||0,frozen:s.frozen?1:0});
+      const diag=SPRITE_ENEMY_KINDS.has(s.kind)?{kind:s.kind,x:s.x,y:s.y,reason:'pending'}:null;
+      if(diag)this.spriteDiagnostics.push(diag);
+      const layer=s.kind==='stamina'?16+Math.max(0,Math.min(4,s.energySprite||0)):s.kind==='fuse'?fuseLayer:SPRITE_LAYER[s.kind];
+      if(layer==null){if(diag)diag.reason='unknown layer';continue;}
+      if(diag)diag.layer=layer;
+      const height=scales[s.kind]*(s.size||1),width=height*sourceAspect[layer];
+      const bob=(s.kind==='fuse'?(.07+Math.sin(gameSession.elapsed*2.2+(s.phase||0))*.08):s.kind==='cat'?Math.sin(gameSession.elapsed*8)*.03:0);
+      const vertical=(s.kind==='fuse'?bob:s.kind==='stamina'||s.kind==='shield'||s.kind==='key'||s.kind==='hardSlow'||s.kind==='hardFreeze'?.15:0);
+      const center=cameraCoordinates(camera,s.x,s.y,vertical+height*.5),ty=center.depth;
+      if(diag)diag.depth=ty;
+      const radius=Math.hypot(width,height)*.5;
+      if(!Number.isFinite(ty)||ty+radius<=RENDER_DEPTH.spriteNear||ty-radius>RENDER_DEPTH.spriteFar){if(diag)diag.reason='outside depth range';continue;}
+      const hPlane=camera.plane,vPlane=hPlane*H/W;
+      if(Math.abs(center.right)>ty*hPlane+radius*Math.hypot(1,hPlane)||Math.abs(center.up)>ty*vPlane+radius*Math.hypot(1,vPlane)){if(diag)diag.reason='offscreen';continue;}
+      const left=center.right,top=center.up;
+      if(diag)diag.reason='projected';
+      order.push({kind:s.kind,diag,layer,ty,left,top,width,height,variant:({red:1,green:2,yellow:3,gray:4,pink:5})[s.variant]||0,frozen:s.frozen?1:0});
     }
-    order.sort((a,b)=>b.ty-a.ty);
-    const data=new Float32Array(Math.min(order.length,GPU_MAX_SPRITES)*8);
-    for(let i=0;i<data.length/8;i++){
-      const s=order[i];data.set([s.left,s.top,s.width,s.height,s.layer,s.ty,s.variant,s.frozen],i*8);
+    // Preserve enemies first when the atlas instance budget is exhausted, then nearest pickups.
+    if(order.length>GPU_MAX_SPRITES){
+      order.sort((a,b)=>Number(SPRITE_ENEMY_KINDS.has(b.kind))-Number(SPRITE_ENEMY_KINDS.has(a.kind))||a.ty-b.ty);
+      for(let i=GPU_MAX_SPRITES;i<order.length;i++)if(order[i].diag)order[i].diag.reason='sprite budget';
+      order.length=GPU_MAX_SPRITES;
     }
-    return data;
+    order.sort((a,b)=>b.ty-a.ty); // alpha compositing remains back-to-front
+    const data=this.spriteData||(this.spriteData=new Float32Array(GPU_MAX_SPRITES*8));
+    for(let i=0;i<order.length;i++){
+      const s=order[i],o=i*8;
+      data[o]=s.left;data[o+1]=s.top;data[o+2]=s.width;data[o+3]=s.height;data[o+4]=s.layer;data[o+5]=s.ty;data[o+6]=s.variant;data[o+7]=s.frozen;
+      if(s.diag)s.diag.reason='submitted (GPU occlusion not measured)';
+    }
+    return data.subarray(0,order.length*8);
+  }
+  syncStaticBuffers(scene=gameSession){
+    const upload=(buffer,data)=>{this.device.queue.writeBuffer(buffer,0,data);this.stats.staticBytes+=data.byteLength;};
+    if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N){
+      this.tilesData.fill(0);
+      for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++)this.tilesData[y*128+x]=scene.world[y][x];
+      this.doorLayout=scene===gameSession?this.makeDoorLayout(scene):[];
+      for(const d of this.doorLayout)this.tilesData[d.y*128+d.x]=0;
+      // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
+      // geometry map unchanged; only the GPU visibility map carries the flag.
+      this.gpuTilesData.set(this.tilesData);
+      for(const d of this.doorLayout){
+        const tile=scene.world[d.y][d.x];
+        if(tile===3||tile===4)this.gpuTilesData[d.y*128+d.x]|=256;
+      }
+      upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;
+    }
+    const furniture=scene.safeRoomFurniture;
+    if(this.furnitureSource!==furniture||this.furnitureLength!==furniture.length){
+      this.furnitureData.fill(0);let i=0;
+      for(const o of furniture){if(o.collisionOnly||i>=64)continue;
+        this.furnitureData.set([o.x-o.w/2,o.y-o.d/2,o.z-o.h/2,o.material,o.x+o.w/2,o.y+o.d/2,o.z+o.h/2,0],i++*8);
+      }
+      this.furnitureCount=i;upload(this.furnitureBuffer,this.furnitureData);this.stats.furnitureUploads++;this.furnitureSource=furniture;this.furnitureLength=furniture.length;
+    }
+    // Trail arrays may be replaced each update even when the hazard content stays identical.
+    let count=0;
+    for(const p of scene.props){
+      if((p.type!=='hazard'&&!(p.type==='decor'&&p.solid))||count>=GPU_MAX_DECALS)continue;
+      const x=Math.floor(p.x),y=Math.floor(p.y);if(x<0||y<0||x>=scene.N||y>=scene.N)continue;
+      this.decalScratch.set([p.x,p.y,p.type==='decor'?Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12):p.size||.75,p.type==='decor'?2:1],count++*4);
+    }
+    let changed=this.decalWorld!==scene.world||this.decalCount!==count;
+    for(let i=0;!changed&&i<count*4;i++)if(this.decalScratch[i]!==this.decalData[i])changed=true;
+    if(changed){
+      this.decalGridData.fill(0);this.decalData.fill(0);this.decalData.set(this.decalScratch.subarray(0,count*4));
+      for(let i=0;i<count;i++){const x=Math.floor(this.decalData[i*4]),y=Math.floor(this.decalData[i*4+1]);this.decalGridData[y*128+x]=i+1;}
+      upload(this.decalCellsBuffer,this.decalGridData);upload(this.decalDataBuffer,this.decalData);this.stats.decalUploads++;this.decalCount=count;this.decalWorld=scene.world;
+    }
+  }
+  makeDoorLayout(scene){
+    // The model replaces only Yellow Corridors doors. Other sectors retain their old textures.
+    const yellow=scene.level!==12&&renderStage()===1;
+    const doors=[];
+    const rooms=scene.level===12?(scene.rushSafeRooms||[]).filter(r=>r.rushSector===1):yellow&&scene.safeRoom?[scene.safeRoom]:[];
+    for(const room of rooms){
+      const x=room.doorX,y=room.doorY;
+      const dx=room.centerX-(x+.5),dy=room.centerY-(y+.5);
+      // Local +Y points into the room; local +X is the hinge edge.
+      const yaw=Math.abs(dx)>Math.abs(dy)?(dx>0?-Math.PI/2:Math.PI/2):(dy>0?0:Math.PI);
+      doors.push({x,y,yaw,room});
+    }
+    if(yellow){
+      const e=scene.exitCell;
+      if(e&&scene.world[e.y]?.[e.x]===3){
+        for(const [dx,dy,yaw] of [[0,-1,0],[0,1,Math.PI],[-1,0,-Math.PI/2],[1,0,Math.PI/2]]){
+          if(scene.world[e.y+dy]?.[e.x+dx]===0)doors.push({x:e.x,y:e.y,yaw,exit:true,dx,dy});
+        }
+      }
+    }
+    return doors;
+  }
+  doorPoses(camera){
+    const out=[];
+    for(const d of this.doorLayout){
+      const visible=this.modelInView(d.x+.5,d.y+.5,1.7,camera);
+      const yaw=d.yaw,c=Math.cos(yaw),s=Math.sin(yaw);
+      if(d.exit){
+        if(!visible)continue;
+        const ready=gameSession.player.collected>=gameSession.GOAL&&gameSession.terminals.every(t=>t.used);
+        out.push([d.x+.5-d.dx*.33,d.y+.5-d.dy*.33,0,.92,c,s,4,ready?1:0]);continue;
+      }
+      const target=d.room.open?1:0,now=gameSession.elapsed;
+      let a=this.doorAnimations.get(d.room);
+      if(!a){a={target,start:target,time:now};this.doorAnimations.set(d.room,a);}
+      const fraction=()=>a.start+(a.target-a.start)*Math.min(1,Math.max(0,(now-a.time)/.24));
+      let f=fraction();if(a.target!==target){a.start=f;a.target=target;a.time=now;}
+      if(!visible)continue;
+      const angle=yaw-f*Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle);
+      // Hold the hinge in place while the imported leaf rotates into the room.
+      out.push([d.x+.5+.51*(c-ca),d.y+.5+.51*(s-sa),0,1,ca,sa,4,0]);
+    }
+    return out.slice(0,16);
+  }
+  modelInView(x,y,radius=1.2,camera=captureRenderCamera()){
+    // Conservative horizontal bounding circle: no geometry is culled while it intersects the frustum.
+    camera=resolveRenderCamera(camera);
+    const dx=x-camera.x,dy=y-camera.y,{cos,sin,plane}=camera;
+    const horizontal=dx*cos+dy*sin,side=Math.abs(-dx*sin+dy*cos);
+    // Conservative vertical extent for tall meshes, including ceiling decor.
+    const depth=horizontal*Math.cos(camera.pitch),bound=radius+Math.abs(Math.sin(camera.pitch))*2;
+    return depth+bound>=RENDER_DEPTH.near&&side<=depth*plane+bound*Math.hypot(1,plane);
+  }
+  visibleRocks(camera=captureRenderCamera()){
+    return gameSession.props.filter(p=>p.type==='rock'&&this.modelInView(p.x,p.y,1,camera)).slice(0,64);
+  }
+  visibleDecor(camera=captureRenderCamera()){
+    // One shared texture/bind layout; distance/frustum culling and a bounded pool.
+    // All nearby objects are retained before distant ones, regardless of type.
+    return gameSession.props.filter(p=>p.type==='decor'&&Math.hypot(p.x-camera.x,p.y-camera.y)<28&&this.modelInView(p.x,p.y,(p.radius??DECOR_MODELS[p.model].radius)+.1,camera))
+      .sort((a,b)=>Math.hypot(a.x-camera.x,a.y-camera.y)-Math.hypot(b.x-camera.x,b.y-camera.y)).slice(0,64);
+  }
+  writePose(kind,index,values){
+    if(values.length===8)values=[...values,1,0,0,0];
+    const key=kind+index,old=this.poseCache.get(key);
+    if(old&&values.every((v,i)=>v===old[i]))return;
+    this.device.queue.writeBuffer(this.rushPoseBuffers[kind][index],0,new Float32Array(values));
+    this.poseCache.set(key,values);
+  }
+  renderMenu(time){
+    if(!this.lastWidth)return;
+    if(!this.menuScene){const N=49,world=Array.from({length:N},()=>Array(N).fill(1));
+      for(let x=1;x<N-1;x++)for(let y=19;y<=23;y++)world[y][x]=0;
+      for(let x=5;x<N-4;x+=8)for(let y=14;y<=28;y++)for(let xx=x;xx<x+3;xx++)world[y][xx]=0;
+      this.menuScene={N,world,worldRevision:-1,props:[],safeRoomFurniture:[]};}
+    this.needsRender=false;this.stats.frames++;this.stats.triangles=0;this.stats.sprites=0;this.syncStaticBuffers(this.menuScene);
+    const t=time/1000, phase=(t*.55)%36;
+    const frame=this.frameData;frame.set([4+phase,21.5+Math.sin(t*.55)*.18,Math.sin(t*.35)*.035,t],RENDER_FRAME.player);
+    frame.set([W,H,this.menuScene.N,1],RENDER_FRAME.viewport);frame.set([0,0,0,-1],RENDER_FRAME.progress);frame.set([1,1,100,0],RENDER_FRAME.visuals);frame.set([0,0,0,0],RENDER_FRAME.weather);frame.set([Math.tan(75*Math.PI/360),0,0,0],RENDER_FRAME.camera);frame.set([0,0,0,0],RENDER_FRAME.lighting);frame.set([0,0,0,0],RENDER_FRAME.flashlight);this.flashlightState=null;
+    this.device.queue.writeBuffer(this.frameBuffer,0,frame);
+    const encoder=this.device.createCommandEncoder({label:'Menu corridor'});
+    const output=this.context.getCurrentTexture().createView();
+    const pass=encoder.beginRenderPass({colorAttachments:[{view:this.post?this.post.scene.createView():output,loadOp:'clear',storeOp:'store',clearValue:{r:.05,g:.04,b:.03,a:1}},{view:this.distanceTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}]});
+    pass.setPipeline(this.terrainPipeline);pass.setBindGroup(0,this.terrainBind);pass.draw(6);pass.end();this.post?.encode(encoder,output,false,time);this.device.queue.submit([encoder.finish()]);
   }
   render(){
     if(!this.lastWidth)return;
-    const frame=new Float32Array(24);
-    frame.set([player.x||2.5,player.y||2.5,player.a||0,elapsed],0);
-    frame.set([W,H,N,renderStage()],4);
-    frame.set([player.collected||0,GOAL,terminals.filter(t=>t.used).length,terminals.length],8);
-    frame.set([player.flash?1:0,(player.hp??100)/100,nearCat<0?100:nearCat,Math.max(0,flashUntil-elapsed)],12);
-    frame.set([level===3&&eventState?.kind==='blackout'?1:0,level===3&&eventState?.kind==='fog'?1:0,rageMode?1:0,viewPitchOffset()],16);
-    const visibleFurniture=typeof safeRoomFurniture==='undefined'?[]:safeRoomFurniture.filter(o=>!o.collisionOnly);
-    frame.set([cameraPlaneScale(),isHardMode()?1:0,isHardMode()&&guards.some(g=>g.state==='chase'&&!g.frozen)?1:0,Math.min(64,visibleFurniture.length)],20);
+    this.needsRender=false;this.stats.frames++;this.stats.triangles=0;
+    this.syncStaticBuffers();
+    const frame=this.frameData,camera=captureRenderCamera();
+    frame.set([camera.x,camera.y,camera.angle,gameSession.elapsed],RENDER_FRAME.player);
+    frame.set([W,H,gameSession.N,gameSession.level===12?12:renderStage()],RENDER_FRAME.viewport);
+    frame.set([gameSession.player.collected||0,gameSession.GOAL,gameSession.terminals.filter(t=>t.used).length,gameSession.terminals.length],RENDER_FRAME.progress);
+    frame.set([gameSession.player.flash?1:0,(gameSession.player.hp??100)/100,gameSession.nearCat<0?100:gameSession.nearCat,Math.max(0,gameSession.flashUntil-gameSession.elapsed)],RENDER_FRAME.visuals);
+    frame.set([gameSession.level===3&&gameSession.eventState?.kind==='blackout'?1:0,gameSession.level===3&&gameSession.eventState?.kind==='fog'?1:0,rageMode?1:0,camera.pitch],RENDER_FRAME.weather);
+    frame.set([camera.plane,isHardMode()?1:0,isHardMode()&&gameSession.guards.some(g=>g.state==='chase'&&!g.frozen)?1:0,this.furnitureCount],RENDER_FRAME.camera);
+    const lightRooms=gameSession.level===12?bossRushRooms():gameSession.safeRoom?[gameSession.safeRoom]:[];
+    const fire=lightRooms.filter(r=>Number.isFinite(r.fireX)&&Number.isFinite(r.fireY)).sort((a,b)=>Math.hypot(camera.x-a.fireX,camera.y-a.fireY)-Math.hypot(camera.x-b.fireX,camera.y-b.fireY))[0];
+    this.flashlightState=sampleFlashlight(this.flashlightState,gameSession.player,camera,gameSession.elapsed,gameSession.walkPhase||0);
+    frame.set([this.flashlightState.yaw,this.flashlightState.pitch,this.flashlightState.intensity,this.flashlightEnabled?1:0],RENDER_FRAME.flashlight);
+    frame.set([this.lightingEnabled?(this.wallShadowsEnabled?2:1):0,fire?.fireX||0,fire?.fireY||0,fire&&Math.hypot(camera.x-fire.fireX,camera.y-fire.fireY)<12?1:0],RENDER_FRAME.lighting);
     this.device.queue.writeBuffer(this.frameBuffer,0,frame);
-    const objects=new Float32Array(64*8);
-    visibleFurniture.slice(0,64).forEach((o,i)=>{
-      objects.set([o.x-o.w/2,o.y-o.d/2,o.z-o.h/2,o.material,o.x+o.w/2,o.y+o.d/2,o.z+o.h/2,0],i*8);
-    });
-    this.device.queue.writeBuffer(this.furnitureBuffer,0,objects);
-    const tiles=new Uint32Array(128*128);
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++)tiles[y*128+x]=world[y][x];
-    this.device.queue.writeBuffer(this.mapBuffer,0,tiles);
-    const decalGrid=new Uint32Array(128*128),decals=new Float32Array(GPU_MAX_DECALS*4);
-    let count=0;
-    for(const p of props){
-      if(p.type!=='hazard'||count>=GPU_MAX_DECALS)continue;
-      const x=Math.floor(p.x),y=Math.floor(p.y);
-      if(x<0||y<0||x>=N||y>=N)continue;
-      const isHazard=p.type==='hazard';
-      decalGrid[y*128+x]=count+1;
-      decals.set([p.x,p.y,p.size||.75,isHazard?1:0],count*4);
-      count++;
-    }
-    this.device.queue.writeBuffer(this.decalCellsBuffer,0,decalGrid);
-    this.device.queue.writeBuffer(this.decalDataBuffer,0,decals);
-    const sprites=this.collectSprites();
+    const sprites=this.collectSprites(camera);this.stats.sprites=sprites.length/8;
     if(sprites.length)this.device.queue.writeBuffer(this.spriteBuffer,0,sprites);
     const encoder=this.device.createCommandEncoder({label:'Catrooms WebGPU frame'});
-    const colorView=this.context.getCurrentTexture().createView();
+    const output=this.context.getCurrentTexture().createView();
+    const colorView=this.post?this.post.scene.createView():output;
     const depthView=this.distanceTexture.createView();
+    const geometry=this.worldGeometry?.enabled?this.worldGeometry:null;
+    if(geometry)geometry.encode(encoder);
     const terrain=encoder.beginRenderPass({colorAttachments:[
       {view:colorView,loadOp:'clear',storeOp:'store',clearValue:{r:.07,g:.07,b:.05,a:1}},
       {view:depthView,loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}
     ]});
-    terrain.setPipeline(this.terrainPipeline);terrain.setBindGroup(0,this.terrainBind);terrain.draw(6);terrain.end();
+    terrain.setPipeline(geometry?geometry.resolvePipeline:this.terrainPipeline);terrain.setBindGroup(0,geometry?geometry.resolveBind:this.terrainBind);terrain.draw(6);terrain.end();
+    this.stats.wallTriangles=geometry?geometry.wallVertexCount/3:0;
+    this.stats.planeTriangles=geometry?geometry.planeVertexCount/3:0;
     // Actual indexed triangles imported from the supplied GLBs, fixed in world
     // coordinates. No billboard rotation, and fragments hide behind walls.
-    if(safeRoom&&this.modelMeshes.slot&&this.modelMeshes.campfire&&
-       Math.hypot(player.x-safeRoom.centerX,player.y-safeRoom.centerY)<25){
-      const poses={
-        slot:[safeRoom.machineX,safeRoom.machineY,0,1,
-          Math.cos(safeRoom.machineYaw),Math.sin(safeRoom.machineYaw),1,0],
-        campfire:[safeRoom.fireX,safeRoom.fireY,0,1,1,0,0,0]
-      };
-      for(const kind of ['slot','campfire'])this.device.queue.writeBuffer(this.modelPoseBuffers[kind],0,new Float32Array(poses[kind]));
-      const meshPass=encoder.beginRenderPass({label:'Imported campfire + slot meshes',
+    const rooms=[];
+    if(gameSession.level!==12&&gameSession.safeRoom&&Math.hypot(camera.x-gameSession.safeRoom.centerX,camera.y-gameSession.safeRoom.centerY)<23)rooms.push(gameSession.safeRoom);
+    if(gameSession.level===12)rooms.push(...bossRushRooms().filter(r=>Math.hypot(camera.x-r.centerX,camera.y-r.centerY)<23).slice(0,3));
+    const rocks=this.visibleRocks(camera);
+    const doors=this.doorPoses(camera);
+    const decor=this.visibleDecor(camera);
+    const drawMeshes=!!((rooms.length||rocks.length||doors.length||decor.length)&&this.modelMeshes.slot&&this.modelMeshes.campfire&&this.modelMeshes.tree&&this.modelMeshes.rock&&this.modelMeshes.door);
+    if(drawMeshes){
+      for(let i=0;i<rooms.length;i++){
+        const room=rooms[i];
+        this.writePose('slot',i,[
+          room.machineX,room.machineY,0,.78,Math.cos(room.machineYaw||0),Math.sin(room.machineYaw||0),1,0]);
+        this.writePose('campfire',i,[
+          room.fireX,room.fireY,0,.68,1,0,0,0]);
+        if(Number.isFinite(room.treeX)&&Number.isFinite(room.treeY))this.writePose('tree',i,[
+          room.treeX,room.treeY,0,.64,Math.cos(room.treeYaw||0),Math.sin(room.treeYaw||0),2,0]);
+      }
+      for(let i=0;i<rocks.length;i++){const r=rocks[i],angle=r.phase||0;this.writePose('rock',i,[r.x,r.y,0,r.size||1,Math.cos(angle),Math.sin(angle),3,0]);}
+      for(let i=0;i<doors.length;i++)this.writePose('door',i,doors[i]);
+      for(let i=0;i<decor.length;i++){const p=decor[i];this.writePose('decor',i,[p.x,p.y,p.z,p.size,Math.cos(p.yaw),Math.sin(p.yaw),5,p.stage,Math.cos(p.tilt||0),Math.sin(p.tilt||0),0,0]);}
+      const meshPass=encoder.beginRenderPass({label:'Imported world meshes',
         colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
         depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:'clear',depthClearValue:1,depthStoreOp:'store'}});
       meshPass.setPipeline(this.meshPipeline);
-      for(const kind of ['slot','campfire']){
+      for(let i=0;i<rooms.length;i++)for(const kind of ['slot','campfire','tree']){
+        const room=rooms[i],x=kind==='slot'?room.machineX:kind==='tree'?room.treeX:room.fireX,y=kind==='slot'?room.machineY:kind==='tree'?room.treeY:room.fireY;
+        if(kind==='tree'&&(!Number.isFinite(x)||!Number.isFinite(y)))continue;
+        if(!this.modelInView(x,y,1.2,camera))continue;
         const mesh=this.modelMeshes[kind];
-        meshPass.setBindGroup(0,this.meshBinds[kind]);
+        meshPass.setBindGroup(0,this.rushMeshBinds[kind][i]);
         meshPass.setVertexBuffer(0,mesh.vertexBuffer);
         meshPass.setIndexBuffer(mesh.indexBuffer,'uint32');
-        meshPass.drawIndexed(mesh.indexCount);
+        meshPass.drawIndexed(mesh.indexCount);this.stats.triangles+=mesh.indexCount/3;
+      }
+      const rockMesh=this.modelMeshes.rock;
+      if(rocks.length){meshPass.setVertexBuffer(0,rockMesh.vertexBuffer);meshPass.setIndexBuffer(rockMesh.indexBuffer,'uint32');
+        for(let i=0;i<rocks.length;i++){meshPass.setBindGroup(0,this.rushMeshBinds.rock[i]);meshPass.drawIndexed(rockMesh.indexCount);this.stats.triangles+=rockMesh.indexCount/3;}}
+      if(doors.length){const m=this.modelMeshes.door;meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');
+        for(let i=0;i<doors.length;i++){meshPass.setBindGroup(0,this.rushMeshBinds.door[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;}}
+      // Group by mesh without changing per-instance pose indices.
+      let meshKind=null;
+      for(const {p,i} of decor.map((p,i)=>({p,i})).sort((a,b)=>a.p.model.localeCompare(b.p.model))){
+        const m=this.modelMeshes[p.model];
+        if(meshKind!==p.model){meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');meshKind=p.model;}
+        meshPass.setBindGroup(0,this.rushMeshBinds.decor[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
       }
       meshPass.end();
     }
     if(sprites.length){
-      const pass=encoder.beginRenderPass({colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}]});
+      const pass=encoder.beginRenderPass({colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
+        depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:drawMeshes?'load':'clear',depthClearValue:1,depthStoreOp:'discard'}});
       pass.setPipeline(this.spritePipeline);pass.setBindGroup(0,this.spriteBind);pass.draw(6,sprites.length/8);pass.end();
     }
+    this.post?.encode(encoder,output,true,performance.now());
     this.device.queue.submit([encoder.finish()]);
   }
 }
@@ -625,29 +449,108 @@ class CatroomsWebGPURenderer {
 let gpuRenderer=null;
 window.CatroomsGraphicsStatus={backend:'initializing',error:null};
 async function initGraphics(){
- if(!navigator.gpu)throw new Error('Ta wersja wymaga WebGPU. Otworz gre w aktualnym Chrome lub Edge z wlaczonym WebGPU.');
+ if(!navigator.gpu)throw new Error('This version requires WebGPU. Open it in an up-to-date Chrome or Edge with WebGPU enabled.');
+ window.CatroomsLoadingProgress?.(42,'CHECKING GRAPHICS ADAPTER...');
  const adapter=await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
- if(!adapter)throw new Error('Nie wykryto adaptera WebGPU.');
+ if(!adapter)throw new Error('No WebGPU adapter was found.');
  const device=await adapter.requestDevice();
  const format=navigator.gpu.getPreferredCanvasFormat();
  device.pushErrorScope('validation');
- const renderer=new CatroomsWebGPURenderer(device,null,format);
+ let post=null,postError=null;
+ try{post=new CatroomsPostProcessing(device,format);const report=await post.shader.getCompilationInfo();const errors=report.messages.filter(m=>m.type==='error');if(errors.length)throw Error(errors.map(m=>m.message).join('; '));}catch(e){postError=String(e.message||e);post=null;}
+ const postValidation=await device.popErrorScope();if(postValidation){postError=postValidation.message;post=null;}
+ if(postError)console.warn('CP08 post-processing disabled:',postError);
+ device.pushErrorScope('validation');
+ const renderer=new CatroomsWebGPURenderer(device,null,format,post);
+ window.CatroomsLoadingProgress?.(56,'COMPILING WEBGPU SHADERS...');
  const reports=await Promise.all([renderer.terrainShader.getCompilationInfo(),renderer.spriteShader.getCompilationInfo(),renderer.meshShader.getCompilationInfo()]);
  const errors=reports.flatMap(r=>r.messages.filter(m=>m.type==='error').map(m=>m.message));
  const validation=await device.popErrorScope();if(validation)errors.push(validation.message);
- if(errors.length)throw new Error('Blad shaderow WebGPU: '+errors.join('; '));
+ if(errors.length)throw new Error('WebGPU shader error: '+errors.join('; '));
+ renderer.worldGeometry=new WorldGeometryExperiment(renderer);
+ try{await renderer.worldGeometry.initialize();}catch(e){renderer.worldGeometry.error=String(e.message||e);renderer.worldGeometry.available=false;}
+ if(renderer.worldGeometry.error)console.warn('CP10 geometry disabled:',renderer.worldGeometry.error);
+ window.CatroomsLoadingProgress?.(69,'DECODING TEXTURES...');
  await renderer.buildTextures();
+ window.CatroomsLoadingProgress?.(76,'LOADING HD MATERIALS...');
+ try{renderer.hdMaterials=await buildHdMaterials(renderer);renderer.hdEnabled=true;}catch(e){renderer.hdError=String(e.message||e);console.warn('CP04 HD disabled:',renderer.hdError);}
+ window.CatroomsLoadingProgress?.(85,'LOADING 3D MODELS...');
  await renderer.buildModels();
  const context=C.getContext('webgpu');
- if(!context)throw new Error('Brak kontekstu WebGPU');
+ if(!context)throw new Error('WebGPU context unavailable');
  renderer.context=context;gpuRenderer=renderer;
+ window.CatroomsGraphicsPreferences?.apply();window.CatroomsSettings?.sync();
  window.CatroomsGraphicsStatus={backend:'webgpu',error:null};
- device.lost.then(info=>{window.CatroomsGraphicsStatus={backend:'webgpu-lost',error:info.message};if(state==='playing')pause();});
+ window.CatroomsPostFX={get available(){return !!renderer.post},get enabled(){return !!renderer.post?.enabled},get passes(){return renderer.post?.passes||0},get error(){return postError}};
+ window.CatroomsFlashlight={get enabled(){return renderer.flashlightEnabled},get intensity(){return renderer.flashlightState?.intensity||0}};
+ window.CatroomsLighting={get enabled(){return renderer.lightingEnabled},get wallShadows(){return renderer.wallShadowsEnabled},get activeWallShadows(){return renderer.lightingEnabled&&renderer.wallShadowsEnabled}};
+ window.CatroomsMaterials={get available(){return !!renderer.hdMaterials},get enabled(){return renderer.hdEnabled},get error(){return renderer.hdError},get wallSize(){return renderer.hdEnabled?[512,1024]:[128,256]},get floorSize(){return renderer.hdEnabled?[512,512]:[64,64]}};
+ window.CatroomsTerrainExperiment={get available(){return renderer.worldGeometry.available},get enabled(){return renderer.worldGeometry.enabled},get error(){return renderer.worldGeometry.error},get wallTriangles(){return renderer.stats.wallTriangles||0},get planeTriangles(){return renderer.stats.planeTriangles||0}};
+ device.lost.then(info=>{
+  // Ignore notifications from a device that is no longer current.
+  if(gpuRenderer!==renderer)return;
+  gpuRenderer=null;
+  window.CatroomsGraphicsStatus={backend:'webgpu-lost',error:info.message||'Graphics device lost'};
+  if(gameSession.state==='playing')pause();
+  renderBackendStatus();
+  const notice=document.createElement('div');notice.id='graphicsFailure';notice.setAttribute('role','alert');
+  notice.style.cssText='position:fixed;inset:auto 20px 20px;z-index:99999;color:#fff;background:#622;padding:12px';
+  notice.textContent='WebGPU device lost. Reload the game to restore graphics. Unsaved round progress will be lost. ';
+  const button=document.createElement('button');button.textContent='RELOAD';button.onclick=()=>location.reload();notice.appendChild(button);document.body.appendChild(notice);
+ });
 }
 function renderBackendStatus(){
   const el=$('rendererMode');if(!el)return;
-  el.textContent=window.CatroomsGraphicsStatus.backend==='webgpu'?'WebGPU · GPU RAYCAST':'WebGPU WYMAGANE';
+  el.textContent=window.CatroomsGraphicsStatus.backend==='webgpu'?'WebGPU · GPU RAYCAST':'WebGPU REQUIRED';
   el.title=window.CatroomsGraphicsStatus.error||'WebGPU';
 }
 function resize(){if(gpuRenderer)gpuRenderer.resize();}
-function render(){if(gpuRenderer)gpuRenderer.render();}
+function render(){if(gpuRenderer){if(gameSession.state==='menu'){if(!$('pixelSplash').hidden)gpuRenderer.renderMenu(performance.now());}else gpuRenderer.render();}}
+
+
+// Nonpersistent, opt-in during gameplay. No changes to save data or game rules.
+if(typeof window.addEventListener==='function')window.addEventListener('keydown',event=>{
+ if(event.code!=='F8'||event.repeat||event.ctrlKey||event.altKey||event.metaKey||gameSession.state!=='playing'||!gpuRenderer?.worldGeometry)return;
+ event.preventDefault();
+ const experiment=gpuRenderer.worldGeometry;
+ if(!experiment.available){showToast('3D WORLD UNAVAILABLE · CLASSIC RENDERER ACTIVE',3);return;}
+ experiment.toggle();window.CatroomsGraphicsPreferences?.capture();
+ showToast(experiment.enabled?'EXPERIMENTAL 3D WORLD · F8 TO RETURN':'CLASSIC RAYCAST · F8 TO COMPARE',3);
+});
+
+// F9 is independent of the F8 wall geometry experiment.
+if(typeof window.addEventListener==='function')window.addEventListener('keydown',event=>{
+ if(event.code!=='F9'||event.repeat||event.ctrlKey||event.altKey||event.metaKey||gameSession.state!=='playing'||!gpuRenderer)return;
+ event.preventDefault();
+ if(!gpuRenderer.hdMaterials){showToast('HD MATERIALS UNAVAILABLE · CLASSIC ACTIVE',3);return;}
+ gpuRenderer.toggleHdMaterials();window.CatroomsGraphicsPreferences?.capture();showToast(gpuRenderer.hdEnabled?'HD MATERIALS · F9 TO COMPARE':'CLASSIC MATERIALS · F9 TO COMPARE',3);
+});
+
+// F10 compares CP05 local lighting without changing game rules or F8/F9.
+if(typeof window.addEventListener==='function')window.addEventListener('keydown',event=>{
+ if(event.code!=='F10'||event.repeat||event.ctrlKey||event.altKey||event.metaKey||gameSession.state!=='playing'||!gpuRenderer)return;
+ event.preventDefault();gpuRenderer.lightingEnabled=!gpuRenderer.lightingEnabled;gpuRenderer.needsRender=true;window.CatroomsGraphicsPreferences?.capture();
+ showToast(gpuRenderer.lightingEnabled?'LIGHTING 2.0 · F10 TO COMPARE':'CLASSIC LIGHTING · F10 TO COMPARE',3);
+});
+
+// F7 compares the wall-visibility term independently of F8/F9/F10.
+if(typeof window.addEventListener==='function')window.addEventListener('keydown',event=>{
+ if(event.code!=='F7'||event.repeat||event.ctrlKey||event.altKey||event.metaKey||gameSession.state!=='playing'||!gpuRenderer)return;
+ event.preventDefault();gpuRenderer.wallShadowsEnabled=!gpuRenderer.wallShadowsEnabled;gpuRenderer.needsRender=true;window.CatroomsGraphicsPreferences?.capture();
+ showToast(!gpuRenderer.lightingEnabled?'WALL SHADOWS '+(gpuRenderer.wallShadowsEnabled?'ON':'OFF')+' · ENABLE LIGHTING WITH F10':gpuRenderer.wallShadowsEnabled?'WALL SHADOWS ON · F7 TO COMPARE':'WALL SHADOWS OFF · F7 TO COMPARE',3);
+});
+
+// F6 compares the physical beam with the original screen-wide lighting.
+if(typeof window.addEventListener==='function')window.addEventListener('keydown',event=>{
+ if(event.code!=='F6'||event.repeat||event.ctrlKey||event.altKey||event.metaKey||gameSession.state!=='playing'||!gpuRenderer)return;
+ event.preventDefault();gpuRenderer.flashlightEnabled=!gpuRenderer.flashlightEnabled;gpuRenderer.needsRender=true;window.CatroomsGraphicsPreferences?.capture();
+ showToast(gpuRenderer.flashlightEnabled?'FLASHLIGHT 2.0 · F6 TO COMPARE':'CLASSIC FLASHLIGHT · F6 TO COMPARE',3);
+});
+
+// F4 compares CP08 with the unprocessed scene. No settings or saves are changed.
+if(typeof window.addEventListener==='function')window.addEventListener('keydown',event=>{
+ if(event.code!=='F4'||event.repeat||event.ctrlKey||event.altKey||event.metaKey||gameSession.state!=='playing'||!gpuRenderer)return;
+ event.preventDefault();const p=gpuRenderer.post;if(!p){showToast('POST FX UNAVAILABLE',3);return;}
+ p.enabled=!p.enabled;p.reset=true;p.lastTime=null;gpuRenderer.needsRender=true;window.CatroomsGraphicsPreferences?.capture();
+ showToast(p.enabled?'HDR & BLOOM · F4 TO COMPARE':'CLASSIC COLOR · F4 TO COMPARE',3);
+});
