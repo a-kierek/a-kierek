@@ -62,6 +62,7 @@ function findInteractable(){
 
 function interact(){
   if(gameSession.state!=='playing')return;
+  if(gameSession.graphicsDemo){toggleGraphicsDemoDoor();return;}
   const safeTarget=findInteractable();
   if(safeTarget?.type==='safeDoor'){safeRoomInteraction(safeTarget.ref);return;}
   if(safeTarget?.type==='slot'){slotMachineSpin(safeTarget.ref);return;}

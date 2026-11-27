@@ -17,23 +17,32 @@ function buildWorldWallVertices(tiles,size,stride=128){
  }
  return new Float32Array(data);
 }
-// Surface tags: 0/1 wall axes, 2 floor, 3 ceiling. Each open cell
-// owns both horizontal quads; collision-only decorations still have floors.
+// A plane tag needs no per-cell material data. Merge adjacent plane quads
+// into rectangles while preserving holes, collision-only cells and winding.
 function buildWorldSurfaceMesh(tiles,size,stride=128){
  const walls=buildWorldWallVertices(tiles,size,stride);
- let cells=0;
- for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(tiles[y*stride+x]===0||tiles[y*stride+x]===5)cells++;
- const vertices=new Float32Array(walls.length+cells*12*6);
- vertices.set(walls);let offset=walls.length;
+ const open=new Uint8Array(size*size);
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-  const t=tiles[y*stride+x];if(t!==0&&t!==5)continue;
-  for(let z=0;z<=1;z++){
-   // Opposite winding for inward floor (+Z) and ceiling (-Z).
-   const corners=z?[[0,0],[0,1],[1,0],[1,0],[0,1],[1,1]]:[[0,0],[1,0],[0,1],[0,1],[1,0],[1,1]];
-   for(const [dx,dy] of corners){vertices.set([x+dx,y+dy,z,x,y,2+z],offset);offset+=6;}
-  }
+  const tile=tiles[y*stride+x];
+  open[y*size+x]=Number(tile===0||tile===5);
  }
- return {vertices,wallVertices:walls.length/6,planeVertices:cells*12};
+ const planes=[];
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+  if(!open[y*size+x])continue;
+  let right=x+1;
+  while(right<size&&open[y*size+right])right++;
+  let bottom=y+1;
+  rows:for(;bottom<size;bottom++){
+   for(let column=x;column<right;column++)if(!open[bottom*size+column])break rows;
+  }
+  for(let row=y;row<bottom;row++)open.fill(0,row*size+x,row*size+right);
+  const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
+  for(const i of [0,1,2,2,1,3])planes.push(...corners[i],0,x,y,2);
+  for(const i of [0,2,1,1,2,3])planes.push(...corners[i],1,x,y,3);
+ }
+ const vertices=new Float32Array(walls.length+planes.length);
+ vertices.set(walls);vertices.set(planes,walls.length);
+ return {vertices,wallVertices:walls.length/6,planeVertices:planes.length/6};
 }
 class WorldGeometryExperiment {
  constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.enabled=false;this.available=false;this.error=null;this.uploadRevision=-1;this.vertexCount=0;this.wallVertexCount=0;this.planeVertexCount=0;this.width=0;this.height=0;this.materialRevision=-1;}

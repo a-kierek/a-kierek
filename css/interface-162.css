@@ -100,3 +100,37 @@ html body #pause #pauseCard,html body #ending #endCard{width:min(470px,100%)!imp
 #hud#hud .objective,#hud#hud #fieldInventory,#hud#hud #hpWrap,#hud#hud #staminaWrap,#hud#hud #activeInventory{background:transparent!important;background-image:none!important;box-shadow:none!important;outline:none!important;border:0!important;filter:none!important}
 #hud#hud .objective::before,#hud#hud .objective::after,#hud#hud #fieldInventory::before,#hud#hud #fieldInventory::after,#hud#hud #hpWrap::before,#hud#hud #hpWrap::after,#hud#hud #staminaWrap::before,#hud#hud #staminaWrap::after{content:none!important;display:none!important}
 #hud#hud #hpFill,#hud#hud #staminaFill{background-image:none!important;box-shadow:none!important;border:0!important}#hud#hud #hpFill{background-color:var(--ui-danger)!important}#hud#hud #staminaFill{background-color:var(--ui-accent)!important}
+
+#graphicsBenchDialog {
+ width: min(420px, calc(100% - 32px));
+ padding: 24px;
+ background: #14120f;
+ color: #ece6d7;
+ border: 1px solid #776245;
+}
+#graphicsBenchDialog::backdrop { background: #000a; }
+.graphics-bench-summary { color: #d7c9ad; font-size: .88rem; line-height: 1.55; }
+.graphics-bench-summary:empty { display: none; }
+.graphics-bench-summary ul { margin: .5rem 0 0; padding-left: 1.2rem; }
+#graphicsDemoBtn { margin: 8px 0; }
+#graphicsDemoHint { display: none; }
+.graphics-demo #graphicsDemoHint {
+ display: block;
+ position: fixed;
+ top: 14px;
+ left: 50%;
+ transform: translateX(-50%);
+ z-index: 2;
+ padding: 6px 10px;
+ background: #0c0b09df;
+ color: #f1e7ce;
+ text-align: center;
+ font: 600 10px/1.45 system-ui, sans-serif;
+ letter-spacing: .08em;
+}
+.graphics-demo #hud { visibility: hidden; }
+.graphics-demo #hud.show #fpsCounter { visibility: visible; }
+.graphics-demo #coinHud, .graphics-demo #safeRoomLabel { display: none !important; }
+@media (pointer: coarse) {
+ #graphicsDemoHint span { display: none; }
+}

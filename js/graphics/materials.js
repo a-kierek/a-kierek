@@ -42,3 +42,33 @@ async function buildHdMaterials(renderer){
  if(failure){wall?.destroy();floor?.destroy();throw Error(failure);}
  return {wall,floor};
 }
+
+// CP11: packed normal XY + roughness; all layers share the 512x512 layout.
+const SURFACE_DETAIL_PATHS=Object.freeze([
+ 'assets/materials/yellow-wall-detail.png',
+ 'assets/materials/flood-wall-detail.png',
+ 'assets/materials/industrial-wall-detail.png',
+ 'assets/materials/chrum-wall-detail.png',
+ 'assets/materials/yellow-floor-detail.png',
+ 'assets/materials/yellow-ceiling-detail.png',
+ 'assets/materials/flood-floor-detail.png',
+ 'assets/materials/flood-ceiling-detail.png',
+ 'assets/materials/industrial-floor-detail.png',
+ 'assets/materials/industrial-ceiling-detail.png',
+ 'assets/materials/chrum-floor-detail.png',
+ 'assets/materials/chrum-ceiling-detail.png'
+]);
+async function buildSurfaceDetails(renderer){
+ const d=renderer.device;let detail;let failure=null;
+ d.pushErrorScope('out-of-memory');d.pushErrorScope('validation');
+ try{
+  const images=await Promise.all(SURFACE_DETAIL_PATHS.map(p=>loadHdAlbedo(p,512,512)));
+  detail=d.createTexture({label:'CP11 normal XY and roughness',size:[512,512,12],mipLevelCount:10,format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+  images.forEach((img,i)=>uploadMaterialMips(d,detail,img,512,512,i));
+  await d.queue.onSubmittedWorkDone?.();
+ }catch(e){failure=String(e.message||e);}
+ const validation=await d.popErrorScope(),memory=await d.popErrorScope();
+ failure=failure||validation?.message||memory?.message;
+ if(failure){detail?.destroy();throw Error(failure);}
+ return detail;
+}

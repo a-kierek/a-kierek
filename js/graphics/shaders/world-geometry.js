@@ -32,12 +32,19 @@ function geometryTerrainSource(){
  const source='@group(0) @binding(11) var geometryHits:texture_2d<f32>;\n'+
  TERRAIN_WGSL.slice(0,start)+` let rasterHit=textureLoad(geometryHits,vec2i(pixel.xy),0);
  let hasSurface=rasterHit.x>0.;
- let hasWall=hasSurface && rasterHit.w<1.5 && rasterHit.x<=surfaceDepth+max(.002,surfaceDepth*.0005);
+ let hasWall=hasSurface && rasterHit.w<1.5;
  let hasPlane=hasSurface && rasterHit.w>=1.5;
  let cell=vec2i(rasterHit.yz);
  let side=i32(rasterHit.w);
  let hit=tileAt(cell.x,cell.y);
- var distance=select(WALL_DEPTH_SCALE,rasterHit.x,hasWall);
+ var distance=WALL_DEPTH_SCALE;
+ if(hasWall){
+   let along=select(ray.y,ray.x,side==0);
+   let axisCell=select(cell.y,cell.x,side==0);
+   let axisOrigin=select(frame.player.y,frame.player.x,side==0);
+   let boundary=f32(axisCell)+select(0.,1.,along<0.);
+   distance=max(VIEW_NEAR,(boundary-axisOrigin)/along);
+ }
 `+TERRAIN_WGSL.slice(end);
  const oldResolve='result=sceneryAt(pixel.xy,ray3);\n   distance=surfaceDepth;';
  if(!source.includes(oldResolve))throw Error('Terrain surface resolve contract changed');

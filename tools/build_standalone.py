@@ -9,7 +9,7 @@ import json
 from functools import lru_cache
 
 root = Path(__file__).resolve().parents[1]
-output = root.parent / 'THE_CATROOMS_V1_6_2_4.html'
+output = root.parent / 'THE_CATROOMS_V1_7_ALPHA1.html'
 text = (root / 'index.html').read_text(encoding='utf-8')
 
 @lru_cache(maxsize=None)
@@ -50,7 +50,7 @@ def combine(reader):
     return '\n;\n'.join('// SOURCE: '+path+'\n'+reader(path) for path in paths[:-1])+ready
 online = combine(lambda path: (root/path).read_text(encoding='utf-8'))
 (root/'js/game.bundle.js').write_text(online, encoding='utf-8')
-pattern = r'<script src="js/game\.bundle\.js\?v=1\.6\.2\.4"></script>\s*<script src="js/core/boot\.js\?v=1\.6\.2\.4"></script>'
+pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1"></script>'
 bundle = combine(script_source)
 boot = script_source(paths[-1])
 text, count = re.subn(pattern, lambda _: '<script>\n'+bundle+'\n</script>\n<script>\n'+boot+'\n</script>', text)

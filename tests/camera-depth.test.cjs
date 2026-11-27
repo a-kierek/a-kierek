@@ -6,8 +6,8 @@ const gameSession={player,renderPosition:p=>({...p})};
 const cameraViewAngle=()=>{calls[0]++;return yaw},cameraPlaneScale=()=>{calls[1]++;return plane},viewPitchOffset=()=>{calls[2]++;return pitch};
 ${read('js/graphics/camera.js')}
 ${['shared','terrain','sprites','mesh'].map(n=>read('js/graphics/shaders/'+n+'.js')).join('\n')}`);
-assert.equal(run('RENDER_FRAME.bytes'),128);assert.equal(run('RENDER_FRAME.floats*4'),128);
-assert.equal(run('Object.values(RENDER_FRAME).slice(2).join(",")'),'0,4,8,12,16,20,24,28');
+assert.equal(run('RENDER_FRAME.bytes'),144);assert.equal(run('RENDER_FRAME.floats*4'),144);
+assert.equal(run('Object.values(RENDER_FRAME).slice(2).join(",")'),'0,4,8,12,16,20,24,28,32');
 for(const n of ['TERRAIN_WGSL','SPRITES_WGSL','MODEL_WGSL']){
  assert.equal(run(`${n}.includes(FRAME_WGSL)&&${n}.includes(DEPTH_WGSL)`),true);
  assert.match(run(n),/var<uniform> frame:SceneFrame/);

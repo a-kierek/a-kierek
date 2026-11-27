@@ -63,7 +63,7 @@ function parseFrames(ws,chunk){ws.buffer=Buffer.concat([ws.buffer,chunk]);if(ws.
 const server=http.createServer((req,res)=>{
  let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch(e){res.writeHead(400);res.end();return;}
  if(pathname==='/favicon.ico'){res.writeHead(204,{'Cache-Control':'no-cache'});res.end();return;}
- if(pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({ok:true,version:'1.6.2.4',rooms:ROOMS.size,clients:CLIENTS.size}));return;}
+ if(pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({ok:true,version:'1.7.0-alpha.1',rooms:ROOMS.size,clients:CLIENTS.size}));return;}
  if(pathname==='/')pathname='/index.html';
  const filepath=path.resolve(ROOT,'.'+pathname);
  if(!filepath.startsWith(ROOT+path.sep)||!fs.existsSync(filepath)||!fs.statSync(filepath).isFile()){res.writeHead(404);res.end('Not found');return;}
@@ -81,7 +81,7 @@ server.on('upgrade',(req,socket,head)=>{
 });
 setInterval(()=>{const now=Date.now();for(const ws of CLIENTS){if(now-ws.pong>65000){disconnect(ws);continue;}sendFrame(ws,0x9);}},25000).unref();
 server.listen(PORT,HOST,()=>{
- console.log('THE CATROOMS v1.6.2.4 REFORGED • host server');
+ console.log('THE CATROOMS v1.7 Alpha 1 • host server');
  console.log('LAN / host browser: http://localhost:'+PORT);
  console.log('Others on same Wi-Fi: http://YOUR-LAN-IP:'+PORT);
  console.log('For internet and GitHub Pages: expose this server over HTTPS/WSS (e.g. Cloudflare Tunnel).');

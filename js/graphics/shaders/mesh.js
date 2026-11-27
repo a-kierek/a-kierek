@@ -4,6 +4,7 @@ ${FRAME_WGSL}
 ${DEPTH_WGSL}
 ${PROJECTION_WGSL}
 @group(0) @binding(5) var<storage,read> worldTiles:array<u32>;
+@group(0) @binding(6) var<storage,read> shadowData:array<vec4f>;
 ${LIGHTING_WGSL}
 struct ModelPose { world:vec4f, rotation:vec4f, tilt:vec4f };
 fn tiltModel(v:vec3f)->vec3f {return vec3f(v.x,v.y*pose.tilt.x-v.z*pose.tilt.y,v.y*pose.tilt.y+v.z*pose.tilt.x);}

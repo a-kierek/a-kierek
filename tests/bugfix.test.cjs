@@ -121,6 +121,7 @@ check('decor preserves components, avoids objectives and covers themed models',(
     if(s.level===12&&bossRushArea(o.cellX)!==o.stage)throw Error('wrong sector');
     if(o.solid){if(s.world[o.cellY][o.cellX]!==5||spec.radius>.45)throw Error('bad solid');baseline[o.cellY][o.cellX]=0;}
     else{if(s.world[o.cellY][o.cellX]!==0||o.z<0||o.z+spec.height>1.001)throw Error('bad wall fixture');}
+    if(o.model==='bench'||o.model==='pipe'){const dx=Math.round(-Math.sin(o.yaw)),dy=Math.round(Math.cos(o.yaw));if(s.world[o.cellY+dy]?.[o.cellX+dx]!==1)throw Error('missing backing wall');const contact=(o.x-o.cellX-.5)*dx+(o.y-o.cellY-.5)*dy+spec.depth;if(Math.abs(contact-(o.model==='pipe'?.5:.485))>1e-6||!o.solid)throw Error('incorrect wall contact');}
     if([s.player,...s.fuses,...s.terminals,...s.bonusItems,...s.guards,...s.interactables].some(a=>Math.hypot(a.x-o.cellX-.5,a.y-o.cellY-.5)<1.999))throw Error('reserved item overlap');
     stats.byStage[o.stage]=(stats.byStage[o.stage]||0)+1;
    }
@@ -164,9 +165,16 @@ check('custom normal spawn uses actual dungeon entrance',()=>{
 console.log('All Alpha 2 logic regression groups passed.');
 
 check('Alpha 3 render cadence: playing every frame, menu capped, pause redraw only on request',()=>{
- run(`let renderCount=0;const requestAnimationFrame=noop;let gpuRenderer={needsRender:false};const render=()=>{renderCount++;gpuRenderer.needsRender=false};const syncGameAudio=noop;state='menu';lastTime=0;lastRenderState=null;lastRenderTime=-Infinity;`);
+ run(`let renderCount=0;const requestAnimationFrame=noop;let gpuRenderer={needsRender:false};const render=()=>{renderCount++;gpuRenderer.needsRender=false;return true};const syncGameAudio=noop;state='menu';lastTime=0;lastRenderState=null;lastRenderTime=-Infinity;`);
  run('tick(10);tick(20);tick(40);tick(60)');assert.equal(run('renderCount'),2);
  run("state='paused';tick(70);tick(80);tick(90)");assert.equal(run('renderCount'),3);
  run('gpuRenderer.needsRender=true;tick(100);tick(110)');assert.equal(run('renderCount'),4);
  run("state='playing';update=noop;tick(120);tick(130)");assert.equal(run('renderCount'),6);
+});
+
+check('FPS cap tracks the requested cadence across refresh rates',()=>{
+ run("gameSettings.fpsLimit=120;renderCount=0;lastRenderState=null;for(let i=0;i<144;i++)tick(200+i*1000/144);");
+ assert.ok(Math.abs(run('renderCount')-120)<=1);
+ run("gameSettings.fpsLimit=30;renderCount=0;for(let i=0;i<60;i++)tick(1200+i*1000/60);");
+ assert.ok(Math.abs(run('renderCount')-30)<=1);
 });

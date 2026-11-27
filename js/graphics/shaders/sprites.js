@@ -4,6 +4,7 @@ ${FRAME_WGSL}
 ${DEPTH_WGSL}
 ${PROJECTION_WGSL}
 @group(0) @binding(5) var<storage,read> worldTiles:array<u32>;
+@group(0) @binding(6) var<storage,read> shadowData:array<vec4f>;
 ${LIGHTING_WGSL}
 struct Sprite { rect:vec4f, data:vec4f };
 @group(0) @binding(0) var<uniform> frame:SceneFrame;

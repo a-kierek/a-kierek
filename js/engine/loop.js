@@ -19,7 +19,7 @@ class FixedStepClock {
  get alpha(){return Math.min(1,Math.max(0,this.accumulator/this.step));}
 }
 const simulationClock=new FixedStepClock();
-let lastTime=0,fpsWindowStart=0,fpsWindowFrames=0,lastRenderTime=-Infinity,lastRenderState=null;
+let lastTime=0,fpsWindowStart=0,fpsWindowFrames=0,lastRenderTime=-Infinity,lastRenderState=null,nextLimitedFrame=0,lastFpsLimit=0;
 function resetSimulationClock(){simulationClock.reset();gameSession.resetInterpolation();lastTime=performance.now();}
 function advanceSimulation(dt){
  simulationClock.advance(dt,()=>gameSession.state==='playing',step=>{
@@ -31,6 +31,7 @@ function advanceSimulation(dt){
 }
 function tick(time){
  requestAnimationFrame(tick);
+ if(window.CatroomsGraphicsBench?.running){lastTime=time;fpsWindowStart=0;fpsWindowFrames=0;return;}
  if(!fpsWindowStart)fpsWindowStart=time;
  if(time-fpsWindowStart>=650){const fps=Math.round(fpsWindowFrames*1000/(time-fpsWindowStart));const el=$('fpsCounter');if(el)el.textContent=fps+' FPS';fpsWindowStart=time;fpsWindowFrames=0;}
  const dt=Math.max(0,(time-lastTime)/1000);lastTime=time;
@@ -39,9 +40,21 @@ function tick(time){
  if(typeof syncDetectionHUD==='function')syncDetectionHUD();
  if(gameSession.state==='playing'&&$('mapClock'))$('mapClock').textContent=formatTime(gameSession.clock);
  if(gameSession.state==='menu')gameSession.elapsed+=Math.min(.25,dt)*.25;
- const changed=lastRenderState!==gameSession.state,requested=typeof gpuRenderer!=='undefined'&&gpuRenderer?.needsRender;
- if(gameSession.state==='playing'&&(changed||!gameSettings.fpsLimit||time-lastRenderTime>=1000/gameSettings.fpsLimit-.5)||gameSession.state==='menu'&&(changed||requested||time-lastRenderTime>=1000/24)||gameSession.state==='paused'&&(changed||requested)){
-  render();lastRenderTime=time;fpsWindowFrames++;
+ const state=gameSession.state,changed=lastRenderState!==state;
+ if(changed&&typeof gpuRenderer!=='undefined'&&gpuRenderer)gpuRenderer.needsRender=true;
+ const requested=typeof gpuRenderer!=='undefined'&&gpuRenderer?.needsRender;
+ const limit=gameSettings.fpsLimit;
+ if(changed||limit!==lastFpsLimit){nextLimitedFrame=time;lastFpsLimit=limit;}
+ const due=state==='playing'&&(!limit||time>=nextLimitedFrame-.5)||
+  state==='menu'&&(changed||requested||time-lastRenderTime>=1000/24)||
+  state==='paused'&&(changed||requested);
+ if(due&&render()){
+  lastRenderTime=time;fpsWindowFrames++;
+  if(state==='playing'&&limit){
+   const period=1000/limit;
+   nextLimitedFrame+=period;
+   if(nextLimitedFrame<time)nextLimitedFrame=time+period;
+  }
  }
- lastRenderState=gameSession.state;
+ lastRenderState=state;
 }

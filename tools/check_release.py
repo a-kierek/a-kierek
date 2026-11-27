@@ -5,6 +5,7 @@ import argparse, subprocess, sys
 root=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--browser', action='store_true', help='Run optional Chromium smoke test (mock GPU)')
+p.add_argument('--webgpu', action='store_true', help='Validate real WebGPU with Chromium and SwiftShader')
 p.add_argument('--chromium', help='Optional Chromium executable path')
 args=p.parse_args()
 def run(*cmd):
@@ -20,4 +21,6 @@ for path in ['tests/assets.test.py','tests/server_smoke.py']:
     run(sys.executable,path)
 if args.browser:
     run(sys.executable,'tests/browser_smoke.py',*([args.chromium] if args.chromium else []))
-print('PASS release checks'+(' including mocked browser smoke' if args.browser else ' (browser smoke not requested)'))
+if args.webgpu:
+    run(sys.executable,'tests/webgpu_smoke.py',*([args.chromium] if args.chromium else []))
+print('PASS release checks')

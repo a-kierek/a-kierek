@@ -1,24 +1,20 @@
-# THE CATROOMS v1.6.2.4 REFORGED
+# THE CATROOMS v1.7 Alpha 1
 
-Based on v1.6.2.3. See `CHANGELOG_V1_6_2_4.md`. The original GLBs are not required to play; use `python tools/import_decor.py /path/to/models` to regenerate the environment meshes.
+## Uruchomienie
 
-- Offline: open `THE_CATROOMS_V1_6_2_4.html` in current Chrome or Edge with WebGPU.
-- Source: extract the whole ZIP into a fresh folder, stop the previous server and run `START_HOST_WINDOWS.bat` or `node server/server.js`. Open http://localhost:8765; `/health` reports `version: 1.6.2.4`.
-- Build: `python tools/build_standalone.py`. Checks: `python tools/check_release.py` (optional `--browser` uses mocked GPU).
-- Save keys are unchanged; different local HTML paths may have separate browser storage. CO-OP remains disabled.
-- Menu autoplay is subject to browser policy; the first click or keypress retries it without interrupting the loop.
+- **Offline** — otwórz plik `THE_CATROOMS_V1_7_ALPHA1.html` w aktualnym Chrome lub Edge z WebGPU. Plik zawiera grę i wszystkie potrzebne zasoby.
+- **Projekt** — rozpakuj cały katalog projektu. Uruchom `START_HOST_WINDOWS.bat`, `./START_HOST_MAC_LINUX.sh` lub `node server/server.js` i wejdź na `http://localhost:8765`. Endpoint `/health` zwraca wersję `1.7.0-alpha.1`.
+- Zapisy w przeglądarce zależą od ścieżki pliku offline lub adresu serwera. Aktualizacja projektu nie zmienia kluczy kampanii ani profilu.
 
-## Alpha 1 checkpoint 05
-See `docs/alpha1-checkpoint-05.md` for camera, lighting, controls and test limitations.
+## Grafika i benchmark
 
-## Alpha 1 checkpoint 07
-See `docs/alpha1-checkpoint-07.md` for the flashlight, randomized decor, controls and test limitations.
+- **Play → Graphics Demo** otwiera korytarz do swobodnego zwiedzania. `F` przełącza latarkę, `E` otwiera drzwi z bliska, a `Esc` otwiera pauzę. W trybie dotykowym skorzystaj z przycisków gry.
+- **Settings → Graphics and Performance → AUTO** mierzy pięć presetów na tej samej trasie i zapisuje najwyższy spełniający cel 60 FPS z zapasem. Jeśli żaden go nie spełnia, wybiera Potato. Po zmianie rozdzielczości wynik można przeliczyć przez ponowny wybór AUTO.
+- **Run Graphics Benchmark** pokazuje szacowaną przepustowość renderera i 90. percentyl czasu klatki dla każdej jakości bez zmiany preferencji. Test korzysta z kolejki WebGPU i działa niezależnie od limitu FPS gry. Wynik zależy od rozdzielczości okna, urządzenia i obciążenia systemu.
+- **Ultra** włącza rasteryzację świata, miękkie cienie i cienie siatek modeli. Opcje można też włączać osobno. Klawisze `F8` i `F9` porównują geometrię oraz materiały. `F7` przełącza cienie otoczenia, `F6` przełącza model latarki, a `F4` przełącza postprocessing.
 
-## Alpha 1 checkpoint 08
-See `docs/alpha1-checkpoint-08.md` for the internal HDR pipeline, F4 controls, exposure and test limitations.
+## Budowanie i testy
 
-## Alpha 1 checkpoint 08 hotfix
-See `docs/alpha1-checkpoint-08-hotfix.md` for light visibility fixes and limitations.
+W katalogu projektu uruchom `python tools/build_standalone.py`, aby odtworzyć paczkę skryptów i plik offline w katalogu nadrzędnym. Polecenie `python tools/check_release.py` wykonuje kompilację, testy regresji, kontrolę zasobów i test serwera. Opcje `--browser` i `--webgpu` uruchamiają odpowiednio test interfejsu z atrapą GPU i test renderera WebGPU w Chromium ze SwiftShaderem. Testy przeglądarkowe wymagają pakietu Playwright dla Pythona.
 
-## Alpha 1 checkpoint 09
-See `docs/alpha1-checkpoint-09.md`.
+Szczegóły zmian, ograniczenia i wyniki weryfikacji znajdują się w [notatkach wydania](docs/alpha1-release.md).

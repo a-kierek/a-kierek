@@ -48,6 +48,82 @@ fn floorLayers(level:f32)->i32 {
  if(level==4.){return 6;}
  return 0;
 }
+// CP11: packed tangent-space normals and dielectric GGX. The geometric normal
+// remains authoritative for light visibility; relief never changes geometry.
+@group(0) @binding(12) var detailTex:texture_2d_array<f32>;
+@group(0) @binding(13) var<storage,read> shadowData:array<vec4f>;
+fn detailAvailable()->bool {return textureDimensions(detailTex,0).x==512u;}
+struct SurfaceDetail { normal:vec3f, roughness:f32 };
+fn readSurfaceDetail(uv:vec2f,layer:i32,lod:f32,n:vec3f,t:vec3f,b:vec3f)->SurfaceDetail {
+ let sampledDetail=textureSampleLevel(detailTex,wallSampler,uv,layer,clamp(lod,0.,9.)).rgb;
+ let xy=(sampledDetail.xy*255.-128.)/127.;
+ let z=sqrt(max(.001,1.-dot(xy,xy)));
+ return SurfaceDetail(normalize(n*z+t*xy.x+b*xy.y),clamp(sampledDetail.z,.16,.96));
+}
+fn cp11BRDF(base:vec3f,n:vec3f,eye:vec3f,l:vec3f,rough:f32)->vec3f {
+ let nl=max(dot(n,l),0.);let nv=max(dot(n,eye),.001);
+ if(nl<=0.){return vec3f(0.);}
+ let halfSum=eye+l;let h=halfSum*inverseSqrt(max(dot(halfSum,halfSum),.00001));
+ let nh=max(dot(n,h),0.);let vh=clamp(dot(eye,h),0.,1.);
+ let a=rough*rough;let a2=a*a;
+ let q=nh*nh*(a2-1.)+1.;let d=a2/max(3.14159265*q*q,.000001);
+ let k=(rough+1.)*(rough+1.)*.125;
+ let g=(nv/(nv*(1.-k)+k))*(nl/(nl*(1.-k)+k));
+ let fresnel=.04+.96*pow(1.-vh,5.);
+ let spec=d*g*fresnel/max(4.*nv*nl,.001);
+ return ((1.-fresnel)*base+vec3f(min(spec*3.14159265,4.)))*nl;
+}
+fn cp11Point(p:vec3f,geom:vec3f,material:SurfaceDetail,base:vec3f,eye:vec3f,source:vec3f,tint:vec3f,power:f32)->vec3f {
+ let delta=source-p;let d2=max(dot(delta,delta),.025);let l=delta*inverseSqrt(d2);
+ if(dot(geom,l)<=0.||dot(material.normal,l)<=0.||d2>=81.){return vec3f(0.);}
+ let walls=frame.lighting.x>1.5;
+ let visibility=lightVisibility(p,source,frame,walls,.28)*select(1.,1.-smoothstep(49.,81.,d2),walls);
+ if(visibility<=.0001){return vec3f(0.);}
+ return tint*cp11BRDF(base,material.normal,eye,l,material.roughness)*power*visibility/(1.+d2*1.35);
+}
+fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
+ // Approximate linear-light material shading, then return to the current
+ // renderer's legacy display-referred color convention before fog/post FX.
+ let base=pow(max(color,vec3f(0.)),vec3f(2.2));
+ let eyeDelta=vec3f(frame.player.xy,.5)-p;
+ let eye=eyeDelta*inverseSqrt(max(dot(eyeDelta,eyeDelta),.00001));
+ var light=base;
+ if(frame.lighting.x>.5){
+  let sector=sectorLevel(p.x);var tint=vec3f(1.,.91,.70);
+  if(sector==2.){tint=vec3f(.57,.85,1.);}
+  else if(sector==3.){tint=vec3f(1.,.40,.27);}
+  else if(sector==4.){tint=vec3f(1.,.76,.48);}
+  else if(sector==5.||sector==6.){tint=vec3f(.86,.51,1.);}
+  let grid=fixtureGrid(p.xy);
+  light=base*vec3f(.16,.16,.18);
+  for(var y:i32=-1;y<=2;y++){for(var x:i32=-1;x<=2;x++){
+   let cell=grid+vec2f(f32(x),f32(y));let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
+   let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
+   if(weight<=0.||(frame.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(frame.viewport.z)))){continue;}
+   let phase=dot(cell,vec2f(12.37,8.91));
+   let flicker=.91+.09*sin(frame.player.w*9.+phase)-.22*step(.985,sin(frame.player.w*2.3+phase));
+   light+=cp11Point(p,geom,material,base,eye,source,tint,select(2.1,.12,frame.weather.x>.5)*flicker*weight);
+  }}
+  if(frame.lighting.w>.5){
+   let flicker=1.1+.22*sin(frame.player.w*13.)+.16*sin(frame.player.w*23.);
+   light+=cp11Point(p,geom,material,base,eye,vec3f(frame.lighting.yz,.30),vec3f(1.,.48,.15),flicker*2.8);
+  }
+ }
+ if(frame.flashlight.w>.5){
+  light*=select(.58,.05,frame.weather.x>.5);
+  let source=vec3f(frame.player.xy,.5);let delta=source-p;let d2=dot(delta,delta);
+  if(frame.flashlight.z>.001&&d2>.0001&&d2<121.){
+   let l=delta*inverseSqrt(d2);
+   let direction=vec3f(cos(frame.flashlight.x)*cos(frame.flashlight.y),sin(frame.flashlight.x)*cos(frame.flashlight.y),sin(frame.flashlight.y));
+   let beam=smoothstep(.9063,.9781,dot(-l,direction));
+   if(beam>.0001&&dot(geom,l)>0.&&dot(material.normal,l)>0.){
+    light+=vec3f(1.,.94,.79)*cp11BRDF(base,material.normal,eye,l,material.roughness)*frame.flashlight.z*beam*lightVisibility(p,source,frame,true,.12)*(1.-smoothstep(64.,121.,d2))*2.8/(1.+d2*.11);
+   }
+  }
+ }
+ return pow(max(light,vec3f(0.)),vec3f(1./2.2));
+}
+
 fn sceneryAt(pixel:vec2f,ray:vec3f)->vec4f {
  let isFloor=ray.z<0.;
  let rd=planeDepth(ray);
@@ -76,7 +152,11 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(frame.lighting.x>.5||frame.flashlight.w>.5){
    let n=vec3f(0.,0.,select(-1.,1.,isFloor));
    let rough=select(.86,.32,sector==2.&&isFloor);
-   c*=surfaceLighting(vec3f(worldPt,select(1.,0.,isFloor)),n,rough,vec3f(1.),frame);
+   let point=vec3f(worldPt,select(1.,0.,isFloor));
+   if(detailAvailable()){
+     let material=readSurfaceDetail(uv,layer+4,floorLod,n,vec3f(1.,0.,0.),vec3f(0.,1.,0.));
+     c=cp11Shade(c,point,n,material);
+   }else{c*=surfaceLighting(point,n,rough,vec3f(1.),frame);}
  }
  // Keep the familiar tiled floors, grout seams and rectangular fluorescent lights.
  let seams=uv.x<.017 || uv.y<.017;
@@ -146,6 +226,7 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    texX=fract(texX);
    if((side==0 && ray.x>0.) || (side==1 && ray.y<0.)){texX=1.-texX;}
    var layer=levelWall(sectorLevel(f32(cell.x)));
+   var detailLod=0.;
    if(hit==8u){
      // Safe-room walls: damp dark brick, rust streaks, tiled grout.
      let uvWall=vec2f(texX,wallV);
@@ -163,6 +244,7 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
      let wallSize=vec2f(textureDimensions(wallTex,0));
      let wallFootprint=max(wallSize.y/wallH,wallSize.x*distance*2.*frame.camera.x/(frame.viewport.x*max(.12,abs(select(ray.y,ray.x,side==0)))));
      let wallLod=clamp(log2(max(1.,wallFootprint)),0.,f32(textureNumLevels(wallTex)-1u));
+     detailLod=wallLod-1.;
      result=textureSampleLevel(wallTex,wallSampler,vec2f(texX,wallV),layer,wallLod);
    }
    if(frame.camera.y>.5){
@@ -176,7 +258,11 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if(frame.lighting.x>.5||frame.flashlight.w>.5){
      let normal=select(vec3f(0.,-sign(ray.y),0.),vec3f(-sign(ray.x),0.,0.),side==0);
      let rough=select(.84,.40,layer==1||layer==2||hit==3u||hit==4u);
-     result=vec4f(result.rgb*surfaceLighting(wallPoint,normal,rough,vec3f(1.),frame),1.);
+     if(detailAvailable()&&hit!=8u&&layer<4){
+       let tangent=vec3f(-normal.y,normal.x,0.);
+       let material=readSurfaceDetail(vec2f(texX,wallV),layer,detailLod,normal,tangent,vec3f(0.,0.,-1.));
+       result=vec4f(cp11Shade(result.rgb,wallPoint,normal,material),1.);
+     }else{result=vec4f(result.rgb*surfaceLighting(wallPoint,normal,rough,vec3f(1.),frame),1.);}
    }
    let fog=clamp((distance-1.5)/32.,0.,.88);
    result=vec4f(mix(result.rgb,vec3f(.10,.10,.09),fog),1.);
@@ -200,7 +286,13 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    let tFar=min(min(max(t0.x,t1.x),max(t0.y,t1.y)),max(t0.z,t1.z));
    if(tNear>.02&&tNear<tFar&&tNear<best){
      let local=(origin3+ray3*tNear-object.lower.xyz)/max(object.upper.xyz-object.lower.xyz,vec3f(.0001));
-     let face=max(abs(ray3.x),abs(ray3.y));
+     // The slab entry axis identifies the actual hit face, even for a very thin poster.
+     let entry=min(t0,t1);
+     let faceX=entry.x>=entry.y&&entry.x>=entry.z;
+     let faceY=!faceX&&entry.y>=entry.z;
+     var n=vec3f(0.,0.,select(1.,-1.,ray3.z>0.));
+     if(faceX){n=vec3f(select(1.,-1.,ray3.x>0.),0.,0.);}
+     else if(faceY){n=vec3f(0.,select(1.,-1.,ray3.y>0.),0.);}
      let typ=i32(object.lower.w);
      var col=vec3f(.30,.23,.18);
      if(typ==1){ // solid metal slot-machine cabinet
@@ -224,17 +316,19 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
        col=mix(vec3f(.63,.09,.02),vec3f(1.,.77,.18),local.z)*flicker;
        if(local.z>.70){col*=.60;}
      }else if(typ>=7&&typ<=11){ // photo posters on the wall
-       let uv=vec2f(clamp(local.x,0.,1.),1.-clamp(local.z,0.,1.));
-       let tex=textureSampleLevel(wallTex,wallSampler,uv,typ,0.);
-       col=mix(vec3f(.08,.06,.05),tex.rgb,smoothstep(0.0,0.05,min(min(uv.x,1.-uv.x),min(uv.y,1.-uv.y))));
+       let extent=object.upper.xyz-object.lower.xyz;
+       let vertical=extent.x<extent.y;
+       col=vec3f(.08,.06,.05); // edges are frame, never stretched photo
+       if((vertical&&faceX)||(!vertical&&faceY)){
+         let u=select(select(1.-local.x,local.x,n.y>0.),select(1.-local.y,local.y,n.x<0.),vertical);
+         let uv=vec2f(clamp(u,0.,1.),1.-clamp(local.z,0.,1.));
+         let tex=textureSampleLevel(wallTex,wallSampler,uv,typ,0.);
+         col=mix(col,tex.rgb,smoothstep(0.0,0.05,min(min(uv.x,1.-uv.x),min(uv.y,1.-uv.y))));
+       }
      }
      let sideShade=select(.79,1.,local.z<.04||local.z>.96);
      furnitureColor=col*sideShade;
      if((frame.lighting.x>.5||frame.flashlight.w>.5)&&typ!=6){
-       let faceDist=min(local,1.-local);
-       var n=vec3f(0.,0.,select(-1.,1.,local.z>.5));
-       if(faceDist.x<=faceDist.y&&faceDist.x<=faceDist.z){n=vec3f(select(-1.,1.,local.x>.5),0.,0.);}
-       else if(faceDist.y<=faceDist.z){n=vec3f(0.,select(-1.,1.,local.y>.5),0.);}
        furnitureColor*=surfaceLighting(origin3+ray3*tNear,n,.68,vec3f(1.),frame);
      }
      best=tNear;

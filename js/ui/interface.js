@@ -21,7 +21,7 @@ function setState(next){
  if(next==='menu')cancelTransition();
  if(next!=='playing')stopGameSounds();
  if(next==='menu')stopLossScream();
- gameSession.state=next;document.body.classList.toggle('menu-scene',next==='menu');if(typeof updateRoundInterface==='function')updateRoundInterface(next);UI.hud.classList.toggle('show',next==='playing');
+ gameSession.state=next;document.body.classList.toggle('graphics-demo',gameSession.graphicsDemo&&next!=='menu');document.body.classList.toggle('menu-scene',next==='menu');if(typeof updateRoundInterface==='function')updateRoundInterface(next);UI.hud.classList.toggle('show',next==='playing');
  if(typeof syncBackgroundTracks==='function')syncBackgroundTracks(0);
  updateTutorialVisibility();
  UI.start.classList.toggle('hidden',next!=='menu');UI.pause.classList.toggle('hidden',next!=='paused');
@@ -110,7 +110,7 @@ function begin(targetLevel=1,{testRun=false}={}){
 }
 function pause(){if(gameSession.state!=='playing')return;setState('paused');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:true});if(coop.role==='guest')coop.send({type:'input',data:{forward:0,strafe:0,angle:gameSession.player.a,pitch:gameSession.player.pitch||0,sprint:0,crouch:0,flash:Number(!!gameSession.player.flash)}});}
 
-function resume(){if(gameSession.state!=='paused'||!graphicsReadyForPlay())return;if(coop.role==='guest'&&coop.hostPaused){showToast('WAIT FOR THE HOST TO RESUME',2);return;}setState('playing');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:false});resetSimulationClock();if(!isCoarse)requestGamePointerLock();}
+function resume(){if(gameSession.state!=='paused'||!graphicsReadyForPlay()||window.CatroomsGraphicsBench?.running)return;if(coop.role==='guest'&&coop.hostPaused){showToast('WAIT FOR THE HOST TO RESUME',2);return;}setState('playing');if(coop.role==='host'&&coop.active)coop.send({type:'pause',paused:false});resetSimulationClock();if(!isCoarse)requestGamePointerLock();}
 
 function finish(good){
  if(gameSession.state!=='playing'&&gameSession.state!=='jumpscare')return;

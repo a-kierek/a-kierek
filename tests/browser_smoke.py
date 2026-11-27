@@ -6,14 +6,14 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 import sys
 root=Path(__file__).resolve().parents[1]
-html=(root.parent/'THE_CATROOMS_V1_6_2_4.html').read_text()
+html=(root.parent/'THE_CATROOMS_V1_7_ALPHA1.html').read_text()
 shim=r'''<script>
 const noGpuOp=()=>{};
 const mockTexture=()=>({createView:()=>({}),destroy:noGpuOp});
 const mockPipeline=()=>({getBindGroupLayout:()=>({})});
 const mockPass=()=>({setPipeline:noGpuOp,setBindGroup:noGpuOp,draw:noGpuOp,end:noGpuOp,setVertexBuffer:noGpuOp,setIndexBuffer:noGpuOp,drawIndexed:noGpuOp});
 let resolveMockGpuLoss;
-const mockDevice={createBuffer:()=>({destroy:noGpuOp}),createTexture:mockTexture,createSampler:()=>({}),createShaderModule:()=>({getCompilationInfo:async()=>({messages:[]})}),createRenderPipeline:mockPipeline,createBindGroup:()=>({}),pushErrorScope:noGpuOp,popErrorScope:async()=>null,queue:{writeBuffer:noGpuOp,copyExternalImageToTexture:noGpuOp,submit:noGpuOp},createCommandEncoder:()=>({beginRenderPass:mockPass,finish:()=>({})}),lost:new Promise(resolve=>{resolveMockGpuLoss=resolve})};
+const mockDevice={createBuffer:()=>({destroy:noGpuOp}),createTexture:mockTexture,createSampler:()=>({}),createShaderModule:()=>({getCompilationInfo:async()=>({messages:[]})}),createRenderPipeline:mockPipeline,createBindGroup:()=>({}),pushErrorScope:noGpuOp,popErrorScope:async()=>null,queue:{writeBuffer:noGpuOp,copyExternalImageToTexture:noGpuOp,submit:noGpuOp,onSubmittedWorkDone:async()=>{}},createCommandEncoder:()=>({beginRenderPass:mockPass,finish:()=>({})}),lost:new Promise(resolve=>{resolveMockGpuLoss=resolve})};
 Object.defineProperty(navigator,'gpu',{value:{requestAdapter:async()=>({requestDevice:async()=>mockDevice}),getPreferredCanvasFormat:()=> 'rgba8unorm'},configurable:true});
 if(!globalThis.GPUBufferUsage)globalThis.GPUBufferUsage={UNIFORM:1,STORAGE:2,COPY_DST:4,VERTEX:8,INDEX:16};
 if(!globalThis.GPUTextureUsage)globalThis.GPUTextureUsage={TEXTURE_BINDING:1,COPY_DST:2,RENDER_ATTACHMENT:4};
@@ -33,7 +33,7 @@ with sync_playwright() as p:
  assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===19 && !!gpuRenderer.modelMeshes.door && !!gpuRenderer.modelMeshes.rock")
  assert page.evaluate("gpuRenderer.loadedSpriteLayers[1].width>0 && gpuRenderer.loadedSpriteLayers[1].height>0")
  assert page.evaluate("$('bossRushBtn').hidden===!bossRushVisible()")
- # New v1.6.2.4 release UI and title music checks.
+ # New v1.7.0-alpha.1 release UI and title music checks.
  assert page.evaluate("!$('pixelSplash').hidden && menuMusicUnlocked && bgTracks.menu?.loop===true")
  assert page.evaluate("$('versionBadge').closest('#start')!==null && $('pixelBloodDecals').querySelectorAll('img').length===1")
  assert page.evaluate("$('startBtn').textContent==='YELLOW CORRIDORS'&&$('bossRushBtn').textContent==='BOSS RUSH'")
@@ -41,7 +41,7 @@ with sync_playwright() as p:
  page.wait_for_function("!$('releaseNotes').hidden")
  assert page.evaluate("$('pixelHub').inert && $('pixelSplash').inert")
  page.evaluate("$('releaseNotesClose').click();$('pixelPressStart').click()")
- assert page.evaluate("$('releaseNotes').hidden && !$('releaseNotesOpen').hidden && progressRead('catroomsReleaseNotesSeen_1.6.2.4')==='1' && !$('pixelHub').inert")
+ assert page.evaluate("$('releaseNotes').hidden && !$('releaseNotesOpen').hidden && progressRead('catroomsReleaseNotesSeen_1.7.0-alpha.1')==='1' && !$('pixelHub').inert")
  page.evaluate("$('releaseNotesOpen').click()")
  assert page.evaluate("!$('releaseNotes').hidden")
  page.evaluate("$('releaseNotesClose').click();$('hubBack').click()")
@@ -52,6 +52,30 @@ with sync_playwright() as p:
  assert page.evaluate("JSON.stringify(gameSession.player)===menuPlayerBefore && gameSession.world===menuMapBefore")
  page.evaluate("$('pixelPressStart').click()")
  print('PASS title music, isolated engine-rendered menu scene, notes and level selector')
+ assert page.evaluate("""(()=>{
+  const before=progressRead('catroomsBest1');
+  $('graphicsDemoBtn').click();
+  if(!gameSession.graphicsDemo||gameSession.state!=='playing'||qualifiesForProgress())return false;
+  pause();$('settingsPauseBtn').click();
+  $('settingPreset').value='ultra';$('settingPreset').dispatchEvent(new Event('change'));
+  if(!gpuRenderer.softShadowsEnabled||!gpuRenderer.modelShadowsEnabled||!gpuRenderer.worldGeometry.enabled)return false;
+  $('settingsDefaultsBtn').click();
+  if(gpuRenderer.softShadowsEnabled||gpuRenderer.modelShadowsEnabled||gpuRenderer.worldGeometry.enabled||!gpuRenderer.wallShadowsEnabled||!gpuRenderer.hdEnabled)return false;
+  $('settingsDoneBtn').click();$('pauseRestartBtn').click();
+  if(!gameSession.graphicsDemo||gameSession.state!=='playing'||before!==progressRead('catroomsBest1'))return false;
+  setState('menu');$('pixelPressStart').click();
+  return true;
+ })()""")
+ print('PASS offline graphics demo, restart isolation, Ultra toggles and graphics defaults')
+ page.evaluate("$('pixelNavSettings').click();$('menuSettingPreset').value='auto';$('menuSettingPreset').dispatchEvent(new Event('change'));")
+ page.wait_for_function("!CatroomsGraphicsBench.running && $('menuSettingBenchResults').querySelectorAll('li').length===5")
+ assert page.evaluate("$('menuSettingPreset').value==='auto' && $('settingPreset').value==='auto' && !!progressRead('catroomsGfxAuto')")
+ page.evaluate("$('menuSettingBenchmark').click();$('graphicsBenchCancel').click()")
+ page.wait_for_function("!CatroomsGraphicsBench.running && $('menuSettingBenchResults').textContent==='Benchmark cancelled.'")
+ assert page.evaluate("$('menuSettingPreset').value==='auto' && !!progressRead('catroomsGfxAuto')")
+ page.evaluate("$('menuSettingsDefaultsBtn').click();$('pixelNavPlay').click()")
+ print('PASS offline AUTO selection, five-preset benchmark, persistence and cancellation (mock WebGPU queue)')
+
  # Position the camera toward a nearby floor model to exercise the decor draw path.
  assert page.evaluate("""(()=>{begin(1,{testRun:true});const p=gameSession.props.find(p=>p.type==='decor'&&p.solid);if(!p)return false;
  const candidates=[[1,0],[-1,0],[0,1],[0,-1]];const step=candidates.find(([dx,dy])=>gameSession.world[p.cellY+dy]?.[p.cellX+dx]===0);if(!step)return false;
@@ -68,14 +92,14 @@ with sync_playwright() as p:
  const ok=!exp.enabled&&gpuRenderer.stats.wallTriangles===0&&gpuRenderer.stats.planeTriangles===0;setState('menu');return ok;})()""")
  print('PASS opt-in raster world surfaces, cached geometry, map revision and classic fallback')
  assert page.evaluate("""(()=>{begin(1,{testRun:true});const r=gpuRenderer,exp=r.worldGeometry;
- if(!window.CatroomsMaterials.available||!r.hdEnabled)return false;
+ if(!window.CatroomsMaterials.available||!r.hdEnabled||!window.CatroomsPBR.enabled)return false;
  const key=code=>window.dispatchEvent(new KeyboardEvent('keydown',{code}));
  key('F8');r.render();const buf=exp.vertexBuffer,bind=exp.resolveBind;
- key('F9');r.render();if(r.hdEnabled||!exp.enabled||exp.resolveBind===bind||exp.vertexBuffer!==buf)return false;
- key('F9');r.render();if(!r.hdEnabled||!exp.enabled)return false;
+ key('F9');r.render();if(r.hdEnabled||window.CatroomsPBR.enabled||!exp.enabled||exp.resolveBind===bind||exp.vertexBuffer!==buf)return false;
+ key('F9');r.render();if(!r.hdEnabled||!window.CatroomsPBR.enabled||!exp.enabled)return false;
  key('F8');r.render();key('F9');r.render();if(r.hdEnabled||exp.enabled)return false;
  key('F9');r.render();const ok=r.hdEnabled&&!exp.enabled;setState('menu');return ok;})()""")
- print('PASS HD albedo decoding and F8/F9 independent toggles, bind refresh')
+ print('PASS HD albedo + PBR detail decoding and F8/F9 independent toggles, bind refresh')
  assert page.evaluate("""(()=>{begin(1,{testRun:true});const r=gpuRenderer;const key=code=>window.dispatchEvent(new KeyboardEvent('keydown',{code,cancelable:true}));
  const old=r.lightingEnabled;key('F10');r.render();if(r.lightingEnabled===old||r.frameData[RENDER_FRAME.lighting]!==(!old?(r.wallShadowsEnabled?2:1):0))return false;
  key('F10');gameSession.player.pitch=1.1;r.render();const up=Math.abs(r.frameData[RENDER_FRAME.weather+3]-1.1)<1e-6;

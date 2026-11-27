@@ -41,7 +41,7 @@ function bossRushSafeRoom(stage){
  const add=(x,y,z,w,d,h,material,collisionOnly=false)=>gameSession.safeRoomFurniture.push({x,y,z,w,d,h,material,collisionOnly});
  add(machineX,machineY,.39,.69,.50,.78,1,true);
  const posterMaterials=pickSafeRoomPosterMaterials(3);
- [[left+1.03,top+2.0,.028,.52],[left+1.03,top+side-2.0,.028,.56],[left+side-1.03,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.028,cfg[3],posterMaterials[index]));
+ [[left+1.03,top+2.0,.028,.52],[left+1.03,top+side-2.0,.028,.56],[left+side-1.03,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
  return room;
 }
 function bossRushGenerateMap(){

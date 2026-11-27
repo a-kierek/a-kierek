@@ -41,4 +41,4 @@ function reset(){
  }
  scatterLevelDecor();
 }
-function update(dt){modeFor(gameSession.level).step(dt);}
+function update(dt){if(gameSession.graphicsDemo)updateGraphicsDemo(dt);else modeFor(gameSession.level).step(dt);}

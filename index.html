@@ -6,7 +6,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" name="viewport"/>
 <meta content="#0D0B0A" name="theme-color"/>
-<title>THE CATROOMS v1.6.2.4 REFORGED | NORMAL / HARD</title>
+<title>THE CATROOMS v1.7 Alpha 1 | NORMAL / HARD</title>
 <link href="css/game.css" rel="stylesheet"/>
 <link href="css/expansion.css" rel="stylesheet"/>
 <link href="css/haunted-ui.css" rel="stylesheet"/>
@@ -28,6 +28,7 @@
 <div id="loadingStatus">BOOTING...</div></div>
 </div>
 <canvas id="game"></canvas><div id="noise"></div><div id="grain"></div>
+<div id="graphicsDemoHint">GRAPHICS DEMO<span> · F TOGGLE LIGHT · E DOOR · ESC PAUSE</span></div>
 <div id="hud"><button aria-label="Show timer, hold M to enlarge the map" id="miniMapButton" type="button">MAP [M]</button>
 <div class="topbar"><div><div class="logo">THE <span>CATROOMS</span> <span style="font-size:11px;vertical-align:top">®</span></div><div class="sub"><span id="playerNameTag">PLAYER</span> · <span id="levelLabel">LEVEL 1 / YELLOW CORRIDORS</span></div></div><div class="hudRight"><div class="chip" title="Batteries"><span class="gem"><span aria-hidden="true" class="icon-slot" data-icon="battery"></span></span> <strong id="count">0</strong> / <span id="required">5</span></div><div class="chip" id="streakChip" title="Win streak"><span aria-hidden="true" class="icon-slot" data-icon="flame"></span> <strong id="streakCount">0</strong></div><div class="chip" id="seedChip" style="display:none">#<span id="seedText">0</span></div><div class="chip" id="timeChip"><span aria-hidden="true" class="icon-slot" data-icon="clock"></span> <span id="clock">00:00</span></div><button id="mapToggle" title="Map (M)"><span aria-hidden="true" class="icon-slot" data-icon="map"></span></button><button id="soundToggle" title="Sound"><span aria-hidden="true" class="icon-slot" data-icon="sound"></span></button><button aria-label="Settings" id="settingsHudBtn" title="Settings" type="button"><span aria-hidden="true" class="icon-slot" data-icon="settings"></span></button></div></div>
 <div class="coop-hud" id="coopHud" style="display:none"></div><div aria-label="Frames per second" id="fpsCounter" style="display:none">-- FPS</div><div class="crosshair"></div><div id="detectionWarning" role="status" aria-label="Detected" hidden><img alt="" src="assets/ui/detection-warning.png"/></div><div id="interactHint">[ E ] USE TERMINAL</div><div id="stealthStatus"><span aria-hidden="true" class="icon-slot" data-icon="dot"></span> UNDETECTED</div><div aria-live="polite" id="eventTag"></div><div id="danger"><span aria-hidden="true" class="icon-slot" data-icon="warning"></span> HE IS NEAR <span aria-hidden="true" class="icon-slot" data-icon="warning"></span></div><div id="toast"></div>
@@ -58,9 +59,20 @@
 <div class="modal pixel-menu-root" id="start">
 <div aria-label="Menu glowne CATROOMS" class="pixel-shell" role="region">
 <div aria-hidden="true" class="pixel-blood-decals" id="pixelBloodDecals"></div>
-<div aria-label="Game version" id="versionBadge">v1.6.2.4 REFORGED</div>
-<button id="releaseNotesOpen" class="release-notes-open" type="button" hidden>WHAT'S NEW <span>ENVIRONMENT UPDATE</span><small>Update 1.6.2.4</small></button>
-<div id="releaseNotes" class="release-notes-overlay" hidden><section role="dialog" aria-modal="true" aria-labelledby="releaseNotesTitle" class="release-notes-card"><h2 id="releaseNotesTitle">WHAT'S NEW / v1.6.2.4</h2><div class="release-notes-scroll"><h3>ADDED</h3><p>14 themed 3D environment models across all five sectors, including mixed props in Last Encounter.</p><h3>MODIFIED</h3><p>Shared material atlas, sector lighting, contact shadows and seed-aware decoration placement.</p><h3>REMOVED</h3><p>No gameplay features removed.</p><h3>FIXED</h3><p>New solid decorations preserve existing routes and keep objectives, doors and safe rooms clear.</p></div><button id="releaseNotesClose" type="button">CONTINUE</button></section></div>
+<div aria-label="Game version" id="versionBadge">v1.7 ALPHA 1</div>
+<button id="releaseNotesOpen" class="release-notes-open" type="button" hidden>WHAT'S NEW <span>GRAPHICS UPDATE</span><small>v1.7 Alpha 1</small></button>
+<div id="releaseNotes" class="release-notes-overlay" hidden>
+<section role="dialog" aria-modal="true" aria-labelledby="releaseNotesTitle" class="release-notes-card">
+<h2 id="releaseNotesTitle">WHAT'S NEW / v1.7 ALPHA 1</h2>
+<div class="release-notes-scroll">
+<h3>LIGHTING AND MATERIALS</h3>
+<p>Soft shadows and shadows from 3D props are available in Graphics Settings and enabled by ULTRA. Compare the 3D world and HD materials in-game with F8 and F9.</p>
+<h3>GRAPHICS DEMO AND AUTO</h3>
+<p>Explore the graphics demo from Play. Use AUTO in Graphics Settings to benchmark the corridor and select a preset for your device.</p>
+</div>
+<button id="releaseNotesClose" type="button" class="primary">CONTINUE</button>
+</section>
+</div>
 <div class="pixel-splash" id="pixelSplash">
 <div aria-hidden="true" class="pixel-splash-noise"></div>
 <div class="pixel-start-center">
@@ -78,7 +90,7 @@
 </div>
 </div>
 <div class="pixel-hub" hidden="" id="pixelHub">
-<header class="pixel-hub-head"><button id="hubBack" type="button">‹ MAIN MENU</button><span id="pixelLiveStatus">CHOOSE AN OPTION</span><span>V1.6.2.4</span></header>
+<header class="pixel-hub-head"><button id="hubBack" type="button">‹ MAIN MENU</button><span id="pixelLiveStatus">CHOOSE AN OPTION</span><span>V1.7 ALPHA 1</span></header>
 <div class="pixel-hub-layout">
 <nav aria-label="Menu gry" class="pixel-side-nav">
 <button aria-current="page" class="pixel-nav-item selected" id="pixelNavPlay" type="button">PLAY</button>
@@ -105,7 +117,8 @@
 <div class="difficulty-controls"><button aria-pressed="true" id="difficultyNormal" type="button">NORMAL</button><button aria-pressed="false" id="difficultyHard" type="button">HARD</button></div>
 <small id="difficultyInfo">Campaign and standard levels.</small>
 </div>
-<button class="primary" id="enterSector" type="button">ENTER SECTOR <span aria-hidden="true">›</span></button><div class="pixel-records">
+<button class="primary" id="enterSector" type="button">ENTER SECTOR <span aria-hidden="true">›</span></button>
+<button class="settingsSecondary" id="graphicsDemoBtn" type="button">GRAPHICS DEMO</button><div class="pixel-records">
 <div class="records streak-menu" id="streakMenu">STREAK: <b id="menuStreak">0</b> · BEST: <b id="menuBestStreak">0</b></div>
 <div class="progressTxt" id="progressText">UNLOCKED 1/5 LEVELS</div>
 <div class="records"><span id="record1">BRAK REKORDU</span><span id="record2">BRAK REKORDU</span><span id="record3">BRAK REKORDU</span><span id="record4">BRAK REKORDU</span></div>
@@ -150,8 +163,13 @@
 </section>
 <section aria-label="Wydajnosc">
 <h3><span>03</span> GRAPHICS AND PERFORMANCE</h3>
-<label class="setting-select"><span>RENDER QUALITY</span><select id="menuSettingQuality"><option value="0.5">50%</option><option value="0.7">70%</option><option value="0.85">85%</option><option value="1">100% (legacy cap)</option><option value="1.2">120% (legacy cap)</option></select></label><label class="setting-select"><span>GRAPHICS PRESET</span><select id="menuSettingPreset"><option value="custom">CUSTOM</option><option value="potato">POTATO</option><option value="low">LOW</option><option value="medium">MEDIUM</option><option value="high">HIGH</option><option value="ultra">ULTRA</option></select></label><label class="setting-check"><input id="menuSettingGfxhd" type="checkbox"/><span>HD materials</span></label><label class="setting-check"><input id="menuSettingGfxlighting" type="checkbox"/><span>Lighting 2.0</span></label><label class="setting-check"><input id="menuSettingGfxshadows" type="checkbox"/><span>Wall shadows</span></label><label class="setting-check"><input id="menuSettingGfxgeometry" type="checkbox"/><span>Experimental 3D world</span></label><label class="setting-check"><input id="menuSettingGfxflashlight" type="checkbox"/><span>Flashlight 2.0</span></label><label class="setting-check"><input id="menuSettingGfxpost" type="checkbox"/><span>HDR / Bloom / exposure</span></label><label class="setting-select"><span>FPS LIMIT</span><select id="menuSettingLimit"><option value="0">Unlimited</option><option value="30">30</option><option value="60">60</option><option value="120">120</option><option value="144">144</option><option value="165">165</option><option value="240">240</option></select></label>
+<label class="setting-select"><span>RENDER QUALITY</span><select id="menuSettingQuality"><option value="0.5">50%</option><option value="0.7">70%</option><option value="0.85">85%</option><option value="1">100%</option><option value="1.2">120%</option></select></label><label class="setting-select"><span>GRAPHICS PRESET</span><select id="menuSettingPreset"><option value="custom">CUSTOM</option><option value="auto">AUTO · BENCHMARK</option><option value="potato">POTATO</option><option value="low">LOW</option><option value="medium">MEDIUM</option><option value="high">HIGH</option><option value="ultra">ULTRA</option></select></label><label class="setting-check"><input id="menuSettingGfxhd" type="checkbox"/><span>HD materials / PBR</span></label><label class="setting-check"><input id="menuSettingGfxlighting" type="checkbox"/><span>Lighting 2.0</span></label><label class="setting-check"><input id="menuSettingGfxshadows" type="checkbox"/><span>Wall and door shadows</span></label>
+<label class="setting-check"><input id="menuSettingGfxsoft" type="checkbox"/><span>Soft shadows</span></label>
+<label class="setting-check"><input id="menuSettingGfxmodels" type="checkbox"/><span>3D model shadows</span></label><label class="setting-check"><input id="menuSettingGfxgeometry" type="checkbox"/><span>3D world geometry</span></label><label class="setting-check"><input id="menuSettingGfxflashlight" type="checkbox"/><span>Flashlight 2.0</span></label><label class="setting-check"><input id="menuSettingGfxpost" type="checkbox"/><span>HDR / Bloom / exposure</span></label><label class="setting-select"><span>FPS LIMIT</span><select id="menuSettingLimit"><option value="0">Unlimited</option><option value="30">30</option><option value="60">60</option><option value="120">120</option><option value="144">144</option><option value="165">165</option><option value="240">240</option></select></label>
 <label class="setting-check"><input id="menuSettingFPS" type="checkbox"/><span>SHOW FPS COUNTER</span></label>
+<button class="settingsSecondary" id="menuSettingBenchmark" type="button" disabled>RUN GRAPHICS BENCHMARK</button>
+<p id="menuSettingAutoStatus" class="graphics-bench-summary"></p>
+<div id="menuSettingBenchResults" class="graphics-bench-summary" aria-live="polite"></div>
 </section>
 </div>
 <div class="pixel-settings-actions"><button class="settingsSecondary" id="menuSettingsDefaultsBtn" type="button">RESTORE DEFAULTS</button></div>
@@ -208,14 +226,24 @@
 <p class="settings-warning">Warning: jumpscares may be loud. Adjust their volume separately.</p>
 </section>
 <section aria-label="Wydajnosc"><h3><span>03</span> Graphics and performance</h3>
-<label class="setting-select"><span>Render quality</span><select id="settingQuality"><option value="0.5">50%</option><option value="0.7">70%</option><option value="0.85">85%</option><option value="1">100% (legacy cap)</option><option value="1.2">120% (legacy cap)</option></select></label><label class="setting-select"><span>GRAPHICS PRESET</span><select id="settingPreset"><option value="custom">CUSTOM</option><option value="potato">POTATO</option><option value="low">LOW</option><option value="medium">MEDIUM</option><option value="high">HIGH</option><option value="ultra">ULTRA</option></select></label><label class="setting-check"><input id="settingGfxhd" type="checkbox"/><span>HD materials</span></label><label class="setting-check"><input id="settingGfxlighting" type="checkbox"/><span>Lighting 2.0</span></label><label class="setting-check"><input id="settingGfxshadows" type="checkbox"/><span>Wall shadows</span></label><label class="setting-check"><input id="settingGfxgeometry" type="checkbox"/><span>Experimental 3D world</span></label><label class="setting-check"><input id="settingGfxflashlight" type="checkbox"/><span>Flashlight 2.0</span></label><label class="setting-check"><input id="settingGfxpost" type="checkbox"/><span>HDR / Bloom / exposure</span></label><label class="setting-select"><span>FPS LIMIT</span><select id="settingLimit"><option value="0">Unlimited</option><option value="30">30</option><option value="60">60</option><option value="120">120</option><option value="144">144</option><option value="165">165</option><option value="240">240</option></select></label>
+<label class="setting-select"><span>Render quality</span><select id="settingQuality"><option value="0.5">50%</option><option value="0.7">70%</option><option value="0.85">85%</option><option value="1">100%</option><option value="1.2">120%</option></select></label><label class="setting-select"><span>GRAPHICS PRESET</span><select id="settingPreset"><option value="custom">CUSTOM</option><option value="auto">AUTO · BENCHMARK</option><option value="potato">POTATO</option><option value="low">LOW</option><option value="medium">MEDIUM</option><option value="high">HIGH</option><option value="ultra">ULTRA</option></select></label><label class="setting-check"><input id="settingGfxhd" type="checkbox"/><span>HD materials / PBR</span></label><label class="setting-check"><input id="settingGfxlighting" type="checkbox"/><span>Lighting 2.0</span></label><label class="setting-check"><input id="settingGfxshadows" type="checkbox"/><span>Wall and door shadows</span></label>
+<label class="setting-check"><input id="settingGfxsoft" type="checkbox"/><span>Soft shadows</span></label>
+<label class="setting-check"><input id="settingGfxmodels" type="checkbox"/><span>3D model shadows</span></label><label class="setting-check"><input id="settingGfxgeometry" type="checkbox"/><span>3D world geometry</span></label><label class="setting-check"><input id="settingGfxflashlight" type="checkbox"/><span>Flashlight 2.0</span></label><label class="setting-check"><input id="settingGfxpost" type="checkbox"/><span>HDR / Bloom / exposure</span></label><label class="setting-select"><span>FPS LIMIT</span><select id="settingLimit"><option value="0">Unlimited</option><option value="30">30</option><option value="60">60</option><option value="120">120</option><option value="144">144</option><option value="165">165</option><option value="240">240</option></select></label>
 <label class="setting-check"><input id="settingFPS" type="checkbox"/><span>Show FPS counter</span></label>
+<button class="settingsSecondary" id="settingBenchmark" type="button" disabled>RUN GRAPHICS BENCHMARK</button>
+<p id="settingAutoStatus" class="graphics-bench-summary"></p>
+<div id="settingBenchResults" class="graphics-bench-summary" aria-live="polite"></div>
 <p class="settings-hint">WebGPU adjusts resolution to your quality settings. FOV changes the camera field of view.</p>
 </section>
 </div>
 <footer class="settings-footer"><button class="settingsSecondary" id="settingsDefaultsBtn" type="button">↺ Restore defaults</button><button class="primary" id="settingsDoneBtn" type="button">SAVE AND RETURN</button></footer>
 </div>
 </div>
+<dialog id="graphicsBenchDialog" aria-labelledby="graphicsBenchHeading">
+<h2 id="graphicsBenchHeading">GRAPHICS BENCHMARK</h2>
+<p id="graphicsBenchProgress" role="status"></p>
+<button class="settingsSecondary" id="graphicsBenchCancel" type="button">CANCEL</button>
+</dialog>
 <div aria-label="Konsola administratora" aria-modal="true" id="adminConsole" role="dialog">
 <div class="console-head"><strong><span aria-hidden="true" class="icon-slot" data-icon="terminal"></span> CATROOMS / TEST CONSOLE</strong><button aria-label="Zamknij konsole" id="adminClose">×</button></div>
 <div aria-live="polite" class="console-log" id="adminLog">LOCAL TERMINAL // TYPE HELP FOR COMMANDS (F2)</div>
@@ -251,7 +279,7 @@ window.addEventListener('error', function(event){
   overlay.classList.add('load-failed');
 },true);
 </script>
-<script src="js/game.bundle.js?v=1.6.2.4"></script>
-<script src="js/core/boot.js?v=1.6.2.4"></script>
+<script src="js/game.bundle.js?v=1.7.0-alpha.1"></script>
+<script src="js/core/boot.js?v=1.7.0-alpha.1"></script>
 </body>
 </html>

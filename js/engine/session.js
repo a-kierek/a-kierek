@@ -7,6 +7,7 @@ class GameSession {
  }
  resetRound(){
   this.generation++;this.worldRevision++;
+  this.graphicsDemo=false;
   this.resetInterpolation();
   this.hardSlowUntil=0;
   this.hardPulseUntil=0;
@@ -85,7 +86,7 @@ class GameSession {
   return {x:p.prevX+(p.x-p.prevX)*a,y:p.prevY+(p.y-p.prevY)*a};
  }
 }
-const gameSession=new GameSession();
+let gameSession=new GameSession();
 
 // Named timer channels: replacements cancel older callbacks, including stale jumpscares.
 class SessionTimers {

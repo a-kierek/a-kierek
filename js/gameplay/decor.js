@@ -31,6 +31,13 @@ function looseDecorPose(kind,spec,random){
  const jitter=Math.max(0,.44-radius);
  return {size,yaw,tilt,z,dx:(random()*2-1)*jitter,dy:(random()*2-1)*jitter,radius};
 }
+// Local +Y is the back of both meshes. Keep the full collision tile and
+// connectivity checks, but move the mesh against the selected solid wall.
+function wallFloorDecorPose(kind,spec,wall){
+ const [dx,dy]=wall;
+ const offset=.5-spec.depth-(kind==='pipe'?0:.015);
+ return {dx:dx*offset,dy:dy*offset,yaw:Math.atan2(-dx,dy)};
+}
 function scatterLevelDecor(){
  const s=gameSession,world=s.world,N=s.N;
  // Independent random stream: decor must not change enemy or loot RNG.
@@ -63,6 +70,7 @@ function scatterLevelDecor(){
    const spec=DECOR_MODELS[kind];if(!spec)continue;
    if(spec.triangles>8000&&placed.filter(p=>p.model===kind&&p.stage===stage).length>=2)continue;
    const isWall=spec.placement==='wall';
+   const againstWall=kind==='bench'||kind==='pipe';
    let selected=null;
    for(const cell of cells){
     const {x,y}=cell;if(world[y][x]!==0)continue;
@@ -70,7 +78,8 @@ function scatterLevelDecor(){
     const walls=DECOR_DIRS.filter(([dx,dy])=>world[y+dy]?.[x+dx]===1);
     if(isWall){if(!walls.length)continue;selected={...cell,wall:walls[Math.floor(random()*walls.length)]};break;}
     if(!decorFloorAllowed(world,x,y))continue;
-    selected=cell;break;
+    if(againstWall&&!walls.length)continue;
+    selected=againstWall?{...cell,wall:walls[Math.floor(poseRandom()*walls.length)]}:cell;break;
    }
    if(!selected)continue; // safe skip, never force a prop into a passage
    const {x,y,wall}=selected;let px=x+.5,py=y+.5,z=0,yaw=Math.floor(random()*4)*Math.PI/2;
@@ -78,6 +87,7 @@ function scatterLevelDecor(){
    if(isWall){const [dx,dy]=wall;const offset=.5-spec.depth-.035;px+=dx*offset;py+=dy*offset;z=kind==='camera'?1-spec.height-.025:.78-spec.height/2;yaw=Math.atan2(-dx,dy);}
    else {
     world[y][x]=5;
+    if(againstWall){const pose=wallFloorDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;yaw=pose.yaw;}
     if(kind==='box'||kind==='crt'){
      const pose=looseDecorPose(kind,spec,poseRandom);
      px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;size=pose.size;tilt=pose.tilt;radius=pose.radius;
