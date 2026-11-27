@@ -27,7 +27,12 @@ const SFX_FILES = {
   hardSqueal:'assets/audio/hard/pig-squeal-horror.mp3',
   menuMusic:'assets/audio/music/menu-ambient.mp3',
   gameMusic:'assets/audio/music/game-ambient.mp3',
-  chaseMusic:'assets/audio/music/chase-trailer.mp3'
+  chaseMusic:'assets/audio/music/chase-trailer.mp3',
+  doorOpen:'assets/audio/doors/open.mp3',
+  doorClose:'assets/audio/doors/close.mp3',
+  repairKeypad:'assets/audio/reactor/keypad.mp3',
+  repairMetal:'assets/audio/reactor/repair-metal.mp3',
+  beepBeep:'assets/audio/beep-beep.mp3'
 };
 // Missing replacements are set to null by the build, so their cues stay silent.
 const REPLACEMENT_SFX_FILES = {
@@ -52,6 +57,7 @@ const VOICE_LINES = Object.freeze({
 const sfxTemplates = Object.create(null);
 const activeEnemySounds = [];
 let walkingAudio = null, walkingPlaying = false, lossScreamAudio = null, hardHeartbeatAudio = null, hardHeartbeatPlaying = false;
+let repairKeypadAudio=null;
 const safeRoomTracks={music:null,fire:null};
 const bgTracks={menu:null,game:null,chase:null,hum:null};
 let menuMusicUnlocked=false;
@@ -140,6 +146,11 @@ function stopWalkingSound() {
 }
 
 function stopGameSounds() {
+  if(repairKeypadAudio){
+    repairKeypadAudio.pause();
+    activeOneShots.delete(repairKeypadAudio);
+    repairKeypadAudio=null;
+  }
   for(const id of ['game','chase','hum'])if(bgTracks[id])bgTracks[id].pause();
   stopSafeRoomTracks();
   if(hardHeartbeatAudio){hardHeartbeatAudio.pause();hardHeartbeatPlaying=false;}
@@ -171,6 +182,17 @@ function syncWalkingAudio() {
 function playPickup(){createGameSample('pickup',.16);}
 function playHurt(){createGameSample('hurt',.72);}
 function playUnlock(){createGameSample('unlock',.32);}
+function playDoorMovement(open){createGameSample(open?'doorOpen':'doorClose',open?.42:.38);}
+function playReactorRepair(){
+ const keypad=createGameSample('repairKeypad',.95);
+ repairKeypadAudio=keypad;
+ createGameSample('repairMetal',.085);
+ keypad?.addEventListener('ended',()=>{
+  if(repairKeypadAudio!==keypad)return;
+  repairKeypadAudio=null;
+  if(gameSession.state==='playing')createGameSample('beepBeep',.44);
+ },{once:true});
+}
 function playSting(loud=true){createGameSample(loud?'warning':'roundStart',loud?.38:.25);}
 function playWin(){createGameSample('win',.45);}
 
@@ -340,13 +362,14 @@ function syncBackgroundTracks(dt=.04){
  const playing=gameSession.state==='playing';
  const chase=playing&&(gameSession.guards.some(g=>g.state==='chase'&&!g.frozen&&g.variant!=='gray'&&
    (gameSession.level!==12||g.rushSector===gameSession.bossRush?.stage))||(gameSession.level===1&&gameSession.awake&&gameSession.cat?.state==='chase'));
+ const sector=gameSession.level===12?bossRushArea(gameSession.player.x):renderStage();
  const targets={
   menu:gameSession.state==='menu'?.25:0,
   game:playing?(chase?.055:.23):0,
   chase:chase?.35:0,
-  hum:playing?.12:0
+  hum:playing?(sector===2?.28:.12):0
  };
- const hum=gameSession.level===2?'humFlooded':gameSession.level===3?'humBloody':'humDefault';
+ const hum=sector===2?'humFlooded':gameSession.level===3?'humBloody':'humDefault';
  for(const [id,key,category] of [['menu','menuMusic','ambient'],['game','gameMusic','ambient'],
    ['chase','chaseMusic','effects'],['hum',hum,'ambient']]){
    let a=bgTracks[id];
@@ -361,7 +384,9 @@ function syncBackgroundTracks(dt=.04){
    a.volume=clamp(a._baseVolume*audioMix(category),0,1);
    if(target>.002&&a.paused&&!a._playPending&&!a._autoplayBlocked){
      a._playPending=true;
-     try{Promise.resolve(a.play()).catch(()=>{a._autoplayBlocked=true;}).finally(()=>{a._playPending=false;});}
+     try{Promise.resolve(a.play()).catch(error=>{
+       if(error?.name!=='AbortError')a._autoplayBlocked=true;
+     }).finally(()=>{a._playPending=false;});}
      catch(e){a._playPending=false;a._autoplayBlocked=true;}
    }
    if(target<=.002&&a._baseVolume<.008&&!a.paused)a.pause();

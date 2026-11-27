@@ -34,7 +34,10 @@ const syncDetectionHUD=(()=>{
   if(gameSession.state!=='playing'){el.hidden=true;return;}
   const active=g=>g&&g.state==='chase'&&!g.frozen&&g.variant!=='gray';
   const detected=!gameSession.player.hidden&&(gameSession.guards.some(g=>active(g)&&(gameSession.level!==12||g.rushSector===gameSession.bossRush?.stage))||(gameSession.level===1&&gameSession.awake&&active(gameSession.cat)));
-  if(detected&&!wasDetected)until=gameSession.elapsed+1;
+  if(detected&&!wasDetected){
+   until=gameSession.elapsed+1;
+   createGameSample('beepBeep',.38);
+  }
   wasDetected=detected;el.hidden=gameSession.elapsed>=until;
   const details=$('mapRunDetails');if(details&&!details.hidden){
    const level=$('levelLabel').textContent,status=gameSession.player.hidden?'HIDDEN':detected?'DETECTED':gameSession.guards.some(g=>g.state==='search'||g.state==='suspicious')?'SEARCHING':'UNDETECTED';

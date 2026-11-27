@@ -212,7 +212,7 @@ function triggerHardEmergency(){
 function finishHardEmergency(){
  gameSession.hardEmergency=null;gameSession.interactables=gameSession.interactables.filter(o=>o.id!=='hard-repair');
  gameSession.hardNextEmergency=gameSession.elapsed+72+rnd()*48;
- $('hardEmergency').hidden=true;showToast('REACTOR REPAIRED · EMERGENCY RESOLVED',3);playUnlock();
+ $('hardEmergency').hidden=true;showToast('REACTOR REPAIRED · EMERGENCY RESOLVED',3);playReactorRepair();
 }
 function updateHard(dt){
  updateFacility(dt,false);

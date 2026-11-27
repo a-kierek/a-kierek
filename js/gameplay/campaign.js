@@ -15,14 +15,14 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
  pickup();pickupCoins();updateCoinCounter();updateSeen();
  gameSession.interactReady=findInteractable();$('interactHint').style.display=gameSession.interactReady?'block':'none';
- if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':'UZYJ');
+ if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='lockedExit'?'CHECK EXIT':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':'UZYJ');
  if(applyHazardsAndRegen(dt))return;
  if(gameSession.awake){updateGuard(gameSession.cat,dt,0);let distance=Math.hypot(gameSession.cat.x-gameSession.player.x,gameSession.cat.y-gameSession.player.y);gameSession.nearCat=distance;UI.danger.style.opacity=distance<5?String(clamp((5-distance)/2,0,1)):'0';if(distance<.67&&!isSafeRoomProtected()&&lineOfSight(gameSession.cat.x,gameSession.cat.y,gameSession.player.x,gameSession.player.y)&&lose())return;
  }else{gameSession.nearCat=Infinity;UI.danger.style.opacity=0}
  // Admin-spawned guards on Level 1 must use the same simulation as their sprites.
  for(let i=0;i<gameSession.guards.length;i++){const g=gameSession.guards[i];updateGuard(g,dt,i+1);const d=Math.hypot(g.x-gameSession.player.x,g.y-gameSession.player.y);gameSession.nearCat=Math.min(gameSession.nearCat,d);if(d<.66&&!isSafeRoomProtected()&&lineOfSight(g.x,g.y,gameSession.player.x,gameSession.player.y)&&lose(g.id))return;}
  if(gameSession.guards.length)UI.danger.style.opacity=gameSession.nearCat<5?String(clamp((5-gameSession.nearCat)/2,0,1)):'0';
- if(gameSession.player.collected===gameSession.GOAL&&Math.hypot(gameSession.player.x-(gameSession.exitCell.x+.5),gameSession.player.y-(gameSession.exitCell.y+.5))<1.52&&lineOfSight(gameSession.player.x,gameSession.player.y,gameSession.exitCell.x+.5,gameSession.exitCell.y+.5,{allowTargetTile:true})){win();return}
+ if(gameSession.player.collected===gameSession.GOAL&&Math.hypot(gameSession.player.x-(gameSession.exitCell.x+.5),gameSession.player.y-(gameSession.exitCell.y+.5))<1.52&&lineOfSight(gameSession.player.x,gameSession.player.y,gameSession.exitCell.x+.5,gameSession.exitCell.y+.5,{allowTargetTile:true})){playDoorMovement(true);win();return}
  let target=gameSession.player.collected===gameSession.GOAL?{x:gameSession.exitCell.x+.5,y:gameSession.exitCell.y+.5}:gameSession.fuses.filter(f=>!f.taken).sort((a,b)=>Math.hypot(gameSession.player.x-a.x,gameSession.player.y-a.y)-Math.hypot(gameSession.player.x-b.x,gameSession.player.y-b.y))[0];
  if(target){let dx=target.x-gameSession.player.x,dy=target.y-gameSession.player.y;let angle=Math.atan2(dy,dx)-gameSession.player.a;while(angle>PI)angle-=TAU;while(angle<-PI)angle+=TAU;UI.bearing.style.transform=`rotate(${angle*180/PI}deg)`;let meters=Math.hypot(dx,dy);UI.signal.innerHTML=`<strong>${gameSession.player.collected===gameSession.GOAL?'EXIT':'ELECTRIC SIGNAL'}</strong> · ${Math.round(meters)} m`}
  if(gameSession.mapOn&&Math.floor(gameSession.elapsed*5)!==Math.floor((gameSession.elapsed-dt)*5))drawMap();
@@ -53,21 +53,36 @@ function pickupFacility(){
 function findInteractable(){
   if(gameSession.player.hidden)return{type:'unhide',title:'LEAVE HIDING PLACE'};
   const all=[];
-  for(let d of gameSession.doors)if(!d.open&&!d.bossGate)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
+  for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
+  const exit=gameSession.exitCell;
+  if(gameSession.world[exit.y]?.[exit.x]===3&&
+     (gameSession.player.collected!==gameSession.GOAL||gameSession.terminals.some(t=>!t.used))){
+    all.push({type:'lockedExit',x:exit.x+.5,y:exit.y+.5,title:'EXIT LOCKED'});
+  }
   for(const room of bossRushRooms())all.push({type:'safeDoor',ref:room,x:room.doorX+.5,y:room.doorY+.5,title:'SAFE ROOM DOOR'});
   for(let o of gameSession.interactables)if(o.type==='hide'||o.type==='stairs'||o.type==='slot'||!o.used)all.push({type:o.type,ref:o,x:o.x,y:o.y,title:o.title});
   all.sort((a,b)=>Math.hypot(gameSession.player.x-a.x,gameSession.player.y-a.y)-Math.hypot(gameSession.player.x-b.x,gameSession.player.y-b.y));
-  return all.find(o=>Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<(o.type==='door'?1.65:1.4)&&lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:o.type==='door'||o.type==='safeDoor',allowTargetFurniture:o.type==='slot'}))||null;
+  return all.find(o=>{
+    const gate=o.type==='door'||o.type==='lockedExit';
+    return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<(gate?1.65:1.4)&&
+      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:o.type==='slot'});
+  })||null;
 }
 
 function interact(){
   if(gameSession.state!=='playing')return;
-  if(gameSession.graphicsDemo){toggleGraphicsDemoDoor();return;}
-  const safeTarget=findInteractable();
-  if(safeTarget?.type==='safeDoor'){safeRoomInteraction(safeTarget.ref);return;}
-  if(safeTarget?.type==='slot'){slotMachineSpin(safeTarget.ref);return;}
+  if(gameSession.graphicsDemo){
+    if(toggleGraphicsDemoDoor())playDoorMovement(gameSession.safeRoom.open);
+    return;
+  }
+  const target=findInteractable();
+  if(target?.type==='safeDoor'){safeRoomInteraction(target.ref);return;}
+  if(target?.type==='slot'){slotMachineSpin(target.ref);return;}
+  if(target?.type==='lockedExit'){
+    createGameSample('doorLocked',.32);showToast('EXIT LOCKED · COMPLETE THE OBJECTIVE',2.4);return;
+  }
   if(gameSession.level===1)return;
-  const target=findInteractable();if(!target){showToast('NOTHING TO INTERACT WITH',1.4);return}
+  if(!target){showToast('NOTHING TO INTERACT WITH',1.4);return}
   const o=target.ref;
   if(target.type==='repair'&&isHardMode()){finishHardEmergency();return}
   if(target.type==='unhide'){gameSession.player.hidden=false;showToast('YOU LEFT HIDING',1.6);return}
@@ -80,10 +95,10 @@ function interact(){
     gameSession.flashUntil=gameSession.elapsed+.5;showToast('ACCESS TO SECTION '+(gameSession.cameraFloor===2?'B':'A'),2.5);playUnlock();return;
   }
   if(target.type==='door'){
-    let why=requirementReason(o);
+    const why=o.bossGate?'Complete the current sector':requirementReason(o);
     if(why){createGameSample('doorLocked',.32);showToast('⛔ '+why.toUpperCase(),3);return}
     o.open=true;gameSession.world[o.y][o.x]=0;markWorldChanged();gameSession.stats.doors++;addNoise(o.x+.5,o.y+.5,11,'brama');
-    playUnlock();showToast('✓ OPENED: '+o.title,2.8);updateObjectiveFacility();return;
+    playDoorMovement(true);showToast('✓ OPENED: '+o.title,2.8);updateObjectiveFacility();return;
   }
   if(target.type==='panel'){
     if(o.used)return;
@@ -136,7 +151,7 @@ function updateFacility(dt,finalMode){
   gameSession.noiseEvents=gameSession.noiseEvents.filter(e=>e.expiry>gameSession.elapsed);
   gameSession.interactReady=findInteractable();
   $('interactHint').style.display=gameSession.interactReady?'block':'none';
-  if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='door'?'OPEN / CHECK GATE':gameSession.interactReady.type==='hide'?'HIDE':gameSession.interactReady.type==='unhide'?'WYJDZ':gameSession.interactReady.type==='stairs'?'TAKE STAIRS':gameSession.interactReady.type==='repair'?'REPAIR REACTOR / 45 SECONDS':'AKTYWUJ PANEL');
+  if(gameSession.interactReady)$('interactHint').textContent='[ E ] '+(gameSession.interactReady.type==='slot'?'PLAY FOR 1 COIN':gameSession.interactReady.type==='lockedExit'?'CHECK EXIT':gameSession.interactReady.type==='safeDoor'?'OPEN / CLOSE ROOM':gameSession.interactReady.type==='door'?'OPEN / CHECK GATE':gameSession.interactReady.type==='hide'?'HIDE':gameSession.interactReady.type==='unhide'?'WYJDZ':gameSession.interactReady.type==='stairs'?'TAKE STAIRS':gameSession.interactReady.type==='repair'?'REPAIR REACTOR / 45 SECONDS':'AKTYWUJ PANEL');
   gameSession.guardSight=Math.max(0,gameSession.guardSight-dt);gameSession.guardNoise=Math.max(0,gameSession.guardNoise-dt);
   let closest=Infinity;
   for(let i=0;i<gameSession.guards.length;i++){
@@ -153,7 +168,7 @@ function updateFacility(dt,finalMode){
   $('stealthStatus').style.color=chasing?'#ff847b':'#a4eadb';
   updateObjectiveFacility();
   const complete=gameSession.player.collected===gameSession.GOAL&&gameSession.terminals.every(t=>t.used);
-  if(complete&&Math.hypot(gameSession.player.x-(gameSession.exitCell.x+.5),gameSession.player.y-(gameSession.exitCell.y+.5))<1.65&&lineOfSight(gameSession.player.x,gameSession.player.y,gameSession.exitCell.x+.5,gameSession.exitCell.y+.5,{allowTargetTile:true})){win();return}
+  if(complete&&Math.hypot(gameSession.player.x-(gameSession.exitCell.x+.5),gameSession.player.y-(gameSession.exitCell.y+.5))<1.65&&lineOfSight(gameSession.player.x,gameSession.player.y,gameSession.exitCell.x+.5,gameSession.exitCell.y+.5,{allowTargetTile:true})){playDoorMovement(true);win();return}
   let targets=gameSession.hardEmergency&&isHardMode()?[gameSession.hardEmergency]:[...gameSession.fuses.filter(f=>!f.taken),...gameSession.terminals.filter(t=>!t.used)];
   if(!targets.length)targets=[{x:gameSession.exitCell.x+.5,y:gameSession.exitCell.y+.5}];
   targets.sort((a,b)=>Math.hypot(gameSession.player.x-a.x,gameSession.player.y-a.y)-Math.hypot(gameSession.player.x-b.x,gameSession.player.y-b.y));

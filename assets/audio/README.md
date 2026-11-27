@@ -25,24 +25,34 @@ Ustawienia, odstępy, głośność i tonacje: `../../js/audio/sound.js`. Jeżeli
 `jumpscares/appear-scream-original.wav` retains the user recording.
 `jumpscares/appear-scream-loud.wav` is an amplified (+10 dB, peak approx -3 dBFS) loss-only version. The amplitude change is applied to the file itself, because `HTMLAudioElement.volume` cannot exceed 1.
 
+## Drzwi, Flooded Complex, reaktor i wykrycie
+
+| Plik | Zdarzenie | Próbka |
+|---|---|---|
+| `doors/open.mp3` | Otwarcie drzwi | Dragon Studio – Heavy Door Unlocking (515258) |
+| `doors/close.mp3` | Zamknięcie drzwi | Dragon Studio – Door Slam (478362) |
+| `replacements/door-locked.mp3` | Próba otwarcia zablokowanych drzwi | Freesound Community – Door Lock (98655) |
+| `replacements/hum-flooded.mp3` | Zapętlone kapanie wody w Flooded Complex | Tanweraman – Dripping Water Stereo Sound (257182) |
+| `reactor/keypad.mp3` | Sygnał klawiatury przy naprawie reaktora w HARD | mr_berrydev – Single Keypad Beep (433456) |
+| `reactor/repair-metal.mp3` | Cichy metaliczny odgłos towarzyszący naprawie | Freesound Community – Repair Metal (85833) |
+| `beep-beep.mp3` | Potwierdzenie po sygnale klawiatury oraz sygnał wykrycia gracza | Freesound Community – Beep Beep (6151) |
+
 ## Pliki do zastąpienia syntezy JS
 
 Umieść poniższe pliki w `assets/audio/replacements/` z podanymi nazwami, a następnie uruchom `python tools/build_standalone.py` z katalogu projektu. Polecenie aktualizuje zarówno `js/game.bundle.js` dla strony, jak i samodzielny plik HTML. Możesz dodawać pliki pojedynczo. Każdy brakujący sygnał pozostaje cichy.
 
 | Plik MP3 | Kiedy gra |
 |---|---|
-| `unlock.mp3` | Otwarcie, odblokowanie przejścia, aktywacja panelu lub naprawa reaktora |
+| `unlock.mp3` | Odblokowanie postępu, zwykła aktywacja panelu lub użycie urządzenia |
 | `warning.mp3` | Obudzenie kota, tryb Rage, fałszywy energetyk i alarm awarii w HARD |
 | `round-start.mp3` | Start rundy |
 | `reactor-wrong-order.mp3` | Reaktory aktywowane w złej kolejności w Bloody Zone |
 | `win.mp3` | Zwycięstwo lub ukończenie aktywacji reaktorów |
-| `door-locked.mp3` | Próba otwarcia drzwi, gdy brakuje wymaganego przedmiotu lub warunku |
 | `event-siren.mp3` | Losowe wydarzenie ALARM SIRENS w Bloody Zone |
 | `event-blackout.mp3` | Losowy zanik zasilania w Bloody Zone |
 | `yellow-pulse.mp3` | Impuls spowalniający żółtego przeciwnika w HARD |
 | `slot-no-prize.mp3` | Przegrana w automacie |
 | `hum-default.mp3` | Domyślne zapętlone buczenie tła |
-| `hum-flooded.mp3` | Zapętlone buczenie tła w drugim poziomie kampanii NORMAL |
 | `hum-bloody.mp3` | Zapętlone buczenie tła w trzecim poziomie kampanii NORMAL |
 
 Podniesienie przedmiotu, obrażenia i jumpscare nadal używają istniejących nagrań. Szum tworzony w pamięci był nieużywany.

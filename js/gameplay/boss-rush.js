@@ -223,7 +223,7 @@ function updateBossRush(dt){
   gameSession.bossRush.progress[s-1].cleared=true;
   const gate=gameSession.bossRush.doors[s-1];gate.open=true;gameSession.world[gate.y][gate.x]=0;markWorldChanged();
   const door=gameSession.doors.find(d=>d.id===gate.id);if(door)door.open=true;
-  playUnlock();showToast('SEKCJA '+s+' COMPLETE · GATE OPENED '+(s+1),4);
+  playDoorMovement(true);showToast('SEKCJA '+s+' COMPLETE · GATE OPENED '+(s+1),4);
  }
  for(const g of gameSession.guards){
   if(g.rushSector!==s||g.frozen)continue;

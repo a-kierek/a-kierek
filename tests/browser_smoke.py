@@ -194,6 +194,70 @@ with sync_playwright() as p:
   assert page.evaluate("gameSession.state==='paused'")
   page.evaluate("setState('menu')")
  print('PASS 13 mode starts, rendered-frame calls, pause and return to menu')
+ result=page.evaluate("""()=>{
+   const ids=['doorOpen','doorClose','doorLocked','humFlooded','repairKeypad','repairMetal','beepBeep'];
+   const embedded=ids.every(id=>sfxTemplates[id]?.src.startsWith('data:audio/mpeg;base64,'));
+   const realSample=createGameSample,heard=[];
+   createGameSample=(id,...args)=>{
+     if(ids.includes(id))heard.push(id);
+     return realSample(id,...args);
+   };
+   const next=(x,y,matches)=>[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{
+     Object.assign(gameSession.player,{x:x+.5+dx,y:y+.5+dy});
+     return freeAt(gameSession.player.x,gameSession.player.y,.22)&&matches(findInteractable());
+   });
+   const repair=()=>{
+     const {x,y}=gameSession.player;
+     gameSession.hardEmergency={x,y,time:45};
+     gameSession.interactables=[{type:'repair',id:'hard-repair',x,y}];
+     interact();
+     return repairKeypadAudio;
+   };
+   try{
+     begin(2,{testRun:true});
+     const track=bgTracks.hum;
+     const water=!!track&&track.loop&&track.src===sfxTemplates.humFlooded.src;
+     pause();const waterPauses=track?.paused;
+     resume();
+     const gate=gameSession.doors.find(d=>d.requires?.cards===1);
+     if(!gate||!next(gate.x,gate.y,t=>t?.ref===gate))throw Error('Missing gate approach');
+     interact();
+     const locked=!gate.open&&heard.at(-1)==='doorLocked';
+     gameSession.player.collected=1;
+     interact();
+     const opened=gate.open&&heard.at(-1)==='doorOpen';
+     const room=gameSession.safeRoom;
+     if(!room||!next(room.doorX,room.doorY,t=>t?.ref===room))throw Error('Missing safe-room approach');
+     interact();interact();
+     const closed=!room.open&&heard.slice(-2).join(',')==='doorOpen,doorClose';
+     const exit=gameSession.exitCell;
+     if(!next(exit.x,exit.y,t=>t?.type==='lockedExit'))throw Error('Missing locked exit approach');
+     interact();
+     const lockedExit=heard.at(-1)==='doorLocked';
+     begin(6,{testRun:true});
+     const onlyFlooded=!bgTracks.hum||bgTracks.hum.src!==sfxTemplates.humFlooded.src;
+     heard.length=0;
+     const first=repair();
+     const beforeBeep=heard.join(',')==='repairKeypad,repairMetal'&&!gameSession.hardEmergency;
+     first.dispatchEvent(new Event('ended'));
+     const sequence=heard.join(',')==='repairKeypad,repairMetal,beepBeep';
+     const second=repair();
+     pause();second.dispatchEvent(new Event('ended'));
+     const cancelled=heard.filter(id=>id==='beepBeep').length===1;
+     resume();
+     gameSession.guards=[{state:'patrol',variant:'classic'}];
+     syncDetectionHUD();
+     gameSession.guards[0].state='chase';syncDetectionHUD();syncDetectionHUD();
+     const detected=heard.filter(id=>id==='beepBeep').length===2;
+     return {embedded,water,waterPauses,locked,opened,closed,lockedExit,onlyFlooded,beforeBeep,sequence,cancelled,detected};
+   }finally{
+     createGameSample=realSample;
+     setState('menu');
+   }
+ }""")
+ assert all(result.values()),result
+ print('PASS Flooded Complex ambience, door cues, ordered reactor repair and one detection sample per alert')
+
  # Test the real E interaction and renderer-only tile override, not just the model loader.
  result=page.evaluate("""()=>{
    begin(1,{testRun:true});godMode=true;gameSession.guards=[];gameSession.awake=false;

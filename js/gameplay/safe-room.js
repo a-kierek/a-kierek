@@ -195,7 +195,7 @@ function safeRoomInteraction(room){
   }
   room.open=!room.open;
   gameSession.world[room.doorY][room.doorX]=room.open?0:4;markWorldChanged();
-  playUnlock();showToast(room.open?'SAFE ROOM OPENED':'SAFE ROOM DOOR CLOSED',2.6);
+  playDoorMovement(room.open);showToast(room.open?'SAFE ROOM OPENED':'SAFE ROOM DOOR CLOSED',2.6);
   updateCoinCounter();return true;
  }
  return false;
