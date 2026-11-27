@@ -18,9 +18,10 @@ for(const name of ['TERRAIN_WGSL','geometryTerrainSource()']){const s=get(name);
 console.log(`PASS ${cases} lamp-window continuity cases, both axes and all heights, compared to full-grid reference`);
 for(const kind of ['bench','pipe']){
  const b=fs.readFileSync(path.join(root,specs[kind].mesh)),n=b.readUInt32LE(4);
- for(const dir of [[1,0],[-1,0],[0,1],[0,-1]]){const p=pose(kind,specs[kind],dir);let contact=-Infinity,minZ=Infinity;
- for(let j=0;j<n;j++){const x=b.readFloatLE(12+j*44),y=b.readFloatLE(16+j*44),z=b.readFloatLE(20+j*44);const xx=p.dx+x*Math.cos(p.yaw)-y*Math.sin(p.yaw),yy=p.dy+x*Math.sin(p.yaw)+y*Math.cos(p.yaw);assert.ok(Math.abs(xx)<=.50001&&Math.abs(yy)<=.50001&&z>=-.00001&&z<=1);contact=Math.max(contact,xx*dir[0]+yy*dir[1]);minZ=Math.min(minZ,z);}
- assert.ok(Math.abs(minZ)<1e-5);assert.ok(Math.abs(contact-(kind==='pipe'?.5:.485))<1e-5,`${kind} ${dir}: ${contact}`);
+ for(const dir of [[1,0],[-1,0],[0,1],[0,-1]]){const p=pose(kind,specs[kind],dir);let contact=-Infinity,minZ=Infinity,left=Infinity,right=Infinity;
+ for(let j=0;j<n;j++){const x=b.readFloatLE(12+j*44),y=b.readFloatLE(16+j*44),z=b.readFloatLE(20+j*44);const xx=p.dx+x*Math.cos(p.yaw)-y*Math.sin(p.yaw),yy=p.dy+x*Math.sin(p.yaw)+y*Math.cos(p.yaw);assert.ok(Math.abs(xx)<=.50001&&Math.abs(yy)<=.50001&&z>=-.00001&&z<=1);contact=Math.max(contact,xx*dir[0]+yy*dir[1]);minZ=Math.min(minZ,z);if(x<-.25)left=Math.min(left,z);if(x>.25)right=Math.min(right,z);}
+ assert.ok(Math.abs(minZ)<1e-5);if(kind==='bench'){assert.ok(left<1e-5);assert.ok(right<1e-5);}
+ assert.ok(Math.abs(contact-(kind==='pipe'?.5:.485))<1e-5,`${kind} ${dir}: ${contact}`);
  }
 }
-console.log('PASS bench and pipe actual mesh vertices, four wall orientations, floor and contact distances');
+console.log('PASS bench and pipe actual mesh vertices, four wall orientations, both bench ends grounded, floor and contact distances');

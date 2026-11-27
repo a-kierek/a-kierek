@@ -364,12 +364,97 @@ function bfsDistances(sx,sy){let dist=Array.from({length:gameSession.N},()=>Arra
 // and navigation share the actual furniture footprint (not floored positions).
 function solidFurniture(){return typeof gameSession.safeRoomFurniture==='undefined'?[]:gameSession.safeRoomFurniture;}
 function solidBox(b){return b.material===1||b.material===3||b.material===4;}
-function overlapsBox(x,y,r,b){return Math.abs(x-b.x)<b.w*.5+.14+r&&Math.abs(y-b.y)<b.d*.5+.14+r;}
-function tileBlocked(x,y){return x<0||y<0||x>=gameSession.N||y>=gameSession.N||gameSession.world[y]?.[x]!==0;}
+function overlapsBox(x,y,r,b){
+ const dx=Math.max(0,Math.abs(x-b.x)-b.w*.5),dy=Math.max(0,Math.abs(y-b.y)-b.d*.5);
+ return dx*dx+dy*dy<=r*r;
+}
+
+// Tile 5 stays a reservation for generation. At runtime the same tile is
+// open around its indexed footprint, including when a mesh spans its edge.
+let objectCollisions=null;
+function prepareObjectCollisions(){
+ const {world,N,worldRevision}=gameSession;
+ if(objectCollisions?.world===world&&objectCollisions.size===N&&objectCollisions.revision===worldRevision)return objectCollisions;
+ const cells=new Map(),reserved=new Set(),shapes=[];
+ for(const prop of gameSession.props||[]){
+  if(prop.type!=='rock'&&!(prop.type==='decor'&&prop.solid))continue;
+  const spec=DECOR_FOOTPRINTS[prop.type==='rock'?'rock':prop.model];
+  if(!spec)continue;
+  const tileX=prop.cellX??Math.floor(prop.x),tileY=prop.cellY??Math.floor(prop.y);
+  if(world[tileY]?.[tileX]!==5)continue;
+  const side=spec.side&&Math.abs(prop.tilt||0)>1;
+  const source=side?spec.side:spec.floor;
+  const scale=prop.size||1,angle=(prop.type==='rock'?prop.phase:prop.yaw)||0;
+  const cos=Math.cos(angle)*scale,sin=Math.sin(angle)*scale;
+  const reflected=side&&prop.tilt>0,p=[];
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(let i=0;i<source.length;i+=2){
+   const j=reflected?source.length-2-i:i;
+   const u=source[j],v=source[j+1]*(reflected?-1:1);
+   const x=prop.x+u*cos-v*sin,y=prop.y+u*sin+v*cos;
+   p.push([x,y]);minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+  }
+  const shape={edges:p.map(([x,y],i)=>{
+   const next=p[(i+1)%p.length];
+   return {x,y,dx:next[0]-x,dy:next[1]-y};
+  }),minX,minY,maxX,maxY};
+  reserved.add(tileY*N+tileX);shapes.push(shape);
+  for(let y=Math.max(0,Math.floor(minY));y<=Math.min(N-1,Math.floor(maxY));y++){
+   for(let x=Math.max(0,Math.floor(minX));x<=Math.min(N-1,Math.floor(maxX));x++){
+    const id=y*N+x;
+    if(!cells.has(id))cells.set(id,[]);
+    cells.get(id).push(shape);
+   }
+  }
+ }
+ objectCollisions={world,size:N,revision:worldRevision,cells,reserved,shapes};
+ return objectCollisions;
+}
+function tileBlocked(x,y,objects){
+ if(x<0||y<0||x>=objects.size||y>=objects.size)return true;
+ const tile=objects.world[y]?.[x];
+ return tile!==0&&(tile!==5||!objects.reserved.has(y*objects.size+x));
+}
+function distanceToSegmentSquared(x,y,ax,ay,dx,dy){
+ const length=dx*dx+dy*dy;
+ const t=length?Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/length)):0;
+ return (x-ax-t*dx)**2+(y-ay-t*dy)**2;
+}
+function footprintOverlaps(shape,x,y,r){
+ if(x+r<shape.minX||x-r>shape.maxX||y+r<shape.minY||y-r>shape.maxY)return false;
+ let inside=true;
+ for(const e of shape.edges){
+  if(e.dx*(y-e.y)-e.dy*(x-e.x)<0)inside=false;
+  if(r&&distanceToSegmentSquared(x,y,e.x,e.y,e.dx,e.dy)<=r*r)return true;
+ }
+ return inside;
+}
+function footprintHitsSegment(shape,ax,ay,bx,by,r=0){
+ if(Math.max(ax,bx)+r<shape.minX||Math.min(ax,bx)-r>shape.maxX||
+    Math.max(ay,by)+r<shape.minY||Math.min(ay,by)-r>shape.maxY)return false;
+ const dx=bx-ax,dy=by-ay;
+ let lo=0,hi=1;
+ for(const e of shape.edges){
+  if(r&&distanceToSegmentSquared(e.x,e.y,ax,ay,dx,dy)<=r*r)return true;
+  const start=e.dx*(ay-e.y)-e.dy*(ax-e.x);
+  const delta=e.dx*dy-e.dy*dx;
+  if(Math.abs(delta)<1e-10){if(start<0)lo=Infinity;}
+  else if(delta>0)lo=Math.max(lo,-start/delta);
+  else hi=Math.min(hi,-start/delta);
+  if(lo>hi&&!r)return false;
+ }
+ return lo<=hi||(r>0&&(footprintOverlaps(shape,ax,ay,r)||footprintOverlaps(shape,bx,by,r)));
+}
 function isWall(x,y){return !freeAt(x,y,0);}
 function freeAt(x,y,r=.23){
  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(r)||r<0)return false;
- for(let ty=Math.floor(y-r);ty<=Math.floor(y+r);ty++)for(let tx=Math.floor(x-r);tx<=Math.floor(x+r);tx++)if(tileBlocked(tx,ty))return false;
+ const objects=prepareObjectCollisions();
+ const left=Math.floor(x-r),right=Math.floor(x+r),top=Math.floor(y-r),bottom=Math.floor(y+r);
+ for(let ty=top;ty<=bottom;ty++)for(let tx=left;tx<=right;tx++){
+  if(tileBlocked(tx,ty,objects))return false;
+  const shapes=objects.cells.get(ty*objects.size+tx);
+  if(shapes?.some(shape=>footprintOverlaps(shape,x,y,r)))return false;
+ }
  return !solidFurniture().some(b=>solidBox(b)&&overlapsBox(x,y,r,b));
 }
 function move(obj,dx,dy,r){
@@ -387,7 +472,7 @@ function updateSeen(){let px=Math.floor(gameSession.player.x),py=Math.floor(game
 // Slab intersection for a segment and a furniture AABB.
 function segmentHitsBox(ax,ay,bx,by,b,pad=0){
  let lo=0,hi=1;
- for(const [a,d,c,h] of [[ax,bx-ax,b.x,b.w*.5+.14+pad],[ay,by-ay,b.y,b.d*.5+.14+pad]]){
+ for(const [a,d,c,h] of [[ax,bx-ax,b.x,b.w*.5+pad],[ay,by-ay,b.y,b.d*.5+pad]]){
   if(Math.abs(d)<1e-12){if(a<c-h||a>c+h)return false;continue;}
   let t1=(c-h-a)/d,t2=(c+h-a)/d;
   if(t1>t2)[t1,t2]=[t2,t1];
@@ -396,12 +481,12 @@ function segmentHitsBox(ax,ay,bx,by,b,pad=0){
  return true;
 }
 // Cache static furniture obstacles per map. Wall/door tiles are always live.
-let navFurnitureSource=null,navFurnitureCount=-1,navSize=0,navBlocked=null,navEdges=null;
+let navFurnitureSource=null,navFurnitureCount=-1,navColliderSource=null,navBlocked=null,navEdges=null;
 const NAV_DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
-function prepareFurnitureNav(){
+function prepareObstacleNav(objects){
  const boxes=solidFurniture();
- if(navFurnitureSource===boxes&&navFurnitureCount===boxes.length&&navSize===gameSession.N)return;
- navFurnitureSource=boxes;navFurnitureCount=boxes.length;navSize=gameSession.N;
+ if(navFurnitureSource===boxes&&navFurnitureCount===boxes.length&&navColliderSource===objects)return;
+ navFurnitureSource=boxes;navFurnitureCount=boxes.length;navColliderSource=objects;
  navBlocked=new Uint8Array(gameSession.N*gameSession.N);navEdges=new Uint8Array(gameSession.N*gameSession.N);
  for(const b of boxes){
   if(!solidBox(b))continue;
@@ -413,14 +498,30 @@ function prepareFurnitureNav(){
    }
   }
  }
+ for(const shape of objects.shapes){
+  for(let y=Math.max(0,Math.floor(shape.minY-2));y<=Math.min(objects.size-1,Math.floor(shape.maxY+2));y++){
+   for(let x=Math.max(0,Math.floor(shape.minX-2));x<=Math.min(objects.size-1,Math.floor(shape.maxX+2));x++){
+    const idx=y*objects.size+x;
+    if(footprintOverlaps(shape,x+.5,y+.5,.23))navBlocked[idx]=1;
+    for(let k=0;k<4;k++){
+     const [dx,dy]=NAV_DIRS[k];
+     if(footprintHitsSegment(shape,x+.5,y+.5,x+.5+dx,y+.5+dy,.23))navEdges[idx]|=1<<k;
+    }
+   }
+  }
+ }
 }
 // Reuse typed workspaces instead of allocating and clearing two N*N arrays per search.
 let navWork=null;
-function searchNav(sx,sy,tx,ty,maxDistance=Infinity){
- if(![sx,sy,tx,ty].every(Number.isInteger)||tileBlocked(sx,sy)||tileBlocked(tx,ty)||(sx===tx&&sy===ty))return null;
- prepareFurnitureNav();
+function searchNav(sx,sy,tx,ty,maxDistance=Infinity,origin=null){
+ const objects=prepareObjectCollisions();
+ if(![sx,sy,tx,ty].every(Number.isInteger)||tileBlocked(sx,sy,objects)||tileBlocked(tx,ty,objects)||(sx===tx&&sy===ty))return null;
+ prepareObstacleNav(objects);
  const start=sy*gameSession.N+sx,target=ty*gameSession.N+tx;
  if(navBlocked[target])return null;
+ // A guard can be beside a mesh in its reserved tile even when the grid
+ // center is occupied. Connect its real position to the first waypoint.
+ const fractionalStart=origin&&objects.reserved.has(start);
  if(!navWork||navWork.size!==gameSession.N*gameSession.N)navWork={size:gameSession.N*gameSession.N,q:new Int32Array(gameSession.N*gameSession.N),prev:new Int32Array(gameSession.N*gameSession.N),dist:new Int32Array(gameSession.N*gameSession.N),stamp:new Uint32Array(gameSession.N*gameSession.N),epoch:0};
  const {q,prev,dist,stamp}=navWork;
  let epoch=navWork.epoch=(navWork.epoch+1)>>>0;
@@ -432,20 +533,27 @@ function searchNav(sx,sy,tx,ty,maxDistance=Infinity){
   const x=here%gameSession.N,y=Math.floor(here/gameSession.N);
   for(let k=0;k<4;k++){
    const [dx,dy]=NAV_DIRS[k],nx=x+dx,ny=y+dy,idx=ny*gameSession.N+nx;
-   if(tileBlocked(nx,ny)||stamp[idx]===epoch||navBlocked[idx]||(navEdges[here]&(1<<k)))continue;
+   if(tileBlocked(nx,ny,objects)||stamp[idx]===epoch||navBlocked[idx])continue;
+   if(here===start&&fractionalStart){
+    const horizontal=nx+.5-origin.x,vertical=ny+.5-origin.y;
+    const steps=Math.max(1,Math.ceil(Math.hypot(horizontal,vertical)/.15));
+    let clear=true;
+    for(let step=1;clear&&step<=steps;step++)clear=freeAt(origin.x+horizontal*step/steps,origin.y+vertical*step/steps,.23);
+    if(!clear)continue;
+   }else if(navEdges[here]&(1<<k))continue;
    stamp[idx]=epoch;prev[idx]=here;dist[idx]=dist[here]+1;q[tail++]=idx;
   }
  }
  return null;
 }
-function findPath(sx,sy,tx,ty){
- const found=searchNav(sx,sy,tx,ty);if(!found)return [];
+function findPath(sx,sy,tx,ty,origin=null){
+ const found=searchNav(sx,sy,tx,ty,Infinity,origin);if(!found)return [];
  const {start,target,prev}=found,path=[];
  for(let v=target;v!==start;v=prev[v])path.push({x:v%gameSession.N+.5,y:Math.floor(v/gameSession.N)+.5});
  return path.reverse();
 }
-function navPathDistance(sx,sy,tx,ty,maxDistance=Infinity){
- const found=searchNav(sx,sy,tx,ty,Math.floor(maxDistance));
+function navPathDistance(sx,sy,tx,ty,maxDistance=Infinity,origin=null){
+ const found=searchNav(sx,sy,tx,ty,Math.floor(maxDistance),origin);
  return found&&found.distance<=maxDistance?found.distance:Infinity;
 }
 // Grid DDA: visit every crossed cell, including diagonal corner contacts.
@@ -454,7 +562,11 @@ function lineOfSight(ax,ay,bx,by,options={}){
  if(![ax,ay,bx,by].every(Number.isFinite))return false;
  let x=Math.floor(ax),y=Math.floor(ay),tx=Math.floor(bx),ty=Math.floor(by);
  const dx=bx-ax,dy=by-ay,sx=Math.sign(dx),sy=Math.sign(dy);
- const blocked=(xx,yy)=>!(options.allowTargetTile&&xx===tx&&yy===ty)&&tileBlocked(xx,yy);
+ const objects=prepareObjectCollisions();
+ const blocked=(xx,yy)=>{
+  if(options.allowTargetTile&&xx===tx&&yy===ty)return false;
+  return tileBlocked(xx,yy,objects)||objects.cells.get(yy*objects.size+xx)?.some(shape=>footprintHitsSegment(shape,ax,ay,bx,by));
+ };
  if(blocked(x,y))return false;
  const deltaX=sx?1/Math.abs(dx):Infinity,deltaY=sy?1/Math.abs(dy):Infinity;
  let nextX=sx?(sx>0?x+1-ax:ax-x)*deltaX:Infinity,nextY=sy?(sy>0?y+1-ay:ay-y)*deltaY:Infinity;
@@ -854,7 +966,7 @@ function randomPatrolPoint(g){
   for(let attempts=0;attempts<70;attempts++){
     let x=Math.floor(a.x0+rnd()*(a.x1-a.x0+1)),y=Math.floor(a.y0+rnd()*(a.y1-a.y0+1));
     if(!freeAt(x+.5,y+.5,.23)||Math.hypot(g.x-x-.5,g.y-y-.5)<3.5)continue;
-    if(lineOfSight(g.x,g.y,x+.5,y+.5)||Number.isFinite(navPathDistance(Math.floor(g.x),Math.floor(g.y),x,y))){return{x:x+.5,y:y+.5}}
+    if(lineOfSight(g.x,g.y,x+.5,y+.5)||Number.isFinite(navPathDistance(Math.floor(g.x),Math.floor(g.y),x,y,Infinity,g))){return{x:x+.5,y:y+.5}}
   }
   return{x:g.x,y:g.y};
 }
@@ -868,7 +980,7 @@ function audibleDistance(g,x,y,maxDistance){
  const d=Math.hypot(g.x-x,g.y-y);
  if(d>maxDistance)return Infinity;
  if(lineOfSight(g.x,g.y,x,y))return d;
- return navPathDistance(Math.floor(g.x),Math.floor(g.y),Math.floor(x),Math.floor(y),maxDistance);
+ return navPathDistance(Math.floor(g.x),Math.floor(g.y),Math.floor(x),Math.floor(y),maxDistance,g);
 }
 
 function updateGuard(g,dt,idx=0){
@@ -955,7 +1067,7 @@ function updateGuard(g,dt,idx=0){
   }
   g.pathTimer-=dt;
   if(target&&g.pathTimer<=0){
-    g.path=findPath(Math.floor(g.x),Math.floor(g.y),Math.floor(target.x),Math.floor(target.y));
+    g.path=findPath(Math.floor(g.x),Math.floor(g.y),Math.floor(target.x),Math.floor(target.y),g);
     g.pathTimer=(g.hardEnhanced?.19:rageMode?.25:.52)+idx*.025;
     if(!g.path.length&&Math.hypot(g.x-target.x,g.y-target.y)>1.4&&g.state==='patrol')g.patrolTarget=null;
   }
@@ -1292,7 +1404,7 @@ const DECOR_MODELS=Object.freeze({
  cabinet:Object.freeze({stage:1,placement:'floor',radius:0.28232,height:0.90000,depth:0.25084,triangles:676,mesh:'assets/models/decor/cabinet.mesh'}),
  desk:Object.freeze({stage:1,placement:'floor',radius:0.42526,height:0.64000,depth:0.39657,triangles:4912,mesh:'assets/models/decor/desk.mesh'}),
  yellowClock:Object.freeze({stage:1,placement:'wall',radius:0.14017,height:0.28000,depth:0.00693,triangles:252,mesh:'assets/models/decor/yellowClock.mesh'}),
- bench:Object.freeze({stage:2,placement:'floor',radius:0.44000,height:0.41092,depth:0.15469,triangles:788,mesh:'assets/models/decor/bench.mesh'}),
+ bench:Object.freeze({stage:2,placement:'floor',radius:0.44000,height:0.41263,depth:0.15103,triangles:788,mesh:'assets/models/decor/bench.mesh'}),
  lifebuoy:Object.freeze({stage:2,placement:'wall',radius:0.21500,height:0.43000,depth:0.03982,triangles:2600,mesh:'assets/models/decor/lifebuoy.mesh'}),
  pipe:Object.freeze({stage:2,placement:'floor',radius:0.22854,height:0.90000,depth:0.10717,triangles:12980,mesh:'assets/models/decor/pipe.mesh'}),
  pump:Object.freeze({stage:2,placement:'floor',radius:0.43000,height:0.55418,depth:0.20900,triangles:28899,mesh:'assets/models/decor/pump.mesh'}),
@@ -1304,6 +1416,19 @@ const DECOR_MODELS=Object.freeze({
  lastClock:Object.freeze({stage:5,placement:'wall',radius:0.21336,height:0.36000,depth:0.08500,triangles:2754,mesh:'assets/models/decor/lastClock.mesh'}),
 });
 const DECOR_ALBEDO='assets/models/decor/albedo.webp';
+const DECOR_FOOTPRINTS=Object.freeze({
+ box:{floor:[-0.3262397,0.1722548,-0.311331,0.125449,-0.1660929,-0.3188379,-0.1659783,-0.3189058,-0.1657321,-0.3190387,0.1361508,-0.3331081,0.1398236,-0.3320677,0.1566557,-0.316339,0.2408164,-0.2376951,0.3081449,-0.1747799,0.3262357,-0.1569398,0.3262397,-0.156925,0.1801074,0.2866636,0.1643261,0.3331081,0.1395296,0.3255371,-0.0811373,0.2532285,-0.3015874,0.1808162],side:[-0.3262397,0.0018689,0.0791027,0.0,0.3256414,0.0021676,0.3262397,0.0508909,0.3262397,0.0973596,0.3262357,0.4690945,0.3256413,0.5178325,0.2998801,0.52,-0.1416538,0.5199998,-0.1560712,0.5199983,-0.3261474,0.518239]},
+ cabinet:{floor:[-0.1295455,-0.1309781,-0.1169259,-0.2332508,-0.0428004,-0.2508402,0.0428004,-0.2508402,0.1169259,-0.2332508,0.1295455,-0.1309781,0.1295455,0.2508402,-0.1295455,0.2508402]},
+ desk:{floor:[-0.391033,0.0252299,-0.3875814,0.0147234,-0.1520969,-0.2358923,-0.1418409,-0.2416092,0.1386985,-0.3944113,0.1457987,-0.3965697,0.1526252,-0.3936592,0.2713493,-0.2849976,0.3876744,-0.1737715,0.391033,-0.167154,0.3893521,-0.1599258,0.2555672,0.1301646,0.2505457,0.1407785,0.0161646,0.3924263,0.0059112,0.3965697,-0.00425,0.3960994,-0.0141814,0.3927964,-0.0270311,0.3841734,-0.3764708,0.0572738,-0.3859303,0.0450267,-0.3898872,0.0353373]},
+ bench:{floor:[-0.4132681,-0.107162,-0.4050516,-0.1491062,-0.403545,-0.1506288,-0.3997008,-0.1510281,0.3669055,-0.1510281,0.3697571,-0.1493642,0.3910234,-0.0681217,0.4132681,0.0839843,0.4128017,0.0954458,0.4120005,0.0978086,-0.2670598,0.1456234,-0.3479384,0.1510281,-0.4132681,0.1510281]},
+ pipe:{floor:[-0.2018552,-0.1071711,0.0950526,-0.1071711,0.1149651,-0.1058287,0.1371038,-0.0991701,0.1550344,-0.0893767,0.1706512,-0.0755734,0.1835365,-0.0610452,0.1946885,-0.0405372,0.200524,-0.0211858,0.2018552,0.0004188,0.2004755,0.0181105,0.1941314,0.0391782,0.1850319,0.057879,0.1706625,0.075992,0.1564047,0.0889641,0.1375051,0.0992975,0.1183482,0.1053518,0.0950746,0.1071711,-0.2018552,0.1071711]},
+ pump:{floor:[-0.3921219,-0.1764664,0.2161721,-0.2089978,0.2223575,-0.2089978,0.2598149,-0.205125,0.2620515,-0.2048293,0.3921219,-0.1741427,0.3921219,0.1356822,0.2620515,0.166369,0.2598751,0.1666647,-0.0680979,0.2089978,-0.1450259,0.2089978,-0.3921219,0.137911]},
+ barrel:{floor:[-0.2299548,2e-07,-0.2255363,-0.0448618,-0.2124506,-0.0879997,-0.1912005,-0.1277559,-0.1626027,-0.1626025,-0.1277561,-0.1912004,-0.088,-0.2124505,-0.044862,-0.2255363,-1e-07,-0.2299548,0.0448619,-0.2255363,0.0879999,-0.2124506,0.127756,-0.1912005,0.1626026,-0.1626026,0.1912004,-0.1277561,0.2124505,-0.0879999,0.2255363,-0.044862,0.2299548,-0.0,0.2299548,1e-07,0.2255363,0.044862,0.2124505,0.0879999,0.1912004,0.1277561,0.1626026,0.1626026,0.127756,0.1912004,0.0879999,0.2124505,0.044862,0.2255363,0.0,0.2299548,-0.0448616,0.2255364,-0.0879996,0.2124507,-0.1277558,0.1912006,-0.1626024,0.1626028,-0.1912002,0.1277563,-0.2124504,0.0880002,-0.2255362,0.0448622,-0.2299548,3e-07]},
+ metalTable:{floor:[-0.1849185,0.3988794,-0.1849183,-0.3988794,-0.1842363,-0.399571,0.1842365,-0.3995709,0.1849185,-0.3988794,0.1849183,0.3988794,0.1842363,0.399571,-0.1842365,0.3995709]},
+ crt:{floor:[-0.2986666,-0.2053333,-0.28,-0.252,0.2799999,-0.252,0.2986666,-0.2053333,0.2986666,-0.0653333,0.2426666,0.1586667,0.1866667,0.252,-0.1866667,0.252,-0.2426666,0.1586667,-0.2986666,-0.0653333],side:[-0.2986666,0.0746667,-0.28,1e-07,-0.2799999,0.0,0.1493333,0.0,0.2799999,1e-07,0.2986666,0.0746667,0.2986666,0.56,-0.2986666,0.56]},
+ mannequin:{floor:[-0.1184419,-0.0552495,-0.0397195,-0.0706335,0.0395556,-0.0708346,0.1184419,-0.0581773,0.1184419,0.0094224,0.087893,0.0429343,0.0698089,0.0576236,0.0543836,0.0682766,0.0360615,0.0706619,-0.0355506,0.0708346,-0.0537107,0.0685639,-0.0686547,0.0583867,-0.1184419,0.0115565]},
+ rock:{floor:[-0.49,0.1728286,-0.4893011,0.1008297,-0.4864228,0.065096,-0.4812224,0.0248945,-0.474424,-0.0084037,-0.3686606,-0.2219455,-0.30945,-0.337554,-0.2969522,-0.352121,-0.2935508,-0.3554949,-0.2715524,-0.3756785,-0.2454079,-0.3980803,-0.1796197,-0.4081782,-0.0761765,-0.4205514,0.0048331,-0.4266967,0.1989115,-0.4225472,0.2213622,-0.4181898,0.3050126,-0.3653118,0.3277377,-0.3500744,0.3425788,-0.3270151,0.3706086,-0.279165,0.450778,-0.1399093,0.4747793,-0.098128,0.486135,-0.0767044,0.49,-0.052641,0.4869068,-0.0282369,0.4513025,0.0701206,0.4406778,0.0956938,0.4248778,0.1174379,0.1831853,0.3494767,0.168333,0.363395,0.152545,0.3772568,0.1117004,0.4043531,0.0858078,0.4157823,0.0568514,0.4228641,0.0232477,0.4264231,-0.0117791,0.4265358,-0.1360783,0.4266967,-0.1769922,0.4241905,-0.2108824,0.4094421,-0.2125392,0.4084228,-0.2393888,0.3907996,-0.4290428,0.2335078,-0.4498063,0.2156278,-0.4636739,0.2035282]},
+});
 
 ;
 // SOURCE: js/engine/assets.js
@@ -1721,6 +1846,10 @@ fn fixtureGrid(p:vec2f)->vec2f {return floor((p-vec2f(2.5,1.45))/vec2f(5.,4.));}
 fn fixtureWeight(p:vec3f,source:vec3f)->f32 {
  let d=source-p;return 1.-smoothstep(36.,64.,dot(d,d));
 }
+fn fixtureFlicker(cell:vec2f,time:f32)->f32 {
+ let phase=dot(cell,vec2f(12.37,8.91));
+ return .91+.09*sin(time*9.+phase)-.22*step(.985,sin(time*2.3+phase));
+}
 fn sceneLight(p:vec3f,n:vec3f,rough:f32,f:SceneFrame)->vec3f {
  let eyeDelta=vec3f(f.player.xy,.5)-p;
  let eye=eyeDelta*inverseSqrt(max(dot(eyeDelta,eyeDelta),.00001));
@@ -1738,8 +1867,7 @@ fn sceneLight(p:vec3f,n:vec3f,rough:f32,f:SceneFrame)->vec3f {
   let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
   let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
   if(weight<=0.||(f.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(f.viewport.z)))){continue;}
-  let phase=dot(cell,vec2f(12.37,8.91));
-  let flicker=.91+.09*sin(f.player.w*9.+phase)-.22*step(.985,sin(f.player.w*2.3+phase));
+  let flicker=fixtureFlicker(cell,f.player.w);
   let power=select(2.1,.12,f.weather.x>.5)*flicker;
   light+=pointContribution(p,n,eye,rough,source,tint,power*weight,f);
  }}
@@ -1880,8 +2008,7 @@ fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
    let cell=grid+vec2f(f32(x),f32(y));let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
    let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
    if(weight<=0.||(frame.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(frame.viewport.z)))){continue;}
-   let phase=dot(cell,vec2f(12.37,8.91));
-   let flicker=.91+.09*sin(frame.player.w*9.+phase)-.22*step(.985,sin(frame.player.w*2.3+phase));
+   let flicker=fixtureFlicker(cell,frame.player.w);
    light+=cp11Point(p,geom,material,base,eye,source,tint,select(2.1,.12,frame.weather.x>.5)*flicker*weight);
   }}
   if(frame.lighting.w>.5){
@@ -1944,7 +2071,14 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(!isFloor){
    let cell=vec2i(floor(worldPt));
    if((cell.x+100)%5==2 && (cell.y+100)%4==1 && uv.x>.19 && uv.x<.82 && uv.y>.22 && uv.y<.68){
-     c=mix(c,vec3f(1.,.95,.73),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
+     if(frame.progress.w<0.&&frame.lighting.x>.5){
+       let fixture=floor((worldPt-vec2f(2.,1.))/vec2f(5.,4.));
+       let lit=fixtureFlicker(fixture,frame.player.w);
+       let edge=min(min(uv.x-.19,.82-uv.x),min(uv.y-.22,.68-uv.y));
+       c=mix(vec3f(.16,.12,.08),vec3f(2.1,1.85,1.4)*lit,smoothstep(0.,.034,edge));
+     }else{
+       c=mix(c,vec3f(1.,.95,.73),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
+     }
    }
  } else {
    let cell=vec2i(floor(worldPt));
@@ -2961,6 +3095,27 @@ class CatroomsWebGPURenderer {
     this.device.queue.writeBuffer(this.rushPoseBuffers[kind][index],0,new Float32Array(values));
     this.poseCache.set(key,values);
   }
+  encodeTerrain(encoder,colorView){
+    const geometry=this.worldGeometry?.enabled?this.worldGeometry:null;
+    if(geometry)geometry.encode(encoder);
+    const terrain=encoder.beginRenderPass({colorAttachments:[
+      {view:colorView,loadOp:'clear',storeOp:'store',clearValue:{r:.07,g:.07,b:.05,a:1}},
+      {view:this.distanceTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}
+    ]});
+    terrain.setPipeline(geometry?geometry.resolvePipeline:this.terrainPipeline);
+    terrain.setBindGroup(0,geometry?geometry.resolveBind:this.terrainBind);
+    terrain.draw(6);terrain.end();
+    this.stats.wallTriangles=geometry?geometry.wallVertexCount/3:0;
+    this.stats.planeTriangles=geometry?geometry.planeVertexCount/3:0;
+  }
+  encodePost(encoder,output,scene,time){
+    if(!this.post)return;
+    if(this.postScene!==scene){
+      this.postScene=scene;
+      this.post.reset=true;this.post.lastTime=null;
+    }
+    this.post.encode(encoder,output,true,time??performance.now());
+  }
   renderMenu(time){
     if(!this.lastWidth)return;
     if(!this.menuScene){const N=49,world=Array.from({length:N},()=>Array(N).fill(1));
@@ -2969,13 +3124,23 @@ class CatroomsWebGPURenderer {
       this.menuScene={N,world,worldRevision:-1,props:[],safeRoomFurniture:[]};}
     this.needsRender=false;this.stats.frames++;this.stats.triangles=0;this.stats.sprites=0;this.stats.wallTriangles=0;this.stats.planeTriangles=0;this.syncStaticBuffers(this.menuScene);
     const t=time/1000, phase=(t*.55)%36;
-    const frame=this.frameData;frame.set([4+phase,21.5+Math.sin(t*.55)*.18,Math.sin(t*.35)*.035,t],RENDER_FRAME.player);
-    frame.set([W,H,this.menuScene.N,1],RENDER_FRAME.viewport);frame.set([0,0,0,-1],RENDER_FRAME.progress);frame.set([1,1,100,0],RENDER_FRAME.visuals);frame.set([0,0,0,0],RENDER_FRAME.weather);frame.set([Math.tan(75*Math.PI/360),0,0,0],RENDER_FRAME.camera);frame.set([0,0,0,0],RENDER_FRAME.lighting);frame.set([0,0,0,0],RENDER_FRAME.flashlight);this.flashlightState=null;frame.fill(0,RENDER_FRAME.shadows);
+    const frame=this.frameData;
+    frame.set([4+phase,21.5+Math.sin(t*.55)*.18,Math.sin(t*.35)*.035,t],RENDER_FRAME.player);
+    frame.set([W,H,this.menuScene.N,1],RENDER_FRAME.viewport);
+    frame.set([0,0,0,-1],RENDER_FRAME.progress);
+    frame.set([1,1,100,0],RENDER_FRAME.visuals);
+    frame.set([0,0,0,.035],RENDER_FRAME.weather);
+    frame.set([Math.tan(75*Math.PI/360),0,0,0],RENDER_FRAME.camera);
+    frame.set([this.lightingEnabled?(this.wallShadowsEnabled?2:1):0,0,0,0],RENDER_FRAME.lighting);
+    frame.fill(0,RENDER_FRAME.flashlight);
+    frame[RENDER_FRAME.shadows]=Number(this.softShadowsEnabled);
+    this.flashlightState=null;
     this.device.queue.writeBuffer(this.frameBuffer,0,frame);
     const encoder=this.device.createCommandEncoder({label:'Menu corridor'});
     const output=this.context.getCurrentTexture().createView();
-    const pass=encoder.beginRenderPass({colorAttachments:[{view:this.post?this.post.scene.createView():output,loadOp:'clear',storeOp:'store',clearValue:{r:.05,g:.04,b:.03,a:1}},{view:this.distanceTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}]});
-    pass.setPipeline(this.terrainPipeline);pass.setBindGroup(0,this.terrainBind);pass.draw(6);pass.end();this.post?.encode(encoder,output,false,time);this.device.queue.submit([encoder.finish()]);
+    this.encodeTerrain(encoder,this.post?this.post.scene.createView():output);
+    this.encodePost(encoder,output,this.menuScene,time);
+    this.device.queue.submit([encoder.finish()]);
   }
   render(){
     if(!this.lastWidth)return;
@@ -3008,16 +3173,7 @@ class CatroomsWebGPURenderer {
     const encoder=this.device.createCommandEncoder({label:'Catrooms WebGPU frame'});
     const output=this.context.getCurrentTexture().createView();
     const colorView=this.post?this.post.scene.createView():output;
-    const depthView=this.distanceTexture.createView();
-    const geometry=this.worldGeometry?.enabled?this.worldGeometry:null;
-    if(geometry)geometry.encode(encoder);
-    const terrain=encoder.beginRenderPass({colorAttachments:[
-      {view:colorView,loadOp:'clear',storeOp:'store',clearValue:{r:.07,g:.07,b:.05,a:1}},
-      {view:depthView,loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}
-    ]});
-    terrain.setPipeline(geometry?geometry.resolvePipeline:this.terrainPipeline);terrain.setBindGroup(0,geometry?geometry.resolveBind:this.terrainBind);terrain.draw(6);terrain.end();
-    this.stats.wallTriangles=geometry?geometry.wallVertexCount/3:0;
-    this.stats.planeTriangles=geometry?geometry.planeVertexCount/3:0;
+    this.encodeTerrain(encoder,colorView);
     // Actual indexed triangles imported from the supplied GLBs, fixed in world
     // coordinates. No billboard rotation, and fragments hide behind walls.
     const rooms=[];
@@ -3068,7 +3224,7 @@ class CatroomsWebGPURenderer {
         depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:drawMeshes?'load':'clear',depthClearValue:1,depthStoreOp:'discard'}});
       pass.setPipeline(this.spritePipeline);pass.setBindGroup(0,this.spriteBind);pass.draw(6,sprites.length/8);pass.end();
     }
-    this.post?.encode(encoder,output,true,performance.now());
+    this.encodePost(encoder,output,gameSession.world);
     this.device.queue.submit([encoder.finish()]);
   }
 }
@@ -4580,7 +4736,7 @@ function applyCustomOptions(){
 ;
 // SOURCE: js/gameplay/decor.js
 // Environment props are generated after the map, objectives and safe rooms.
-// A floor prop occupies exactly one existing floor tile (5 = solid mesh tile).
+// Reserve one existing floor tile for generation; runtime collision uses the mesh footprint.
 // Preserve connectivity constructively: every incident edge of the removed
 // tile must have a replacement path in its eight-cell ring. By induction,
 // adding any number of these props cannot disconnect any original component.
@@ -4601,7 +4757,7 @@ function decorFloorAllowed(world,x,y){
  return neighbors.every(p=>seen.has(p.join(',')));
 }
 function decorModelsFor(stage){return Object.keys(DECOR_MODELS).filter(k=>stage===5||DECOR_MODELS[k].stage===stage);}
-// Smaller loose props stay inside the existing collision tile, even on their side.
+// Smaller loose props stay inside the reserved floor tile, even on their side.
 // Imported box/CRT meshes have symmetric local Y extents and a floor origin.
 function looseDecorPose(kind,spec,random){
  const size=(kind==='box'?.48:.55)+random()*.12;
@@ -4612,12 +4768,15 @@ function looseDecorPose(kind,spec,random){
  const jitter=Math.max(0,.44-radius);
  return {size,yaw,tilt,z,dx:(random()*2-1)*jitter,dy:(random()*2-1)*jitter,radius};
 }
-// Local +Y is the back of both meshes. Keep the full collision tile and
-// connectivity checks, but move the mesh against the selected solid wall.
+// Local +Y is the back of each mesh, facing the backing wall.
 function wallFloorDecorPose(kind,spec,wall){
  const [dx,dy]=wall;
  const offset=.5-spec.depth-(kind==='pipe'?0:.015);
  return {dx:dx*offset,dy:dy*offset,yaw:Math.atan2(-dx,dy)};
+}
+function mountedDecorPose(kind,spec,[dx,dy]){
+ const offset=.5-spec.depth-.035;
+ return {dx:dx*offset,dy:dy*offset,z:kind==='camera'?1-spec.height-.025:.78-spec.height/2,yaw:Math.atan2(-dx,dy)};
 }
 function scatterLevelDecor(){
  const s=gameSession,world=s.world,N=s.N;
@@ -4665,7 +4824,7 @@ function scatterLevelDecor(){
    if(!selected)continue; // safe skip, never force a prop into a passage
    const {x,y,wall}=selected;let px=x+.5,py=y+.5,z=0,yaw=Math.floor(random()*4)*Math.PI/2;
    let size=1,tilt=0,radius=spec.radius; // converter bounds each floor object within its collision tile
-   if(isWall){const [dx,dy]=wall;const offset=.5-spec.depth-.035;px+=dx*offset;py+=dy*offset;z=kind==='camera'?1-spec.height-.025:.78-spec.height/2;yaw=Math.atan2(-dx,dy);}
+   if(isWall){const pose=mountedDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;}
    else {
     world[y][x]=5;
     if(againstWall){const pose=wallFloorDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;yaw=pose.yaw;}
@@ -4706,12 +4865,14 @@ function populateGraphicsDemo(scene){
  scene.world[9][24]=4;
  scene.safeRoom={left:21,top:5,side:8,centerX:24.5,centerY:7.5,doorX:24,doorY:9,
   fireX:24.5,fireY:6.65,machineX:23.2,machineY:7.6,treeX:26.2,treeY:7.4,open:false};
+ const clock=mountedDecorPose('yellowClock',DECOR_MODELS.yellowClock,[0,-1]);
+ const bench=wallFloorDecorPose('bench',DECOR_MODELS.bench,[-1,0]);
  for(const [model,x,y,z,yaw,size,solid] of [
   ['cabinet',5.5,10.5,0,0,1.22,true],
   ['box',7.5,12.5,0,.36,1.4,true],
   ['desk',11.5,13.5,0,Math.PI,1,true],
-  ['yellowClock',9.05,7.5,.66,Math.PI,1,false],
-  ['bench',15.5,14.5,0,.2,1,true],
+  ['yellowClock',8.5+clock.dx,6.5+clock.dy,clock.z,clock.yaw,1,false],
+  ['bench',14.5+bench.dx,17.5+bench.dy,0,bench.yaw,1,true],
   ['mannequin',15.5,11.5,0,.28,.96,true],
   ['pump',18.5,15.5,0,.55,1,true],
   ['metalTable',19.5,19.5,0,0,1,true],

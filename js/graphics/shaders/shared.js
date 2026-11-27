@@ -188,6 +188,10 @@ fn fixtureGrid(p:vec2f)->vec2f {return floor((p-vec2f(2.5,1.45))/vec2f(5.,4.));}
 fn fixtureWeight(p:vec3f,source:vec3f)->f32 {
  let d=source-p;return 1.-smoothstep(36.,64.,dot(d,d));
 }
+fn fixtureFlicker(cell:vec2f,time:f32)->f32 {
+ let phase=dot(cell,vec2f(12.37,8.91));
+ return .91+.09*sin(time*9.+phase)-.22*step(.985,sin(time*2.3+phase));
+}
 fn sceneLight(p:vec3f,n:vec3f,rough:f32,f:SceneFrame)->vec3f {
  let eyeDelta=vec3f(f.player.xy,.5)-p;
  let eye=eyeDelta*inverseSqrt(max(dot(eyeDelta,eyeDelta),.00001));
@@ -205,8 +209,7 @@ fn sceneLight(p:vec3f,n:vec3f,rough:f32,f:SceneFrame)->vec3f {
   let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
   let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
   if(weight<=0.||(f.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(f.viewport.z)))){continue;}
-  let phase=dot(cell,vec2f(12.37,8.91));
-  let flicker=.91+.09*sin(f.player.w*9.+phase)-.22*step(.985,sin(f.player.w*2.3+phase));
+  let flicker=fixtureFlicker(cell,f.player.w);
   let power=select(2.1,.12,f.weather.x>.5)*flicker;
   light+=pointContribution(p,n,eye,rough,source,tint,power*weight,f);
  }}

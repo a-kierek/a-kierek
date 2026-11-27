@@ -32,7 +32,7 @@ function randomPatrolPoint(g){
   for(let attempts=0;attempts<70;attempts++){
     let x=Math.floor(a.x0+rnd()*(a.x1-a.x0+1)),y=Math.floor(a.y0+rnd()*(a.y1-a.y0+1));
     if(!freeAt(x+.5,y+.5,.23)||Math.hypot(g.x-x-.5,g.y-y-.5)<3.5)continue;
-    if(lineOfSight(g.x,g.y,x+.5,y+.5)||Number.isFinite(navPathDistance(Math.floor(g.x),Math.floor(g.y),x,y))){return{x:x+.5,y:y+.5}}
+    if(lineOfSight(g.x,g.y,x+.5,y+.5)||Number.isFinite(navPathDistance(Math.floor(g.x),Math.floor(g.y),x,y,Infinity,g))){return{x:x+.5,y:y+.5}}
   }
   return{x:g.x,y:g.y};
 }
@@ -46,7 +46,7 @@ function audibleDistance(g,x,y,maxDistance){
  const d=Math.hypot(g.x-x,g.y-y);
  if(d>maxDistance)return Infinity;
  if(lineOfSight(g.x,g.y,x,y))return d;
- return navPathDistance(Math.floor(g.x),Math.floor(g.y),Math.floor(x),Math.floor(y),maxDistance);
+ return navPathDistance(Math.floor(g.x),Math.floor(g.y),Math.floor(x),Math.floor(y),maxDistance,g);
 }
 
 function updateGuard(g,dt,idx=0){
@@ -133,7 +133,7 @@ function updateGuard(g,dt,idx=0){
   }
   g.pathTimer-=dt;
   if(target&&g.pathTimer<=0){
-    g.path=findPath(Math.floor(g.x),Math.floor(g.y),Math.floor(target.x),Math.floor(target.y));
+    g.path=findPath(Math.floor(g.x),Math.floor(g.y),Math.floor(target.x),Math.floor(target.y),g);
     g.pathTimer=(g.hardEnhanced?.19:rageMode?.25:.52)+idx*.025;
     if(!g.path.length&&Math.hypot(g.x-target.x,g.y-target.y)>1.4&&g.state==='patrol')g.patrolTarget=null;
   }

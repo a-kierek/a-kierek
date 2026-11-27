@@ -32,6 +32,22 @@ check('path detours around furniture and reflects live gate changes',()=>{
  assert.equal(run('findPath(2,3,4,3).length'),0);
  assert.equal(run('world[3][3]=0;findPath(2,3,4,3).length'),2);
 });
+check('model footprints leave free space around props and block movement and sight across the mesh',()=>{
+ run(fixture+`world[3][4]=5;world[4][4]=1;
+  const wallBench=wallFloorDecorPose('bench',DECOR_MODELS.bench,[0,1]);
+  props=[{type:'decor',model:'bench',x:4.5,y:3.5+wallBench.dy,yaw:wallBench.yaw,solid:true,cellX:4,cellY:3}];
+  worldRevision++;`);
+ assert.equal(run('freeAt(4.5,3.35,.22)'),true);
+ assert.equal(run('freeAt(4.5,3.82,0)'),false);
+ assert.equal(run('lineOfSight(3.4,3.35,5.6,3.35)'),true);
+ assert.equal(run('lineOfSight(3.4,3.82,5.6,3.82)'),false);
+ assert.equal(run('findPath(4,3,3,3,{x:4.5,y:3.35}).length'),1);
+ assert.equal(run('player={x:4.5,y:2.7};move(player,0,1.4,.22);player.y<3.5'),true);
+ run(fixture+`world[3][4]=5;props=[{type:'rock',x:4.5,y:3.5,size:.62,phase:1.2}];worldRevision++;`);
+ assert.equal(run('freeAt(4.01,3.01,0)'),true);
+ assert.equal(run('freeAt(4.5,3.5,0)'),false);
+ assert.equal(run('props=[];worldRevision++;freeAt(4.01,3.01,0)'),false);
+});
 check('diagonal walls and interaction target exceptions',()=>{
  run(fixture+`player={x:2.8,y:2.8};world[2][3]=1;world[3][2]=1;interactables=[{type:'panel',x:3.5,y:3.5}];`);
  assert.equal(run('findInteractable()'),null);

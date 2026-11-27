@@ -100,8 +100,7 @@ fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
    let cell=grid+vec2f(f32(x),f32(y));let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
    let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
    if(weight<=0.||(frame.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(frame.viewport.z)))){continue;}
-   let phase=dot(cell,vec2f(12.37,8.91));
-   let flicker=.91+.09*sin(frame.player.w*9.+phase)-.22*step(.985,sin(frame.player.w*2.3+phase));
+   let flicker=fixtureFlicker(cell,frame.player.w);
    light+=cp11Point(p,geom,material,base,eye,source,tint,select(2.1,.12,frame.weather.x>.5)*flicker*weight);
   }}
   if(frame.lighting.w>.5){
@@ -164,7 +163,14 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(!isFloor){
    let cell=vec2i(floor(worldPt));
    if((cell.x+100)%5==2 && (cell.y+100)%4==1 && uv.x>.19 && uv.x<.82 && uv.y>.22 && uv.y<.68){
-     c=mix(c,vec3f(1.,.95,.73),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
+     if(frame.progress.w<0.&&frame.lighting.x>.5){
+       let fixture=floor((worldPt-vec2f(2.,1.))/vec2f(5.,4.));
+       let lit=fixtureFlicker(fixture,frame.player.w);
+       let edge=min(min(uv.x-.19,.82-uv.x),min(uv.y-.22,.68-uv.y));
+       c=mix(vec3f(.16,.12,.08),vec3f(2.1,1.85,1.4)*lit,smoothstep(0.,.034,edge));
+     }else{
+       c=mix(c,vec3f(1.,.95,.73),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
+     }
    }
  } else {
    let cell=vec2i(floor(worldPt));

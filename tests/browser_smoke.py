@@ -126,8 +126,12 @@ with sync_playwright() as p:
  key('F4');r.render();if(p.enabled||p.passes!==1||!p.reset)return false;
  key('F8');key('F4');r.render();if(!p.enabled||p.passes!==4||!r.worldGeometry.enabled)return false;
  key('F8');const tex=p.scene;p.resize(321,241);if(p.scene===tex||p.bloomWidth!==81||p.bloomHeight!==61||!p.reset)return false;
- p.resize(r.lastWidth,r.lastHeight);r.render();setState('menu');r.renderMenu(performance.now());return p.passes===1&&p.reset;})()""")
- print('PASS CP08 post-processing, F4/F8, history, resize and menu bypass (mock GPU)')
+ p.resize(r.lastWidth,r.lastHeight);r.render();setState('menu');r.renderMenu(performance.now());const active=p.passes===4&&!p.reset&&r.frameData[RENDER_FRAME.lighting]===2&&CatroomsPBR.enabled;
+ r.lightingEnabled=false;p.enabled=false;r.renderMenu(performance.now());
+ const bypass=p.passes===1&&p.reset&&r.frameData[RENDER_FRAME.lighting]===0;
+ r.lightingEnabled=true;p.enabled=true;
+ return active&&bypass;})()""")
+ print('PASS CP08 post-processing, F4/F8, history, resize, PBR lighting and menu HDR preferences (mock GPU)')
  # Simulate an existing saved HARD campaign in another fresh document.
  saved=b.new_page(viewport={'width':640,'height':480});saved.on('pageerror',lambda e:errors.append(str(e)))
  storage="<script>Object.defineProperty(window,'localStorage',{value:new MapStorage(),configurable:true});function MapStorage(){const data=new Map([['catroomsBossRushUnlocked','1'],['catroomsDifficulty','hard'],['catroomsCfgMaster','broken'],['catroomsCfgEffects','NaN'],['catroomsCfgAmbient',''],['catroomsCfgMouse','Infinity'],['catroomsBestStreak','Infinity'],['catroomsWinStreak','-5'],['catroomsBest6','Infinity']]);this.getItem=k=>data.get(k)??null;this.setItem=(k,v)=>data.set(k,String(v));this.removeItem=k=>data.delete(k);}</script>"

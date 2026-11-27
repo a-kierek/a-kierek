@@ -382,6 +382,27 @@ class CatroomsWebGPURenderer {
     this.device.queue.writeBuffer(this.rushPoseBuffers[kind][index],0,new Float32Array(values));
     this.poseCache.set(key,values);
   }
+  encodeTerrain(encoder,colorView){
+    const geometry=this.worldGeometry?.enabled?this.worldGeometry:null;
+    if(geometry)geometry.encode(encoder);
+    const terrain=encoder.beginRenderPass({colorAttachments:[
+      {view:colorView,loadOp:'clear',storeOp:'store',clearValue:{r:.07,g:.07,b:.05,a:1}},
+      {view:this.distanceTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}
+    ]});
+    terrain.setPipeline(geometry?geometry.resolvePipeline:this.terrainPipeline);
+    terrain.setBindGroup(0,geometry?geometry.resolveBind:this.terrainBind);
+    terrain.draw(6);terrain.end();
+    this.stats.wallTriangles=geometry?geometry.wallVertexCount/3:0;
+    this.stats.planeTriangles=geometry?geometry.planeVertexCount/3:0;
+  }
+  encodePost(encoder,output,scene,time){
+    if(!this.post)return;
+    if(this.postScene!==scene){
+      this.postScene=scene;
+      this.post.reset=true;this.post.lastTime=null;
+    }
+    this.post.encode(encoder,output,true,time??performance.now());
+  }
   renderMenu(time){
     if(!this.lastWidth)return;
     if(!this.menuScene){const N=49,world=Array.from({length:N},()=>Array(N).fill(1));
@@ -390,13 +411,23 @@ class CatroomsWebGPURenderer {
       this.menuScene={N,world,worldRevision:-1,props:[],safeRoomFurniture:[]};}
     this.needsRender=false;this.stats.frames++;this.stats.triangles=0;this.stats.sprites=0;this.stats.wallTriangles=0;this.stats.planeTriangles=0;this.syncStaticBuffers(this.menuScene);
     const t=time/1000, phase=(t*.55)%36;
-    const frame=this.frameData;frame.set([4+phase,21.5+Math.sin(t*.55)*.18,Math.sin(t*.35)*.035,t],RENDER_FRAME.player);
-    frame.set([W,H,this.menuScene.N,1],RENDER_FRAME.viewport);frame.set([0,0,0,-1],RENDER_FRAME.progress);frame.set([1,1,100,0],RENDER_FRAME.visuals);frame.set([0,0,0,0],RENDER_FRAME.weather);frame.set([Math.tan(75*Math.PI/360),0,0,0],RENDER_FRAME.camera);frame.set([0,0,0,0],RENDER_FRAME.lighting);frame.set([0,0,0,0],RENDER_FRAME.flashlight);this.flashlightState=null;frame.fill(0,RENDER_FRAME.shadows);
+    const frame=this.frameData;
+    frame.set([4+phase,21.5+Math.sin(t*.55)*.18,Math.sin(t*.35)*.035,t],RENDER_FRAME.player);
+    frame.set([W,H,this.menuScene.N,1],RENDER_FRAME.viewport);
+    frame.set([0,0,0,-1],RENDER_FRAME.progress);
+    frame.set([1,1,100,0],RENDER_FRAME.visuals);
+    frame.set([0,0,0,.035],RENDER_FRAME.weather);
+    frame.set([Math.tan(75*Math.PI/360),0,0,0],RENDER_FRAME.camera);
+    frame.set([this.lightingEnabled?(this.wallShadowsEnabled?2:1):0,0,0,0],RENDER_FRAME.lighting);
+    frame.fill(0,RENDER_FRAME.flashlight);
+    frame[RENDER_FRAME.shadows]=Number(this.softShadowsEnabled);
+    this.flashlightState=null;
     this.device.queue.writeBuffer(this.frameBuffer,0,frame);
     const encoder=this.device.createCommandEncoder({label:'Menu corridor'});
     const output=this.context.getCurrentTexture().createView();
-    const pass=encoder.beginRenderPass({colorAttachments:[{view:this.post?this.post.scene.createView():output,loadOp:'clear',storeOp:'store',clearValue:{r:.05,g:.04,b:.03,a:1}},{view:this.distanceTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}]});
-    pass.setPipeline(this.terrainPipeline);pass.setBindGroup(0,this.terrainBind);pass.draw(6);pass.end();this.post?.encode(encoder,output,false,time);this.device.queue.submit([encoder.finish()]);
+    this.encodeTerrain(encoder,this.post?this.post.scene.createView():output);
+    this.encodePost(encoder,output,this.menuScene,time);
+    this.device.queue.submit([encoder.finish()]);
   }
   render(){
     if(!this.lastWidth)return;
@@ -429,16 +460,7 @@ class CatroomsWebGPURenderer {
     const encoder=this.device.createCommandEncoder({label:'Catrooms WebGPU frame'});
     const output=this.context.getCurrentTexture().createView();
     const colorView=this.post?this.post.scene.createView():output;
-    const depthView=this.distanceTexture.createView();
-    const geometry=this.worldGeometry?.enabled?this.worldGeometry:null;
-    if(geometry)geometry.encode(encoder);
-    const terrain=encoder.beginRenderPass({colorAttachments:[
-      {view:colorView,loadOp:'clear',storeOp:'store',clearValue:{r:.07,g:.07,b:.05,a:1}},
-      {view:depthView,loadOp:'clear',storeOp:'store',clearValue:{r:1,g:0,b:0,a:1}}
-    ]});
-    terrain.setPipeline(geometry?geometry.resolvePipeline:this.terrainPipeline);terrain.setBindGroup(0,geometry?geometry.resolveBind:this.terrainBind);terrain.draw(6);terrain.end();
-    this.stats.wallTriangles=geometry?geometry.wallVertexCount/3:0;
-    this.stats.planeTriangles=geometry?geometry.planeVertexCount/3:0;
+    this.encodeTerrain(encoder,colorView);
     // Actual indexed triangles imported from the supplied GLBs, fixed in world
     // coordinates. No billboard rotation, and fragments hide behind walls.
     const rooms=[];
@@ -489,7 +511,7 @@ class CatroomsWebGPURenderer {
         depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:drawMeshes?'load':'clear',depthClearValue:1,depthStoreOp:'discard'}});
       pass.setPipeline(this.spritePipeline);pass.setBindGroup(0,this.spriteBind);pass.draw(6,sprites.length/8);pass.end();
     }
-    this.post?.encode(encoder,output,true,performance.now());
+    this.encodePost(encoder,output,gameSession.world);
     this.device.queue.submit([encoder.finish()]);
   }
 }

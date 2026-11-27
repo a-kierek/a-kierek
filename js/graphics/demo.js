@@ -20,12 +20,14 @@ function populateGraphicsDemo(scene){
  scene.world[9][24]=4;
  scene.safeRoom={left:21,top:5,side:8,centerX:24.5,centerY:7.5,doorX:24,doorY:9,
   fireX:24.5,fireY:6.65,machineX:23.2,machineY:7.6,treeX:26.2,treeY:7.4,open:false};
+ const clock=mountedDecorPose('yellowClock',DECOR_MODELS.yellowClock,[0,-1]);
+ const bench=wallFloorDecorPose('bench',DECOR_MODELS.bench,[-1,0]);
  for(const [model,x,y,z,yaw,size,solid] of [
   ['cabinet',5.5,10.5,0,0,1.22,true],
   ['box',7.5,12.5,0,.36,1.4,true],
   ['desk',11.5,13.5,0,Math.PI,1,true],
-  ['yellowClock',9.05,7.5,.66,Math.PI,1,false],
-  ['bench',15.5,14.5,0,.2,1,true],
+  ['yellowClock',8.5+clock.dx,6.5+clock.dy,clock.z,clock.yaw,1,false],
+  ['bench',14.5+bench.dx,17.5+bench.dy,0,bench.yaw,1,true],
   ['mannequin',15.5,11.5,0,.28,.96,true],
   ['pump',18.5,15.5,0,.55,1,true],
   ['metalTable',19.5,19.5,0,0,1,true],

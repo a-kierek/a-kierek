@@ -1,5 +1,5 @@
 // Environment props are generated after the map, objectives and safe rooms.
-// A floor prop occupies exactly one existing floor tile (5 = solid mesh tile).
+// Reserve one existing floor tile for generation; runtime collision uses the mesh footprint.
 // Preserve connectivity constructively: every incident edge of the removed
 // tile must have a replacement path in its eight-cell ring. By induction,
 // adding any number of these props cannot disconnect any original component.
@@ -20,7 +20,7 @@ function decorFloorAllowed(world,x,y){
  return neighbors.every(p=>seen.has(p.join(',')));
 }
 function decorModelsFor(stage){return Object.keys(DECOR_MODELS).filter(k=>stage===5||DECOR_MODELS[k].stage===stage);}
-// Smaller loose props stay inside the existing collision tile, even on their side.
+// Smaller loose props stay inside the reserved floor tile, even on their side.
 // Imported box/CRT meshes have symmetric local Y extents and a floor origin.
 function looseDecorPose(kind,spec,random){
  const size=(kind==='box'?.48:.55)+random()*.12;
@@ -31,12 +31,15 @@ function looseDecorPose(kind,spec,random){
  const jitter=Math.max(0,.44-radius);
  return {size,yaw,tilt,z,dx:(random()*2-1)*jitter,dy:(random()*2-1)*jitter,radius};
 }
-// Local +Y is the back of both meshes. Keep the full collision tile and
-// connectivity checks, but move the mesh against the selected solid wall.
+// Local +Y is the back of each mesh, facing the backing wall.
 function wallFloorDecorPose(kind,spec,wall){
  const [dx,dy]=wall;
  const offset=.5-spec.depth-(kind==='pipe'?0:.015);
  return {dx:dx*offset,dy:dy*offset,yaw:Math.atan2(-dx,dy)};
+}
+function mountedDecorPose(kind,spec,[dx,dy]){
+ const offset=.5-spec.depth-.035;
+ return {dx:dx*offset,dy:dy*offset,z:kind==='camera'?1-spec.height-.025:.78-spec.height/2,yaw:Math.atan2(-dx,dy)};
 }
 function scatterLevelDecor(){
  const s=gameSession,world=s.world,N=s.N;
@@ -84,7 +87,7 @@ function scatterLevelDecor(){
    if(!selected)continue; // safe skip, never force a prop into a passage
    const {x,y,wall}=selected;let px=x+.5,py=y+.5,z=0,yaw=Math.floor(random()*4)*Math.PI/2;
    let size=1,tilt=0,radius=spec.radius; // converter bounds each floor object within its collision tile
-   if(isWall){const [dx,dy]=wall;const offset=.5-spec.depth-.035;px+=dx*offset;py+=dy*offset;z=kind==='camera'?1-spec.height-.025:.78-spec.height/2;yaw=Math.atan2(-dx,dy);}
+   if(isWall){const pose=mountedDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;}
    else {
     world[y][x]=5;
     if(againstWall){const pose=wallFloorDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;yaw=pose.yaw;}
