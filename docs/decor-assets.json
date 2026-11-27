@@ -1,0 +1,163 @@
+{
+  "atlas": [
+    1920,
+    1536
+  ],
+  "materials": 19,
+  "models": {
+    "box": {
+      "source": "box.glb",
+      "stage": 1,
+      "placement": "floor",
+      "triangles": 2260,
+      "vertices": 1288,
+      "radius": 0.37143513560295105,
+      "height": 0.5199999809265137,
+      "depth": 0.3331080973148346,
+      "bytes": 83804
+    },
+    "cabinet": {
+      "source": "rusty_filing_cabinet.glb",
+      "stage": 1,
+      "placement": "floor",
+      "triangles": 676,
+      "vertices": 1325,
+      "radius": 0.2823168635368347,
+      "height": 0.8999999761581421,
+      "depth": 0.2508401572704315,
+      "bytes": 66424
+    },
+    "desk": {
+      "source": "school_desk.glb",
+      "stage": 1,
+      "placement": "floor",
+      "triangles": 4912,
+      "vertices": 3311,
+      "radius": 0.42526137828826904,
+      "height": 0.6399999856948853,
+      "depth": 0.39656972885131836,
+      "bytes": 204640
+    },
+    "yellowClock": {
+      "source": "wall_clock__ps1_style.glb",
+      "stage": 1,
+      "placement": "wall",
+      "triangles": 252,
+      "vertices": 443,
+      "radius": 0.14017155766487122,
+      "height": 0.2800000011920929,
+      "depth": 0.006933137308806181,
+      "bytes": 22528
+    },
+    "bench": {
+      "source": "floodedcomplex/broken_bench.glb",
+      "stage": 2,
+      "placement": "floor",
+      "triangles": 788,
+      "vertices": 612,
+      "radius": 0.4399999976158142,
+      "height": 0.4109223783016205,
+      "depth": 0.15469156205654144,
+      "bytes": 36396
+    },
+    "lifebuoy": {
+      "source": "floodedcomplex/lifebuoy.glb",
+      "stage": 2,
+      "placement": "wall",
+      "triangles": 2600,
+      "vertices": 1936,
+      "radius": 0.21500012278556824,
+      "height": 0.4300000071525574,
+      "depth": 0.03981500118970871,
+      "bytes": 116396
+    },
+    "pipe": {
+      "source": "floodedcomplex/pipe.glb",
+      "stage": 2,
+      "placement": "floor",
+      "triangles": 12980,
+      "vertices": 8166,
+      "radius": 0.22854135930538177,
+      "height": 0.8999999761581421,
+      "depth": 0.10717111825942993,
+      "bytes": 515076
+    },
+    "pump": {
+      "source": "floodedcomplex/water_motor_pump.glb",
+      "stage": 2,
+      "placement": "floor",
+      "triangles": 28899,
+      "vertices": 28382,
+      "radius": 0.4300000071525574,
+      "height": 0.5541753768920898,
+      "depth": 0.20899780094623566,
+      "bytes": 1595608
+    },
+    "barrel": {
+      "source": "bloodyzone/rusty_red_barell_with_danger_sign.glb",
+      "stage": 3,
+      "placement": "floor",
+      "triangles": 1404,
+      "vertices": 1186,
+      "radius": 0.22995483875274658,
+      "height": 0.6800000071525574,
+      "depth": 0.2299548089504242,
+      "bytes": 69044
+    },
+    "metalTable": {
+      "source": "bloodyzone/table_with_metal_legs.glb",
+      "stage": 3,
+      "placement": "floor",
+      "triangles": 656,
+      "vertices": 672,
+      "radius": 0.4400000274181366,
+      "height": 0.3751269578933716,
+      "depth": 0.3995710015296936,
+      "bytes": 37452
+    },
+    "camera": {
+      "source": "chrumsector/broken_camera.glb",
+      "stage": 4,
+      "placement": "wall",
+      "triangles": 9984,
+      "vertices": 9810,
+      "radius": 0.11359243094921112,
+      "height": 0.2800000011920929,
+      "depth": 0.08500000089406967,
+      "bytes": 551460
+    },
+    "crt": {
+      "source": "chrumsector/crt-tv.glb",
+      "stage": 4,
+      "placement": "floor",
+      "triangles": 140,
+      "vertices": 263,
+      "radius": 0.3767014443874359,
+      "height": 0.5600000023841858,
+      "depth": 0.25200003385543823,
+      "bytes": 13264
+    },
+    "mannequin": {
+      "source": "lastencounter/store_mannequin.glb",
+      "stage": 5,
+      "placement": "floor",
+      "triangles": 2842,
+      "vertices": 1917,
+      "radius": 0.13195867836475372,
+      "height": 0.9100000262260437,
+      "depth": 0.07083458453416824,
+      "bytes": 118464
+    },
+    "lastClock": {
+      "source": "lastencounter/wall_clock__ps1_style.glb",
+      "stage": 5,
+      "placement": "wall",
+      "triangles": 2754,
+      "vertices": 2976,
+      "radius": 0.21336102485656738,
+      "height": 0.36000001430511475,
+      "depth": 0.08500000089406967,
+      "bytes": 164004
+    }
+  }
+}

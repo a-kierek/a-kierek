@@ -7,14 +7,16 @@
 #start .pixel-shell,
 #start .pixel-shell *{font-family:var(--pixel-font)!important;text-transform:uppercase;-webkit-font-smoothing:none;font-smooth:never}
 #start .pixel-shell{position:relative;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(circle at 50% 30%,#1a0707 0%,#080202 45%,#020000 100%);box-shadow:inset 0 0 220px #1d0404,inset 0 0 40px #3f0606}
-#start .pixel-shell:before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;background-image:url('../assets/ui/menu-blood-splatter.png'),url('../assets/ui/menu-blood-handprint.png');background-repeat:no-repeat,no-repeat;background-size:78% auto,32% auto;background-position:center top,6% 92%;opacity:.96;filter:contrast(1.18) saturate(1.12) drop-shadow(0 0 16px #530000)}
+#start .pixel-shell:before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;background-image:url('../assets/ui/menu-blood-handprint.png');background-repeat:no-repeat,no-repeat;background-size:78% auto,32% auto;background-position:center top,6% 92%;opacity:.96;filter:contrast(1.18) saturate(1.12) drop-shadow(0 0 16px #530000)}
 #start .pixel-shell:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;background:repeating-linear-gradient(0deg,transparent 0 3px,#0008 3px 4px),radial-gradient(circle at 50% 50%,transparent 34%,#000b 100%);opacity:.5;mix-blend-mode:multiply;animation:pixelScan 5.3s steps(1,end) infinite}
 @keyframes pixelScan{0%,89%,94%,100%{opacity:.5}90%,92%{opacity:.22}93%{opacity:.7}}
 #start .pixel-splash,#start .pixel-hub{position:absolute;inset:0;z-index:2}
 #start [hidden]{display:none!important}
 #start .pixel-splash-noise{position:absolute;inset:0;background:radial-gradient(circle at 20% 18%,#5b09091a 0 16%,transparent 26%),radial-gradient(circle at 76% 84%,#83090914 0 14%,transparent 24%),repeating-linear-gradient(90deg,transparent 0 6px,#ffffff03 6px 7px);pointer-events:none}
-#start .pixel-start-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px;min-height:100%;padding:24px;text-align:center}
+#start .pixel-start-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;min-height:100%;padding:24px;text-align:center}
+#start .pixel-logo-stack{position:relative;display:inline-flex;align-items:flex-end;justify-content:center;padding:10px 20px 18px}
 #start .pixel-logo{margin:0;color:#f5ecdc;font-size:clamp(42px,8vw,116px)!important;line-height:1.05!important;letter-spacing:.08em!important;text-shadow:4px 4px 0 #2b0606,8px 8px 0 #650606,0 0 26px #9c11117d}
+#start .pixel-reforged-mark{position:absolute;right:-8px;bottom:2px;color:#ffbb70;font-size:clamp(18px,2.2vw,34px);line-height:1;letter-spacing:.14em;text-shadow:2px 2px 0 #220202,4px 4px 0 #7f1612,0 0 18px #ff8f4a77;transform:rotate(-8deg);transform-origin:100% 100%;pointer-events:none;white-space:nowrap}
 #start .pixel-press{font-weight:700;font-size:clamp(16px,1.7vw,24px);letter-spacing:.18em;color:#fff2e6;background:#210909;border:3px solid #aa2e26;box-shadow:0 0 0 4px #090202,0 0 28px #7f0f0f66;padding:16px 30px;cursor:pointer;animation:pressPulse 1.4s steps(2,end) infinite}
 @keyframes pressPulse{50%{opacity:.35}}
 #start .pixel-press:hover,#start .pixel-press:focus-visible{animation:none;outline:2px solid #ffe2b4;outline-offset:3px;background:#481111}
@@ -102,5 +104,9 @@
  #start .pixel-panel-area{padding-top:14px}
  #start .pixel-levels{gap:8px}
  #start .pixel-level-button{min-height:46px!important;padding:10px 16px!important}
+}
+@media(max-width:760px){
+ #start .pixel-logo-stack{padding:8px 14px 14px}
+ #start .pixel-reforged-mark{right:-2px;bottom:-1px;font-size:clamp(16px,4vw,24px)}
 }
 @media(prefers-reduced-motion:reduce){#start .pixel-shell:after,#start .pixel-press{animation:none!important}}

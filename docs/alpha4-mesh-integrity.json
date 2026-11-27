@@ -1,0 +1,14 @@
+{
+  "tree": {
+    "bytes": 1809940,
+    "sha256": "67432752127db77497146b365f4c8d177cc9ff94d015a583a035a9f806220d3f"
+  },
+  "campfire": {
+    "bytes": 81220,
+    "sha256": "2b7d197b2222f0a149734e20c1895263ad5e98de0db09662b06339b40bb73cb1"
+  },
+  "slot": {
+    "bytes": 2164232,
+    "sha256": "a21a45341a40dd6aa28dc913c27180e5e43e56b14b0b2f7d7be61c0afb279377"
+  }
+}

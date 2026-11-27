@@ -1,0 +1,138 @@
+/* v1.5 - minimalist survival HUD: zero gameplay objective banners. */
+body{overflow:hidden!important}
+#hud .topbar,#hud .objective,#hud #fieldAction,#safeRoomLabel{display:none!important}
+#hud .bottombar{display:contents!important}
+#hud #hpWrap,#hud #staminaWrap,#hud #fieldInventory{
+ position:absolute!important;right:auto!important;left:18px!important;bottom:auto!important;
+ width:205px!important;max-width:min(205px,46vw)!important;min-width:0!important;
+ margin:0!important;padding:7px 10px!important;border:2px solid #5c302c!important;
+ background:#140b0bcf!important;text-align:left!important;box-shadow:0 8px 25px #0009!important;
+}
+#hud #hpWrap{top:20px!important;height:51px!important}
+#hud #staminaWrap{top:75px!important;height:49px!important}
+#hud #fieldInventory{top:130px!important;height:auto;min-height:59px!important}
+#hud .barText{display:flex;align-items:center;justify-content:space-between;height:24px;font-size:15px!important;letter-spacing:.04em!important;margin:0!important}
+#hud .hud-stat-icon{height:23px;width:29px;object-fit:contain;image-rendering:pixelated}
+#hud .hud-stat-percent{font-size:12px;letter-spacing:.06em;color:#c8a98d}
+#hud .bar{height:9px!important;margin:2px 0!important}
+#hud #fieldInventory .f-inv-heading{font-size:10px!important;margin-bottom:2px!important}
+#hud #fieldInventory .f-inv-main{font-size:14px!important;line-height:1!important}
+#hud #fieldInventory .f-inv-bottom{font-size:10px!important;margin-top:4px!important}
+#coinHud{position:fixed!important;top:202px!important;left:18px!important;right:auto!important;bottom:auto!important;z-index:11!important;padding:4px 8px!important;font-size:16px!important;gap:5px!important;background:#160b0bcc!important;border:2px solid #795536!important;}
+#coinHud img{width:20px!important;height:20px!important}
+#hud #stealthStatus{top:247px!important;left:18px!important;right:auto!important;max-width:220px!important}
+#hud #eventTag{top:268px!important;left:18px!important;right:auto!important;max-width:220px!important}
+#hud #danger{top:48px!important;left:50%!important;right:auto!important;transform:translateX(-50%)!important;max-width:290px!important;white-space:normal!important;text-align:center!important;}
+#hud #fpsCounter{top:12px!important;right:12px!important;z-index:10}
+#hud #interactHint{bottom:140px!important;top:auto!important;right:18px!important;left:auto!important;text-align:right!important;max-width:270px!important;white-space:normal!important}
+#hud #toast{top:27%!important}
+#hud #mapPanel{position:absolute!important;display:none;top:16px!important;right:18px!important;left:auto!important;bottom:auto!important;width:min(245px,30vw)!important;max-width:none!important;max-height:calc(100dvh - 40px)!important;padding:8px!important;z-index:5!important;background:#0b1212a9!important;border:1px solid #64716a88!important;border-radius:0!important;box-shadow:0 8px 36px #0007!important;overflow:visible!important;pointer-events:none!important;transition:width .16s,height .16s,background .16s}
+#hud #mapPanel.visible{display:block!important}
+#hud #mapPanel .mapTitle{font-size:10px!important;margin:0 0 4px!important;color:#bfceb5!important}
+#hud #mapPanel #mapCanvas{width:100%!important;height:auto!important;max-width:none!important;aspect-ratio:1!important;image-rendering:pixelated}
+#hud #mapPanel small{display:none!important}
+#hud #mapPanel.expanded{width:min(66vmin,620px)!important;max-height:calc(100dvh - 20px)!important;background:#050c0ce8!important;box-shadow:0 0 0 9999px #0009!important;z-index:8!important}
+#mapClock{position:absolute;right:7px;bottom:-35px;left:auto;width:max-content;min-width:90px;text-align:center;padding:6px 14px;color:#eee5d0;background:#090b0bb0;border:1px solid #a9a59a55;font:19px 'Upheaval',monospace;letter-spacing:.1em;backdrop-filter:blur(4px)}
+#mapClock[hidden]{display:none!important}
+#miniMapButton{position:absolute;top:10px;right:272px;z-index:7;pointer-events:auto;color:#d8d2bd;background:#111717c7;border:1px solid #64635c66;font-size:13px;padding:7px 10px;cursor:pointer}
+#activeInventory{position:absolute!important;top:auto!important;left:50%!important;right:auto!important;bottom:16px!important;transform:translateX(-50%)!important;width:max-content!important;max-width:min(95vw,430px)!important;z-index:7!important;padding:7px 9px!important;}
+#activeInventory .inv-title{font-size:9px!important;letter-spacing:.08em!important;margin-bottom:3px!important}
+#activeInventory .inv-buttons{gap:4px!important}
+#activeInventory .inv-buttons>button{min-width:77px!important;min-height:65px!important;font-size:10px!important;gap:1px!important}
+#activeInventory .inv-buttons>button img{height:32px!important;width:38px!important}
+#start .pixel-hub-layout{grid-template-columns:minmax(280px,25%) minmax(0,1fr)!important}
+#start .pixel-side-nav{padding:24px 12px!important;gap:12px!important;overflow:visible!important}
+#start .pixel-nav-item{font-size:clamp(19px,1.9vw,26px)!important;line-height:1.1!important;white-space:nowrap!important;overflow:visible!important;min-height:57px!important;padding:11px 14px!important;clip-path:none!important;letter-spacing:.025em!important}
+#start .pixel-nav-return{margin-top:auto!important;border-color:#775649!important;color:#d6b6ab!important;font-size:19px!important}
+#start #pixelPlayPanel .pixel-play-sidebar #difficultyInfo{display:none!important}
+#start .pixel-records{display:none!important}
+#start .pixel-panel-area{overflow-x:hidden!important}
+#start .pixel-simple-panel.custom-mode-panel{max-width:900px!important;display:flex;flex-direction:column;gap:14px;min-height:0!important;height:100%;}
+#start .custom-mode-panel[hidden]{display:none!important}
+#start .custom-mode-scroll{overflow-y:auto;min-height:0;flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:12px;padding-right:12px}
+#start .custom-mode-scroll label{display:flex;flex-direction:column;gap:8px;font-size:16px;color:#e6c9b6}
+#start .custom-mode-scroll select{width:100%;min-height:47px;background:#170709;color:#fff3e1;border:2px solid #68302a;padding:7px 9px;font-size:16px;cursor:pointer}
+#start .custom-enemy-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
+#start .custom-enemy-grid label{font-size:14px}
+#start .custom-safe-check{grid-column:1/-1;flex-direction:row!important;align-items:center!important;line-height:1.4!important}
+#start .custom-safe-check input{appearance:auto;accent-color:#b74b45;width:18px;height:18px}
+#start #customStartBtn{width:100%;justify-content:center!important}
+@media(max-width:860px){
+ #start .pixel-hub-layout{grid-template-columns:1fr!important;grid-template-rows:auto minmax(0,1fr)}
+ #start .pixel-side-nav{flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important;padding:8px!important;border:0;border-bottom:2px solid #7b3330!important}
+ #start .pixel-nav-item{flex:1 1 28%!important;min-width:0!important;text-align:center!important;font-size:clamp(13px,2vw,19px)!important;padding:8px 5px!important;min-height:39px!important}
+ #start .pixel-nav-return{margin-top:0!important}
+ #start .custom-mode-scroll{grid-template-columns:1fr}
+}
+@media(pointer:coarse){
+ #hud #hpWrap{top:12px!important;left:9px!important;width:135px!important;height:40px!important;padding:4px 6px!important}
+ #hud #staminaWrap{top:56px!important;left:9px!important;width:135px!important;height:40px!important;padding:4px 6px!important}
+ #hud #fieldInventory{top:102px!important;left:9px!important;width:135px!important;min-height:50px!important;padding:4px 6px!important}
+ #hud .barText{height:20px;font-size:12px!important}
+ #hud .hud-stat-icon{height:19px;width:23px}
+ #hud #fieldInventory .f-inv-main{font-size:11px!important}
+ #coinHud{top:161px!important;left:9px!important;padding:2px 5px!important;font-size:12px!important}
+ #hud #stealthStatus{top:193px!important;left:9px!important;font-size:9px!important}
+ #hud #eventTag{top:211px!important;left:9px!important;font-size:9px!important}
+ #hud #mapPanel{top:12px!important;right:9px!important;width:min(165px,38vw)!important}
+ #hud #mapPanel.expanded{width:min(80vmin,470px)!important}
+ #miniMapButton{top:10px;right:calc(min(165px,38vw) + 14px);font-size:9px;padding:4px}
+ #activeInventory{bottom:max(112px,env(safe-area-inset-bottom))!important;padding:4px 5px!important}
+ #activeInventory .inv-title{font-size:8px!important}
+ #activeInventory .inv-buttons>button{min-width:51px!important;min-height:49px!important;padding:2px!important;font-size:8px!important}
+ #activeInventory .inv-buttons>button img{height:23px!important;width:26px!important}
+ #hud #interactHint{bottom:clamp(165px,29vh,240px)!important;right:8px!important;max-width:160px!important;font-size:11px!important}
+}
+@media(max-height:475px){#hud #mapPanel{width:150px!important}#hud #mapPanel.expanded{width:min(75vh,490px)!important}#activeInventory{bottom:7px!important}}
+
+#rearPeekMobile{display:none;pointer-events:auto;position:absolute;right:125px;bottom:23px;min-width:50px;height:40px;padding:6px;background:#1a0e0edb;border:2px solid #965852;color:#f5dbc9;font:18px 'Upheaval',monospace}
+@media(pointer:coarse){#rearPeekMobile{display:block;right:calc(12px + env(safe-area-inset-right));bottom:max(106px,env(safe-area-inset-bottom))}}
+@media(max-height:490px) and (pointer:coarse){#rearPeekMobile{bottom:8px;right:185px}}
+/* Final mobile spacing / scrolling refinements */
+#start .pixel-panel-area,#start .pixel-inline-scroll,#start .custom-mode-scroll{touch-action:pan-y;overscroll-behavior:contain}
+@media(max-width:520px){
+ #start .pixel-nav-item{flex:1 1 45%!important;font-size:15px!important;letter-spacing:0!important}
+ #hud #fieldInventory{min-height:74px!important}
+ #coinHud{top:183px!important}
+ #hud #stealthStatus{top:218px!important}
+ #hud #eventTag{top:237px!important}
+}
+@media(pointer:coarse){#rearPeekMobile{right:122px;bottom:max(58px,env(safe-area-inset-bottom))}}
+@media(max-height:490px) and (pointer:coarse){#rearPeekMobile{right:170px;bottom:13px}}
+
+/* Mobile controls must never overlap the three inventory buttons. */
+@media(pointer:coarse){#rearPeekMobile{position:absolute;right:auto!important;left:50%;transform:translateX(-50%);bottom:202px!important;z-index:9;width:55px;height:39px}}
+@media(pointer:coarse) and (orientation:portrait) and (max-width:650px){#activeInventory{bottom:40vh!important}}
+@media(pointer:coarse) and (orientation:landscape){#rearPeekMobile{bottom:145px!important}}
+
+#hud #fieldInventory .f-inv-heading,#hud #fieldInventory .f-inv-bottom{display:none!important}
+#hud #fieldInventory .f-inv-main{display:flex!important;align-items:center!important;gap:8px!important}
+#hud #fieldInventory .f-inv-main .hud-stat-icon{height:20px!important;width:20px!important}
+#hud #staminaWrap .barText{justify-content:flex-start!important;gap:8px!important}
+#coinHud{min-width:0!important}
+#coinHud span{display:inline-block;min-width:1ch}
+
+/* User-provided pixel-art HUD sprites. */
+#hud #hpWrap .hud-stat-icon,#hud #staminaWrap .hud-stat-icon{object-fit:contain!important;width:34px!important;height:29px!important;max-width:none!important;image-rendering:pixelated!important;flex:none!important;filter:none!important}
+#hud #hpWrap .barText,#hud #staminaWrap .barText{display:flex!important;align-items:center!important;gap:8px!important;justify-content:flex-start!important}
+#hud #staminaWrap .barText>span:not(#staminaFill){display:none!important}
+#hud #hpWrap .barText>span{margin-left:auto}
+#decoyBtn,#adminPauseBtn{display:none!important}
+@media (pointer:coarse){#hud #hpWrap .hud-stat-icon,#hud #staminaWrap .hud-stat-icon{width:26px!important;height:23px!important}}
+
+/* v1.6.1: menu-only release badge, notices and compact map HUD. */
+#start #versionBadge{position:absolute;left:max(10px,env(safe-area-inset-left));right:auto;bottom:max(8px,env(safe-area-inset-bottom));z-index:5;width:max-content;max-width:48%;font:clamp(13px,1.4vw,20px) 'Upheaval',monospace;color:#ba887a;background:#0a0202c0;border:1px solid #5a2321;padding:4px 9px;pointer-events:none}
+#start .pixel-reforged-mark{bottom:clamp(21px,3.2vw,42px);animation:reforgedPulse 3.2s ease-in-out infinite}
+@keyframes reforgedPulse{0%,100%{transform:rotate(-8deg) scale(1)}50%{transform:rotate(-8deg) scale(1.10)}}
+@media(prefers-reduced-motion:reduce){#start .pixel-reforged-mark{animation:none}}
+#start .release-notes-open{position:absolute;right:max(10px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));z-index:5;max-width:48%;font-size:clamp(12px,1.5vw,18px);color:#f2c6aa;background:#200909;border:1px solid #8c4034;padding:5px 10px}
+#start .release-notes-overlay{position:absolute;inset:0;z-index:10;display:grid;place-items:center;background:#080202d9;padding:16px}
+#start .release-notes-card{width:min(670px,94vw);max-height:90dvh;display:flex;flex-direction:column;gap:12px;padding:clamp(14px,3vw,28px);background:#170808;border:2px solid #8e3f36;box-shadow:0 12px 60px #000c;color:#ead8c9;text-align:left;min-height:0}
+#start .release-notes-card h2{font-size:clamp(22px,3.5vw,34px);margin:0;color:#f5d2b4}#start .release-notes-card h3{font-size:20px;color:#df9f71;margin:14px 0 4px}#start .release-notes-card p{font-size:clamp(14px,1.8vw,19px);line-height:1.4;margin:0;letter-spacing:.035em}#start .release-notes-scroll{min-height:0;overflow:auto;touch-action:pan-y}#start #releaseNotesClose{align-self:flex-end;background:#4a1713;border:2px solid #b45445;padding:10px 16px;color:#fff1dc;font-size:20px}
+#start .pixel-hub-head{justify-content:flex-end}
+#hud #stealthStatus,#hud #eventTag{display:none!important}
+#hud #mapRunDetails{margin-top:5px;padding:5px;border-top:1px solid #64716a88;color:#e8d3a6;font-size:clamp(10px,1.2vw,14px);line-height:1.4;overflow-wrap:anywhere}
+#hud #mapRunDetails[hidden],#hud #detectionWarning[hidden]{display:none!important}
+#hud #detectionWarning{position:absolute;top:12%;left:50%;transform:translateX(-50%);width:clamp(28px,3vw,44px);height:clamp(28px,3vw,44px);pointer-events:none;z-index:10}
+#hud #detectionWarning img{width:100%;height:100%;object-fit:contain;filter:brightness(0) saturate(100%) invert(89%) sepia(78%) saturate(695%) hue-rotate(350deg) brightness(108%) contrast(97%) drop-shadow(0 0 5px #ffe36c) drop-shadow(0 0 12px #ffd55a)}
+#hud .battery-hud-icon{filter:invert(90%) sepia(24%) saturate(550%) hue-rotate(350deg);image-rendering:auto!important}

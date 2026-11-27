@@ -1,0 +1,117 @@
+>>> /opt/pyvenv/bin/python tools/build_standalone.py
+/mnt/data/catrooms_audit/THE_CATROOMS_V1_6_2_4.html (30,116,326 bytes)
+>>> node --check js/admin/console.js
+>>> node --check js/audio/sound.js
+>>> node --check js/characters/actors.js
+>>> node --check js/characters/ai.js
+>>> node --check js/core/boot.js
+>>> node --check js/core/navigation.js
+>>> node --check js/core/state.js
+>>> node --check js/engine/assets.js
+>>> node --check js/engine/loop.js
+>>> node --check js/engine/modes.js
+>>> node --check js/engine/session.js
+>>> node --check js/game.bundle.js
+>>> node --check js/gameplay/boss-rush.js
+>>> node --check js/gameplay/campaign.js
+>>> node --check js/gameplay/custom-mode.js
+>>> node --check js/gameplay/decor.js
+>>> node --check js/gameplay/hard.js
+>>> node --check js/gameplay/inventory.js
+>>> node --check js/gameplay/procedural.js
+>>> node --check js/gameplay/safe-room.js
+>>> node --check js/graphics/art-assets.js
+>>> node --check js/graphics/collectibles.js
+>>> node --check js/graphics/decor-data.js
+>>> node --check js/graphics/minimap.js
+>>> node --check js/graphics/model-data.js
+>>> node --check js/graphics/shaders/mesh.js
+>>> node --check js/graphics/shaders/sprites.js
+>>> node --check js/graphics/shaders/terrain.js
+>>> node --check js/graphics/textures.js
+>>> node --check js/graphics/webgpu.js
+>>> node --check js/maps/level1.js
+>>> node --check js/maps/level2.js
+>>> node --check js/maps/level3.js
+>>> node --check js/maps/level5.js
+>>> node --check js/maps/navigable.js
+>>> node --check js/maps/shared.js
+>>> node --check js/network/coop.js
+>>> node --check js/progression/streak.js
+>>> node --check js/ui/controls.js
+>>> node --check js/ui/icons.js
+>>> node --check js/ui/interface.js
+>>> node --check js/ui/macabre-hud.js
+>>> node --check js/ui/pixel-menu.js
+>>> node --check js/ui/player-profile.js
+>>> node --check js/ui/profile-162.js
+>>> node --check js/ui/settings.js
+>>> node --check server/server.js
+>>> node tests/bugfix.test.cjs
+PASS fractional cabinet collision, clear nearby floor, movement cannot tunnel
+PASS path detours around furniture and reflects live gate changes
+PASS diagonal walls and interaction target exceptions
+PASS shield and god mode, toxic damage, exact expiry, meltdown exception
+PASS safe room cannot close on player or enemy; exact target selected
+PASS admin/custom results do not modify progression, ordinary results do
+PASS substeps preserve elapsed time at 10 FPS and stop when state changes
+PASS protected room does not reset patrol every update
+PASS real map resets: NORMAL, procedural, HARD, Boss Rush and custom
+PASS same seed reproduces map, rooms, furniture, loot and initial enemies
+DECOR REPORT {"runs":96,"models":1773,"min":5,"max":51,"byStage":{"1":380,"2":298,"3":190,"4":149,"5":756},"missing":[]}
+PASS decor preserves components, avoids objectives and covers themed models
+PASS Chrum keeps chase target within contact distance
+PASS Chrum investigates sustained noise instead of listening forever
+PASS idle guard rotates rather than staring permanently in one direction
+PASS suspicious guard searches instead of dropping target on arrival
+PASS custom normal spawn uses actual dungeon entrance
+All Alpha 2 logic regression groups passed.
+PASS Alpha 3 render cadence: playing every frame, menu capped, pause redraw only on request
+>>> node tests/debloat.test.cjs
+PASS: solo adapter, one coin per item in 4 modes, energy variants, shield/key/devices, stranger/rock, texture layer count.
+>>> node tests/engine.test.cjs
+PASS 54 migrated session fields, fresh references and retained mode/progress flags
+PASS fixed-step equality at 5, 10, 30, 60, 144 and 240 FPS
+PASS stall bound, pause and mid-tick termination discard remainder
+PASS visual interpolation does not modify collision coordinates; teleport and pause snap
+PASS mode registry and entry mapping preserve all IDs and room policies
+PASS named timers replace or cancel stale callbacks even if scheduler fires them
+PASS offline and HTTP binary loading, identical bytes, malformed/missing asset handling
+>>> node tests/performance.test.cjs
+PASS Chrum decoded even when complete and uploaded to layer 1 with correct aspect
+PASS Chrum projected in normal, hard, custom, Boss Rush and admin Level 1
+PASS enemy prioritized under sprite pressure, nearest pickups retained, back-to-front compositing
+PASS static GPU uploads only when map/furniture/hazard content changes
+PASS mesh pose caching and conservative frustum
+PASS rocks use a world-mesh pose and never enter the sprite list
+PASS decor uses solid world cells, bounded visibility, shadow cache and mesh draws
+PASS path workspace reused, bounded hearing and live walls preserved
+All Alpha 3 performance regression groups passed.
+>>> node tests/shader-layout.test.cjs
+PASS modular shader order, source uniqueness and online bundle
+>>> node tests/startup.test.cjs
+PASS missing bundle, missing Custom Game and previous script error prevent partial startup
+>>> /opt/pyvenv/bin/python tests/assets.test.py
+PASS CRM2 models: {'tree': 29699, 'campfire': 1832} ; five enemy sprites have visible alpha data.
+PASS real rock geometry, albedo and supplied transparent HUD/decal images
+PASS new model slot 2011 1968
+PASS new model door 1118 740
+PASS 14 decor meshes, normalized geometry and shared texture atlas
+>>> /opt/pyvenv/bin/python tests/server_smoke.py
+PASS all 81 production media files via HTTP, genuine missing file returns 404
+PASS actual HTTP server: version, index, both scripts, all source scripts, CSS, models, favicon, bundle integrity
+PASS release checks (browser smoke not requested)
+PASS title music, isolated engine-rendered menu scene, notes and level selector
+PASS environment model render submission and shared shadow buffer
+PASS malformed saved settings, streak and records recover to safe values
+PASS selected-sector entry, custom presets/options, pause restart, profile totals and end screens
+PASS M toggles details, one-second detection pulse, re-detection and no gameplay version strip
+PASS actual menu Start, Custom and unlocked Boss Rush click handlers
+PASS cold and saved HARD/unlocked Boss Rush startup
+PASS full standalone DOM startup, real image decode and model loading (mock GPU)
+PASS 13 mode starts, rendered-frame calls, pause and return to menu
+PASS Yellow Corridors imported door hinge animation, closed/open collision, blocked closure, exit model, unchanged other sectors and slot interaction
+PASS desktop HUD and pause layout, mobile custom panel scroll
+PASS sync and async pointer-lock rejection does not abort a round
+PASS simulated WebGPU loss stops renderer, pauses game, blocks resume and offers reload
+PASS restart during jumpscare, paused clock, cancelled transition and no page errors

@@ -1,0 +1,92 @@
+{
+  "models": {
+    "tree": {
+      "vertices_before": 402813,
+      "vertices_after": 33035,
+      "triangles_before": 134271,
+      "triangles_after": 29699,
+      "bytes_before": 19335036,
+      "bytes_after": 1809940
+    },
+    "campfire": {
+      "vertices_before": 1346,
+      "vertices_after": 1346,
+      "triangles_before": 1832,
+      "triangles_after": 1832,
+      "bytes_before": 81220,
+      "bytes_after": 81220
+    },
+    "slot": {
+      "vertices_before": 105054,
+      "vertices_after": 34951,
+      "triangles_before": 172288,
+      "triangles_after": 52198,
+      "bytes_before": 6689844,
+      "bytes_after": 2164232
+    }
+  },
+  "images": {
+    "card.png": {
+      "before": [
+        1536,
+        1024
+      ],
+      "after": [
+        512,
+        341
+      ],
+      "bytes_before": 2653711,
+      "bytes_after": 242849
+    },
+    "battery.png": {
+      "before": [
+        1100,
+        1422
+      ],
+      "after": [
+        396,
+        512
+      ],
+      "bytes_before": 421604,
+      "bytes_after": 69755
+    },
+    "puffi.png": {
+      "before": [
+        512,
+        512
+      ],
+      "after": [
+        512,
+        512
+      ],
+      "bytes_before": 259522,
+      "bytes_after": 259522
+    },
+    "grosz.png": {
+      "before": [
+        512,
+        512
+      ],
+      "after": [
+        512,
+        512
+      ],
+      "bytes_before": 133293,
+      "bytes_after": 133293
+    }
+  },
+  "audio": {
+    "music/menu-ambient.mp3": {
+      "bytes_before": 6721619,
+      "bytes_after": 3361688
+    },
+    "music/game-ambient.mp3": {
+      "bytes_before": 1601619,
+      "bytes_after": 801688
+    },
+    "music/chase-trailer.mp3": {
+      "bytes_before": 2835435,
+      "bytes_after": 1418596
+    }
+  }
+}

@@ -1,0 +1,18 @@
+PASS title music, isolated engine-rendered menu scene, notes and level selector
+PASS environment model render submission and shared shadow buffer
+PASS opt-in raster walls, cached geometry, map revision and classic fallback
+PASS HD albedo decoding and F8/F9 independent toggles, bind refresh
+PASS F10 local lighting toggle and real pitch frame data (mock GPU)
+PASS F7 wall-shadow switch, F8 geometry and F10 lighting modes (mock GPU)
+PASS malformed saved settings, streak and records recover to safe values
+PASS selected-sector entry, custom presets/options, pause restart, profile totals and end screens
+PASS M toggles details, one-second detection pulse, re-detection and no gameplay version strip
+PASS actual menu Start, Custom and unlocked Boss Rush click handlers
+PASS cold and saved HARD/unlocked Boss Rush startup
+PASS full standalone DOM startup, real image decode and model loading (mock GPU)
+PASS 13 mode starts, rendered-frame calls, pause and return to menu
+PASS Yellow Corridors imported door hinge animation, closed/open collision, blocked closure, exit model, unchanged other sectors and slot interaction
+PASS desktop HUD and pause layout, mobile custom panel scroll
+PASS sync and async pointer-lock rejection does not abort a round
+PASS simulated WebGPU loss stops renderer, pauses game, blocks resume and offers reload
+PASS restart during jumpscare, paused clock, cancelled transition and no page errors

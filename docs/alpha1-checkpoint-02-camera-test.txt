@@ -1,0 +1,1 @@
+PASS shared frame ABI, snapshot consistency, legacy FOV/yaw and matching sprite/mesh depth

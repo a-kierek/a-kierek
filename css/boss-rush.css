@@ -1,0 +1,35 @@
+/* Catrooms BOSS RUSH / v1.4: boot scan and locked campaign ending. */
+#loadingScreen{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;
+ background:radial-gradient(circle at 50% 38%,#22090d,#050102 65%,#010000);
+ color:#eee1d8;font-family:"Upheaval","Courier New",monospace;text-align:center;
+ overflow:hidden;transition:opacity .55s ease,visibility .55s ease;}
+#loadingScreen::before{content:"";position:absolute;inset:0;pointer-events:none;
+ background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 3px,#0008 3px 5px),
+ radial-gradient(ellipse at 50% 50%,transparent 32%,#000a 100%);opacity:.7;}
+#loadingScreen.finished{opacity:0;visibility:hidden;pointer-events:none}
+#loadingScreen .loading-inner{position:relative;z-index:1;width:min(660px,88vw);padding:24px;}
+#loadingScreen .loading-title{font-size:clamp(36px,8vw,94px);letter-spacing:.12em;
+ color:#f0e0d7;text-shadow:5px 5px 0 #450b0b,0 0 25px #9f24245e;line-height:1;}
+#loadingScreen .loading-subtitle{font-size:clamp(10px,1.3vw,16px);margin:30px 0 15px;
+ letter-spacing:.13em;color:#bba59a;}
+#loadingScreen .loading-track{border:2px solid #73302d;background:#090304;height:16px;padding:2px;}
+#loadingScreen #loadingFill{height:100%;width:5%;background:repeating-linear-gradient(90deg,#9f3b32 0 12px,#a94c3f 12px 18px);
+ transition:width .33s ease;box-shadow:0 0 18px #d14037a0;}
+#loadingScreen #loadingStatus{font-size:12px;letter-spacing:.14em;margin-top:15px;color:#d1a199;}
+#start #bossRushBtn{border-color:#af3434!important;background:linear-gradient(180deg,#5a0915,#1e050b)!important;
+ color:#ffe0e0!important;text-shadow:0 0 8px #d5464a;box-shadow:inset 0 0 18px #8f131766!important;
+ animation:rushBlink 3s steps(1,end) infinite;}
+#start #bossRushBtn:hover{background:#9f1b23!important;border-color:#e96065!important;}
+@keyframes rushBlink{0%,90%,96%,100%{filter:brightness(1)}93%{filter:brightness(.6)}}
+body.boss-rush-level #hud .goal{color:#ffb6ad!important;}
+body.boss-rush-level #hud #eventTag{color:#f5ac9d!important;}
+body.boss-rush-level #hud .objective{border-left-color:#bb2f37!important;}
+body.boss-rush-level #hud #hpWrap{outline:1px solid #7c2226;}
+@media(prefers-reduced-motion:reduce){#start #bossRushBtn{animation:none}}
+
+#loadingScreen.load-failed .loading-track{border-color:#dc4541}
+#loadingScreen.load-failed #loadingFill{background:#c83129}
+#loadingScreen.load-failed #loadingStatus{font-size:clamp(12px,2vw,20px);line-height:1.4;color:#ffb4ad;overflow-wrap:anywhere}
+/* Explicit hidden rule outranks the inherited flex display of level buttons. */
+#start #bossRushBtn[hidden]{display:none!important}
+#start #bossRushBtn:not([hidden]){display:flex!important}

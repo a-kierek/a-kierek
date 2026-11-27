@@ -1,0 +1,2 @@
+# Checkpoint 09 — Graphics settings
+Main menu and pause menu share five presets, six independent feature switches and a render FPS cap. Existing quality values and save keys are retained. Default is HIGH (classic walls); ULTRA enables experimental walls. F4/F6–F10 now persist their changes and synchronize both menus. Resolution retains the previous renderer safety cap. FPS cap affects rendering only, not fixed-step simulation. AUTO, dynamic resolution, individual PBR controls and true full-resolution rendering remain future work. GPU validation is required.

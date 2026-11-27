@@ -1,0 +1,9 @@
+# v1.7 Alpha 1 / Checkpoint 06: Shadow System (grid wall visibility)
+
+Owner confirmed CP05 works on Ryzen 5 5600 / RTX 5060 Ti 8 GB. CP06 adds finite grid-segment visibility queries for the local point lights and Safe Room fire introduced in CP05. All terrain, raster-wall resolve, mesh and billboard shaders share the existing render map. Solid map tiles occlude direct illumination; collision-only tile 5 does not. Fixture positions inside walls are rejected. Conservative corner handling and a small forward bias avoid wall self-shadowing. Each ray is limited to 24 cell crossings and a nine-cell light radius; negligible light contributions skip traversal. Existing ambient illumination is retained. No extra map uploads or GPU storage buffers are required.
+
+F7 compares wall shadows on/off (default on). F10 still switches the whole CP05 lighting system; F8 and F9 remain independent. The first lighting frame field now encodes 0 classic, 1 CP05 lighting, 2 CP06 lighting with wall occlusion. No new assets, settings persistence, map generation or gameplay changes. Internal game version stays v1.6.2.4.
+
+Limitations: only full-height grid walls block point lights. Imported door tiles removed from the rendering grid, model geometry, furniture and sprite silhouettes do not yet cast shadows; no soft shadow maps, indirect bounce, normal/roughness maps, full PBR or flashlight occlusion. Ambient and legacy flashlight effects are unchanged. Visual results and performance need testing on actual WebGPU. CPU visibility tests compare a translated traversal against an independent segment/AABB reference; mock browser tests do not compile or execute WGSL.
+
+Suggested checks: F7 on/off near a corner, in the Safe Room, near lights and in the dark sectors; repeat with F8 toggled; report FPS and any dark bands, missing walls or startup validation errors. F10 off should still restore classic lighting.
