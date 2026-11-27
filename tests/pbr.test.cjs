@@ -5,7 +5,7 @@ run(['js/graphics/materials.js','js/graphics/shaders/shared.js','js/graphics/sha
 const paths=run('SURFACE_DETAIL_PATHS');assert.equal(paths.length,12);assert.equal(new Set(paths).size,12);
 for(const p of paths){const png=fs.readFileSync(path.join(root,p));assert.equal(png.readUInt32BE(16),512);assert.equal(png.readUInt32BE(20),512);assert.equal(png[25],2);}
 for(const code of [run('TERRAIN_WGSL'),run('geometryTerrainSource()')]){
- for(const term of ['@binding(12)','fn cp11BRDF','material.roughness','wallLightVisible(p.xy,source.xy','readSurfaceDetail(uv,layer+4','readSurfaceDetail(vec2f(texX,wallV)','detailAvailable()&&hit!=8u&&layer<4'])assert.ok(code.includes(term),term);
+ for(const term of ['@binding(12)','fn cp11BRDF','material.roughness','wallLightVisible(p.xy,source.xy','readSurfaceDetail(uv,layer+4','readSurfaceDetail(vec2f(texX,wallV)','detailAvailable()&&!ceramic&&hit!=8u&&layer<4'])assert.ok(code.includes(term),term);
 }
 // Numeric reference for bounded dielectric GGX at extreme roughness/angles.
 function brdf(nl,nv,nh,vh,rough,base){if(nl<=0)return 0;nv=Math.max(nv,.001);const a=rough**2,a2=a*a,q=nh*nh*(a2-1)+1,d=a2/Math.max(Math.PI*q*q,.000001),k=(rough+1)**2/8,g=nv/(nv*(1-k)+k)*nl/(nl*(1-k)+k),f=.04+.96*(1-vh)**5,s=d*g*f/Math.max(4*nv*nl,.001);return ((1-f)*base+Math.min(s*Math.PI,4))*nl;}
