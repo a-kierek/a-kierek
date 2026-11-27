@@ -5,61 +5,55 @@ Run: python tools/build_standalone.py
 from pathlib import Path
 import base64
 import re
+import json
+from functools import lru_cache
 
 root = Path(__file__).resolve().parents[1]
-output = root.parent / 'THE_CATROOMS_V1_3_SEKTOR_05.html'
+output = root.parent / 'THE_CATROOMS_V1_6_2_4.html'
 text = (root / 'index.html').read_text(encoding='utf-8')
 
+@lru_cache(maxsize=None)
 def data_url(path):
     asset = root / path
     if not asset.is_file():
         raise FileNotFoundError(asset)
     suffix = asset.suffix.lower()
-    mime = {'.png': 'image/png', '.webp':'image/webp', '.wav':'audio/wav', '.mp3':'audio/mpeg', '.ogg':'audio/ogg'}[suffix]
+    mime = {'.png': 'image/png', '.svg':'image/svg+xml', '.webp':'image/webp', '.wav':'audio/wav', '.mp3':'audio/mpeg', '.ogg':'audio/ogg', '.mesh':'application/octet-stream'}[suffix]
     return f'data:{mime};base64,{base64.b64encode(asset.read_bytes()).decode("ascii")}'
 
 def inline_css(match):
     css = (root / match.group(1)).read_text(encoding='utf-8')
-    for rel in ['blood-ui.png','handprints-ui.png','grease-ui.png','damage-ui.png','menu-blood-splatter.png','menu-blood-handprint.png']:
+    for rel in ['blood-ui.png','handprints-ui.png','grease-ui.png','damage-ui.png','menu-blood-handprint.png']:
         css=css.replace("../assets/ui/"+rel, data_url('assets/ui/'+rel))
     return '<style>\n' + css + '\n</style>'
 
-def inline_js(match):
-    js = (root / match.group(1)).read_text(encoding='utf-8')
-    # JS constants containing paths are replaced by URI without external dependencies.
-    for relative in [
-        'assets/characters/marmur.png', 'assets/characters/szept.png',
-        'assets/characters/blysk.png', 'assets/characters/chrum.png', 'assets/characters/nowy-przeciwnik.png',
-        'assets/items/battery.png', 'assets/items/card.png', 'assets/items/puffi.png',
-        'assets/items/slow-device.png', 'assets/items/freeze-device.png',
-        'assets/items/grosz.png', 'assets/ui/menu-blood-splatter.png', 'assets/ui/menu-blood-handprint.png', 'assets/items/energy-classic.png', 'assets/items/energy-berry.png',
-        'assets/items/energy-peach.png', 'assets/items/energy-ultra.png', 'assets/items/energy-green.png',
-        'assets/decals/blood-realistic.png',
-        'assets/models/slot-albedo.webp',
-        'assets/audio/safe-room/lift-music.mp3', 'assets/audio/safe-room/campfire-crackle.mp3',
-        'assets/audio/menu-beep.mp3', 'assets/audio/coin-pickup.mp3','assets/audio/coin-slot.wav', 'assets/audio/battery-charge.wav', 'assets/audio/roblox-walking.mp3',
-        'assets/audio/pig-oink.mp3', 'assets/audio/pig-grunt.mp3',
-        'assets/audio/pig-squeal.mp3', 'assets/audio/angry-beast.mp3',
-        'assets/audio/angry-cat.mp3', 'assets/audio/very-angry-cat.mp3', 'assets/audio/steve-old-hurt.mp3',
-        'assets/audio/voices/szept-jadymy-na-imielin.mp3',
-        'assets/audio/voices/szept-nie-lubi-imielina.mp3',
-        'assets/audio/voices/szept-vamos-polska.mp3',
-        'assets/audio/voices/blysk-oni-gadaja.mp3',
-        'assets/audio/voices/blysk-kurwy.mp3',
-        'assets/audio/voices/blysk-pijany.mp3',
-        'assets/audio/jumpscares/appear-scream-loud.wav',
-        'assets/audio/hard/heartbeat.mp3','assets/audio/hard/pig-squeal-horror.mp3',
-    ]:
-        js = js.replace("'" + relative + "'", "'" + data_url(relative) + "'")
+def script_source(path):
+    js = (root / path).read_text(encoding='utf-8')
+    # Embed quoted local asset paths, including binary model manifests.
+    # Cache URLs so multiple references do not repeatedly read/encode a file.
+    js = re.sub(r"(['\"])(assets/[^'\"\s]+\.(?:png|svg|webp|wav|mp3|ogg|mesh))\1",
+                lambda m: m.group(1) + data_url(m.group(2)) + m.group(1), js)
     if '</script' in js.lower():
-        raise ValueError(f'Unsafe script ending in {match.group(1)}')
-    return '<script>\n' + js + '\n</script>'
+        raise ValueError(f'Unsafe script ending in {path}')
+    return js
 
 # Asset URLs in HTML attributes must also be embedded (not only JS string paths).
-text = re.sub(r'(<img[^>]*\bsrc=")(?P<path>assets/items/[^"]+\.png)(")',
+text = re.sub(r'(<img[^>]*\bsrc=")(?P<path>assets/(?:items|ui)/[^"]+\.(?:png|svg))(")',
               lambda m: m.group(1)+data_url(m.group('path'))+m.group(3),text)
-text = re.sub(r'<link rel="stylesheet" href="([^"]+)">', inline_css, text)
-text = re.sub(r'<script src="([^"]+)"></script>', inline_js, text)
-text = text.replace('THE CATROOMS | NORMAL / HARD', 'THE CATROOMS | NORMAL / HARD')
+text = re.sub(r'<link\b(?=[^>]*\brel="stylesheet")(?=[^>]*\bhref="([^"]+)")[^>]*>', inline_css, text)
+# Generate the online bundle from the same canonical ordered manifest as offline.
+paths = json.loads((root / 'tools/script-order.json').read_text(encoding='utf-8'))
+assert paths[-1] == 'js/core/boot.js' and len(paths) == len(set(paths))
+assert 'js/gameplay/custom-mode.js' in paths
+ready = '\n;\nwindow.CatroomsScriptsReady = true;\n'
+def combine(reader):
+    return '\n;\n'.join('// SOURCE: '+path+'\n'+reader(path) for path in paths[:-1])+ready
+online = combine(lambda path: (root/path).read_text(encoding='utf-8'))
+(root/'js/game.bundle.js').write_text(online, encoding='utf-8')
+pattern = r'<script src="js/game\.bundle\.js\?v=1\.6\.2\.4"></script>\s*<script src="js/core/boot\.js\?v=1\.6\.2\.4"></script>'
+bundle = combine(script_source)
+boot = script_source(paths[-1])
+text, count = re.subn(pattern, lambda _: '<script>\n'+bundle+'\n</script>\n<script>\n'+boot+'\n</script>', text)
+assert count == 1, 'Expected online bundle and boot tags in index.html'
 output.write_text(text, encoding='utf-8')
 print(f'{output} ({output.stat().st_size:,} bytes)')

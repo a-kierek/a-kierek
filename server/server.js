@@ -12,7 +12,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const MAX_CLIENTS = 4;
 const ROOMS = new Map();
 const CLIENTS = new Set();
-const TYPES = {'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.wav':'audio/wav','.ogg':'audio/ogg','.mp3':'audio/mpeg','.ico':'image/x-icon','.json':'application/json; charset=utf-8'};
+const TYPES = {'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.wav':'audio/wav','.ogg':'audio/ogg','.mp3':'audio/mpeg','.ico':'image/x-icon','.json':'application/json; charset=utf-8','.mesh':'application/octet-stream'};
 const ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const sanitizeName = value => typeof value==='string' ? value.replace(/[<>\r\n\x00-\x1F]/g,'').trim().slice(0,22) || 'Gracz' : 'Gracz';
 function code(){for(let k=0;k<50;k++){let out='';for(let j=0;j<6;j++)out+=ALPHABET[crypto.randomInt(ALPHABET.length)];if(!ROOMS.has(out))return out;}throw Error('Room collision');}
@@ -53,7 +53,7 @@ function onMessage(ws,msg){
   for(const k of fields){const v=Number(data[k]);if(!Number.isFinite(v))return;clean[k]=['forward','strafe'].includes(k)?Math.min(1,Math.max(-1,v)):['sprint','crouch','flash'].includes(k)?Boolean(v):Math.min(10,Math.max(-10,v));}
   safeJSON(room.host,{type:'input',id:ws.id,data:clean});return;
  }
- if(msg.type==='action'&&room.guests.get(ws.id)===ws&&room.started){if(['interact','decoy'].includes(msg.action))safeJSON(room.host,{type:'action',id:ws.id,action:msg.action});return;}
+ if(msg.type==='action'&&room.guests.get(ws.id)===ws&&room.started){if(msg.action==='interact')safeJSON(room.host,{type:'action',id:ws.id,action:msg.action});return;}
  if(msg.type==='chat'&&typeof msg.text==='string'){
   const text=msg.text.trim().slice(0,120);if(!text)return;
   for(const peer of [room.host,...room.guests.values()])safeJSON(peer,{type:'chat',from:ws.name,text});
@@ -62,7 +62,8 @@ function onMessage(ws,msg){
 function parseFrames(ws,chunk){ws.buffer=Buffer.concat([ws.buffer,chunk]);if(ws.buffer.length>350000){disconnect(ws);return;}while(ws.buffer.length>=2){const b=ws.buffer;const opcode=b[0]&15;const masked=(b[1]&128)!==0;let len=b[1]&127,off=2;if(!masked){disconnect(ws);return;}if(len===126){if(b.length<4)return;len=b.readUInt16BE(2);off=4;}else if(len===127){if(b.length<10)return;const hi=b.readUInt32BE(2),lo=b.readUInt32BE(6);if(hi>0||lo>160000){disconnect(ws);return;}len=lo;off=10;}if(len>160000){disconnect(ws);return;}if(b.length<off+4+len)return;const mask=b.subarray(off,off+4);off+=4;const payload=Buffer.from(b.subarray(off,off+len));ws.buffer=b.subarray(off+len);for(let i=0;i<len;i++)payload[i]^=mask[i%4];if(opcode===0x8){disconnect(ws);return;}if(opcode===0x9){sendFrame(ws,0xa,payload);continue;}if(opcode===0xa){ws.pong=Date.now();continue;}if(opcode!==1){disconnect(ws);return;}try{onMessage(ws,JSON.parse(payload.toString('utf8')));}catch(e){safeJSON(ws,{type:'error',message:'Nieprawidlowe dane.'});}}}
 const server=http.createServer((req,res)=>{
  let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch(e){res.writeHead(400);res.end();return;}
- if(pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({ok:true,rooms:ROOMS.size,clients:CLIENTS.size}));return;}
+ if(pathname==='/favicon.ico'){res.writeHead(204,{'Cache-Control':'no-cache'});res.end();return;}
+ if(pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({ok:true,version:'1.6.2.4',rooms:ROOMS.size,clients:CLIENTS.size}));return;}
  if(pathname==='/')pathname='/index.html';
  const filepath=path.resolve(ROOT,'.'+pathname);
  if(!filepath.startsWith(ROOT+path.sep)||!fs.existsSync(filepath)||!fs.statSync(filepath).isFile()){res.writeHead(404);res.end('Not found');return;}
@@ -80,7 +81,7 @@ server.on('upgrade',(req,socket,head)=>{
 });
 setInterval(()=>{const now=Date.now();for(const ws of CLIENTS){if(now-ws.pong>65000){disconnect(ws);continue;}sendFrame(ws,0x9);}},25000).unref();
 server.listen(PORT,HOST,()=>{
- console.log('THE CATROOMS CO-OP • host server');
+ console.log('THE CATROOMS v1.6.2.4 REFORGED • host server');
  console.log('LAN / host browser: http://localhost:'+PORT);
  console.log('Others on same Wi-Fi: http://YOUR-LAN-IP:'+PORT);
  console.log('For internet and GitHub Pages: expose this server over HTTPS/WSS (e.g. Cloudflare Tunnel).');

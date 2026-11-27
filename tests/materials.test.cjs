@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const ctx=vm.createContext({});const run=s=>vm.runInContext(s,ctx);
+run(read('js/graphics/materials.js'));
+assert.equal(run('JSON.stringify(materialMipSizes(512,1024))'),'[[512,1024],[256,512],[128,256],[64,128],[32,64],[16,32],[8,16],[4,8],[2,4],[1,2],[1,1]]');
+assert.equal(run('materialMipSizes(512,512).length'),10);
+assert.throws(()=>run('materialMipSizes(0,1)'));
+run(`let copies=[];const document={createElement:()=>({getContext:()=>({drawImage(){}})})};const d={queue:{copyExternalImageToTexture:(s,t,size)=>copies.push([t.mipLevel,t.origin[2],...size])}};uploadMaterialMips(d,{}, {},512,1024,3);`);
+assert.equal(run('copies.length'),11);assert.equal(run('JSON.stringify(copies[0])'),'[0,3,512,1024,1]');assert.equal(run('JSON.stringify(copies.at(-1))'),'[10,3,1,1,1]');
+for(const p of run('[...HD_WALL_PATHS,...HD_FLOOR_PATHS]')) assert.ok(fs.existsSync(path.join(root,p)),p);
+assert.ok(read('js/graphics/shaders/terrain.js').includes('textureNumLevels(wallTex)'));
+assert.ok(read('js/graphics/world-geometry.js').includes('this.materialRevision!==r.materialRevision'));
+console.log('PASS HD asset manifest, mip dimensions, layer uploads and renderer revision contract');
