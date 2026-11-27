@@ -6,7 +6,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 import sys
 root=Path(__file__).resolve().parents[1]
-html=(root.parent/'THE_CATROOMS_V1_7_ALPHA1.html').read_text()
+html=(root.parent/'THE_CATROOMS_V1_8_BETA.html').read_text()
 shim=r'''<script>
 const noGpuOp=()=>{};
 let synthAttempts=0;
@@ -37,7 +37,7 @@ with sync_playwright() as p:
  assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===24 && ['door','rock','battery','card','terminal','shield','drink'].every(kind=>gpuRenderer.modelMeshes[kind]?.indexCount>0)")
  assert page.evaluate("gpuRenderer.loadedSpriteLayers[1].width>0 && gpuRenderer.loadedSpriteLayers[1].height>0")
  assert page.evaluate("$('bossRushBtn').hidden===!bossRushVisible()")
- # New v1.7.0-alpha.1 release UI and title music checks.
+ # New v1.8.0-beta release UI and title music checks.
  assert page.evaluate("!$('pixelSplash').hidden && menuMusicUnlocked && bgTracks.menu?.loop===true")
  assert page.evaluate("$('versionBadge').closest('#start')!==null && $('pixelBloodDecals').querySelectorAll('img').length===1")
  assert page.evaluate("$('startBtn').textContent==='YELLOW CORRIDORS'&&$('bossRushBtn').textContent==='BOSS RUSH'")
@@ -45,7 +45,7 @@ with sync_playwright() as p:
  page.wait_for_function("!$('releaseNotes').hidden")
  assert page.evaluate("$('pixelHub').inert && $('pixelSplash').inert")
  page.evaluate("$('releaseNotesClose').click();$('pixelPressStart').click()")
- assert page.evaluate("$('releaseNotes').hidden && !$('releaseNotesOpen').hidden && progressRead('catroomsReleaseNotesSeen_1.7.0-alpha.1')==='1' && !$('pixelHub').inert")
+ assert page.evaluate("$('releaseNotes').hidden && !$('releaseNotesOpen').hidden && progressRead('catroomsReleaseNotesSeen_1.8.0-beta')==='1' && !$('pixelHub').inert")
  page.evaluate("$('releaseNotesOpen').click()")
  assert page.evaluate("!$('releaseNotes').hidden")
  page.evaluate("$('releaseNotesClose').click();$('hubBack').click()")

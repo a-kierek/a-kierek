@@ -2,33 +2,11 @@
 // randomized enemy casts, pickup locations, consumables and escape positions.
 let proceduralSeed=0,requestedSeed=null;
 function dungeonBuild(runSeed){
-  seed=runSeed|0;
-  gameSession.N=49;gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
-  const centers=[6,18,30,42],segments=[];
-  const carve=(x,y,w,h)=>{for(let yy=Math.max(1,y);yy<Math.min(gameSession.N-1,y+h);yy++)for(let xx=Math.max(1,x);xx<Math.min(gameSession.N-1,x+w);xx++)gameSession.world[yy][xx]=0};
-  for(let yi=0;yi<4;yi++)for(let xi=0;xi<4;xi++){
-    const x=centers[xi],y=centers[yi],w=5+Math.floor(rnd()*4),h=5+Math.floor(rnd()*4);
-    carve(x-Math.floor(w/2),y-Math.floor(h/2),w,h);
-  }
-  // Randomized spanning tree ensures ALL rooms are connected on every seed.
-  const visited=new Set(['0,0']),stack=[[0,0]],connections=new Set();
-  const edge=(a,b)=>[a.join(','),b.join(',')].sort().join('::');
-  while(stack.length){
-    const [x,y]=stack.at(-1),neighbors=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([u,v])=>u>=0&&u<4&&v>=0&&v<4&&!visited.has(`${u},${v}`));
-    if(!neighbors.length){stack.pop();continue}
-    const next=neighbors[Math.floor(rnd()*neighbors.length)];
-    connections.add(edge([x,y],next));visited.add(next.join(','));stack.push(next);
-  }
-  for(let y=0;y<4;y++)for(let x=0;x<4;x++){
-    if(x<3&&(rnd()<.47||connections.has(edge([x,y],[x+1,y]))))segments.push([x,y,x+1,y]);
-    if(y<3&&(rnd()<.47||connections.has(edge([x,y],[x,y+1]))))segments.push([x,y,x,y+1]);
-  }
-  for(const [x,y,u,v] of segments){
-    const sx=centers[x],sy=centers[y],ex=centers[u],ey=centers[v];
-    if(x===u)carve(sx-1,Math.min(sy,ey),3,Math.abs(ey-sy)+1);
-    else carve(Math.min(sx,ex),sy-1,Math.abs(ex-sx)+1,3);
-  }
-  return centers;
+ seed=runSeed|0;
+ const layout=startRoomLayout(49,runSeed);
+ const centers=roomCenters(6,42,4);
+ buildRoomRegion(layout,5,centers,centers);
+ return centers;
 }
 function dungeonEmptyCells(fromX=5,fromY=5){
   const dist=bfsDistances(fromX,fromY),out=[];

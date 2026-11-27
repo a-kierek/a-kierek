@@ -50,8 +50,26 @@ const LIGHTING_WGSL=/* wgsl */ `
 fn shadowSolid(cell:vec2i,size:i32)->bool {
  if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return true;}
  let tile=worldTiles[u32(cell.y)*128u+u32(cell.x)];
- // The upper bits flag a closed mesh door hidden from terrain rendering.
- return tile!=0u&&tile!=5u;
+ // The low byte is the terrain type and bit eight is a closed mesh door.
+ let solid=tile&511u;
+ return solid!=0u&&solid!=5u;
+}
+fn roomFields(cell:vec2i,size:i32)->u32 {
+ if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return 0u;}
+ return worldTiles[u32(cell.y)*128u+u32(cell.x)];
+}
+fn roomCeiling(cell:vec2i,size:i32)->f32 {
+ let code=(roomFields(cell,size)>>9u)&7u;
+ return array<f32,8>(1.,.84,.92,1.10,1.22,1.36,1.,1.)[code];
+}
+fn roomLamp(p:vec2f,size:i32,time:f32)->vec3f {
+ let mode=(roomFields(vec2i(floor(p)),size)>>12u)&7u;
+ if(mode==1u){return vec3f(.34);}
+ if(mode==2u){return vec3f(.58,.85,1.);}
+ if(mode==3u){return vec3f(.93,.21,.11);}
+ if(mode==4u){return vec3f(select(.15,.85,sin(time*2.3+p.x*.34+p.y*.63)>.12));}
+ if(mode==5u){return vec3f(.025);}
+ return vec3f(1.);
 }
 // Trace only the finite segment toward the light, not the entire map.
 // A small forward bias avoids re-hitting the shaded wall itself, including
@@ -207,11 +225,11 @@ fn sceneLight(p:vec3f,n:vec3f,rough:f32,f:SceneFrame)->vec3f {
  for(var y:i32=-1;y<=2;y++){for(var x:i32=-1;x<=2;x++){
   let cell=grid+vec2f(f32(x),f32(y));
   let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
-  let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
+  let source=vec3f(pos,roomCeiling(vec2i(floor(pos)),i32(f.viewport.z))-.03);let weight=fixtureWeight(p,source);
   if(weight<=0.||(f.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(f.viewport.z)))){continue;}
   let flicker=fixtureFlicker(cell,f.player.w);
   let power=select(2.1,.12,f.weather.x>.5)*flicker;
-  light+=pointContribution(p,n,eye,rough,source,tint,power*weight,f);
+  light+=pointContribution(p,n,eye,rough,source,tint*roomLamp(pos,i32(f.viewport.z),f.player.w),power*weight,f);
  }}
  if(f.lighting.w>.5){
   let flicker=1.1+.22*sin(f.player.w*13.)+.16*sin(f.player.w*23.);

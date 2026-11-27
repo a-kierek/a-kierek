@@ -1,45 +1,58 @@
 // Build only wall faces adjacent to walkable/render-empty cells. The exact
 // uploaded render tiles are authoritative (including animated-door openings
 // and tile 5, which is a collision-only decoration, not a visible wall).
-function buildWorldWallVertices(tiles,size,stride=128){
+const ROOM_CEILING_HEIGHTS=[1,.84,.92,1.10,1.22,1.36,1,1];
+function buildWorldWallVertices(tiles,size,stride=128,fields=tiles){
  if(!Number.isInteger(size)||size<1||size>stride||tiles.length<size*stride)throw Error('Invalid wall grid');
  const data=[];
  const tile=(x,y)=>x<0||y<0||x>=size||y>=size?1:tiles[y*stride+x];
  const open=(x,y)=>{const t=tile(x,y);return t===0||t===5;};
- const face=(ax,ay,bx,by,cx,cy,side)=>{
-  for(const [x,y,z] of [[ax,ay,0],[bx,by,0],[ax,ay,1],[ax,ay,1],[bx,by,0],[bx,by,1]])data.push(x,y,z,cx,cy,side);
+ const height=(x,y)=>ROOM_CEILING_HEIGHTS[(fields[y*stride+x]>>>9)&7];
+ const face=(ax,ay,bx,by,cx,cy,side,low,high)=>{
+  for(const [x,y,z] of [[ax,ay,low],[bx,by,low],[ax,ay,high],[ax,ay,high],[bx,by,low],[bx,by,high]])data.push(x,y,z,cx,cy,side);
  };
  for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(open(x,y)){
-  if(!open(x-1,y))face(x,y,x,y+1,x-1,y,0);
-  if(!open(x+1,y))face(x+1,y,x+1,y+1,x+1,y,0);
-  if(!open(x,y-1))face(x,y,x+1,y,x,y-1,1);
-  if(!open(x,y+1))face(x,y+1,x+1,y+1,x,y+1,1);
+  const high=height(x,y);
+  for(const [ax,ay,bx,by,nx,ny,side] of [
+   [x,y,x,y+1,x-1,y,0],[x+1,y,x+1,y+1,x+1,y,0],
+   [x,y,x+1,y,x,y-1,1],[x,y+1,x+1,y+1,x,y+1,1]
+  ]){
+   const low=open(nx,ny)?height(nx,ny):0;
+   if(low<high)face(ax,ay,bx,by,nx,ny,side,low,high);
+  }
  }
  return new Float32Array(data);
 }
 // A plane tag needs no per-cell material data. Merge adjacent plane quads
 // into rectangles while preserving holes, collision-only cells and winding.
-function buildWorldSurfaceMesh(tiles,size,stride=128){
- const walls=buildWorldWallVertices(tiles,size,stride);
- const open=new Uint8Array(size*size);
+function buildWorldSurfaceMesh(tiles,size,stride=128,fields=tiles){
+ const walls=buildWorldWallVertices(tiles,size,stride,fields);
+ const open=new Uint8Array(size*size), ceilings=new Uint8Array(size*size);
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
   const tile=tiles[y*stride+x];
   open[y*size+x]=Number(tile===0||tile===5);
+  ceilings[y*size+x]=open[y*size+x]?1+((fields[y*stride+x]>>>9)&7):0;
  }
  const planes=[];
- for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-  if(!open[y*size+x])continue;
-  let right=x+1;
-  while(right<size&&open[y*size+right])right++;
-  let bottom=y+1;
-  rows:for(;bottom<size;bottom++){
-   for(let column=x;column<right;column++)if(!open[bottom*size+column])break rows;
+ function mergePlanes(cells,isFloor){
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+   const code=cells[y*size+x];
+   if(!code)continue;
+   let right=x+1;
+   while(right<size&&cells[y*size+right]===code)right++;
+   let bottom=y+1;
+   rows:for(;bottom<size;bottom++){
+    for(let column=x;column<right;column++)if(cells[bottom*size+column]!==code)break rows;
+   }
+   for(let row=y;row<bottom;row++)cells.fill(0,row*size+x,row*size+right);
+   const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
+   const order=isFloor?[0,1,2,2,1,3]:[0,2,1,1,2,3];
+   const z=isFloor?0:ROOM_CEILING_HEIGHTS[code-1];
+   for(const i of order)planes.push(...corners[i],z,x,y,isFloor?2:3);
   }
-  for(let row=y;row<bottom;row++)open.fill(0,row*size+x,row*size+right);
-  const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
-  for(const i of [0,1,2,2,1,3])planes.push(...corners[i],0,x,y,2);
-  for(const i of [0,2,1,1,2,3])planes.push(...corners[i],1,x,y,3);
  }
+ mergePlanes(open,true);
+ mergePlanes(ceilings,false);
  const vertices=new Float32Array(walls.length+planes.length);
  vertices.set(walls);vertices.set(planes,walls.length);
  return {vertices,wallVertices:walls.length/6,planeVertices:planes.length/6};
@@ -66,7 +79,7 @@ class WorldGeometryExperiment {
  prepare(){
   const r=this.renderer,d=this.device;
   if(this.uploadRevision!==r.stats.mapUploads){
-   const {vertices,wallVertices,planeVertices}=buildWorldSurfaceMesh(r.tilesData,r.mapSize);
+   const {vertices,wallVertices,planeVertices}=buildWorldSurfaceMesh(r.tilesData,r.mapSize,128,r.gpuTilesData);
    const newBuffer=d.createBuffer({label:'CP10 static world triangles',size:Math.max(24,vertices.byteLength),usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
    if(vertices.length)d.queue.writeBuffer(newBuffer,0,vertices);
    if(this.vertexBuffer)this.vertexBuffer.destroy();

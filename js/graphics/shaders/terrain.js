@@ -98,10 +98,10 @@ fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
   light=base*vec3f(.16,.16,.18);
   for(var y:i32=-1;y<=2;y++){for(var x:i32=-1;x<=2;x++){
    let cell=grid+vec2f(f32(x),f32(y));let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
-   let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
+   let source=vec3f(pos,roomCeiling(vec2i(floor(pos)),i32(frame.viewport.z))-.03);let weight=fixtureWeight(p,source);
    if(weight<=0.||(frame.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(frame.viewport.z)))){continue;}
    let flicker=fixtureFlicker(cell,frame.player.w);
-   light+=cp11Point(p,geom,material,base,eye,source,tint,select(2.1,.12,frame.weather.x>.5)*flicker*weight);
+   light+=cp11Point(p,geom,material,base,eye,source,tint*roomLamp(pos,i32(frame.viewport.z),frame.player.w),select(2.1,.12,frame.weather.x>.5)*flicker*weight);
   }}
   if(frame.lighting.w>.5){
    let flicker=1.1+.22*sin(frame.player.w*13.)+.16*sin(frame.player.w*23.);
@@ -151,11 +151,17 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(frame.lighting.x>.5||frame.flashlight.w>.5){
    let n=vec3f(0.,0.,select(-1.,1.,isFloor));
    let rough=select(.86,.32,sector==2.&&isFloor);
-   let point=vec3f(worldPt,select(1.,0.,isFloor));
+   let point=vec3f(worldPt,select(.5+ray.z*rd,0.,isFloor));
    if(detailAvailable()){
      let material=readSurfaceDetail(uv,layer+4,floorLod,n,vec3f(1.,0.,0.),vec3f(0.,1.,0.));
      c=cp11Shade(c,point,n,material);
    }else{c*=surfaceLighting(point,n,rough,vec3f(1.),frame);}
+ }
+ let condition=(roomFields(vec2i(floor(worldPt)),i32(frame.viewport.z))>>15u)&3u;
+ if(condition==1u&&isFloor){c*=vec3f(.83,.95,1.09);}
+ if(condition==2u){
+   let wear=.92+.08*sin(worldPt.x*3.4)*sin(worldPt.y*2.8);
+   c*=wear;
  }
  // Keep the familiar tiled floors, grout seams and rectangular fluorescent lights.
  let seams=uv.x<.017 || uv.y<.017;
@@ -165,11 +171,11 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if((cell.x+100)%5==2 && (cell.y+100)%4==1 && uv.x>.19 && uv.x<.82 && uv.y>.22 && uv.y<.68){
      if(frame.progress.w<0.&&frame.lighting.x>.5){
        let fixture=floor((worldPt-vec2f(2.,1.))/vec2f(5.,4.));
-       let lit=fixtureFlicker(fixture,frame.player.w);
+       let lit=fixtureFlicker(fixture,frame.player.w)*roomLamp(worldPt,i32(frame.viewport.z),frame.player.w);
        let edge=min(min(uv.x-.19,.82-uv.x),min(uv.y-.22,.68-uv.y));
        c=mix(vec3f(.16,.12,.08),vec3f(2.1,1.85,1.4)*lit,smoothstep(0.,.034,edge));
      }else{
-       c=mix(c,vec3f(1.,.95,.73),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
+       c=mix(c,vec3f(1.,.95,.73)*roomLamp(worldPt,i32(frame.viewport.z),frame.player.w),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
      }
    }
  } else {
@@ -208,8 +214,10 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  let uv=pixel.xy/frame.viewport.xy;
  let ray3=worldRay(uv,frame);
  let ray=ray3.xy;
- let surfaceDepth=planeDepth(ray3);
  var cell=vec2i(floor(frame.player.xy));
+ let size=i32(frame.viewport.z);
+ let floorDepth=planeDepth(ray3);
+ let upward=ray3.z>0.;
  let delta=vec2f(1.)/max(abs(ray),vec2f(.00001));
  let gridStep=vec2i(select(1,-1,ray.x<0.),select(1,-1,ray.y<0.));
  var tMax=vec2f(0.);
@@ -218,19 +226,29 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(ray.y<0.){tMax.y=(frame.player.y-f32(cell.y))*delta.y;}
  else{tMax.y=(f32(cell.y)+1.-frame.player.y)*delta.y;}
  var side=0;
- var hit=1u;
+ var hit=0u;
+ var distance=select(floorDepth,VIEW_FAR,upward);
+ var roof=roomCeiling(cell,size);
  for(var i:i32=0;i<190;i++){
+   let edge=min(tMax.x,tMax.y);
+   let roofDepth=(roof-.5)/max(ray3.z,.000001);
+   if(upward&&roofDepth<=edge){distance=min(distance,roofDepth);break;}
+   if(edge>distance){break;}
    if(tMax.x<tMax.y){tMax.x+=delta.x;cell.x+=gridStep.x;side=0;}
    else{tMax.y+=delta.y;cell.y+=gridStep.y;side=1;}
    hit=tileAt(cell.x,cell.y);
-   if(hit!=0u){break;}
-   if(min(tMax.x,tMax.y)>surfaceDepth){break;}
+   roof=roomCeiling(cell,size);
+   if(hit!=0u||(upward&&.5+ray3.z*edge>=roof)){
+    if(hit==0u){hit=1u;}
+    distance=max(VIEW_NEAR,edge);break;
+   }
  }
- var distance=max(VIEW_NEAR,select(tMax.y-delta.y,tMax.x-delta.x,side==0));
- let hasWall=hit!=0u && distance<=surfaceDepth;
+ let hasWall=hit!=0u;
  let wallPoint=vec3f(frame.player.xy,.5)+ray3*distance;
- let wallV=clamp(1.-wallPoint.z,0.,1.);
- let wallH=frame.viewport.x/(2.*frame.camera.x*distance);
+ let wallRoom=vec2i(floor(wallPoint.xy-ray.xy*.015));
+ let wallCeiling=roomCeiling(wallRoom,i32(frame.viewport.z));
+ let wallV=clamp(1.-wallPoint.z/wallCeiling,0.,1.);
+ let wallH=wallCeiling*frame.viewport.x/(2.*frame.camera.x*distance);
  var result=vec4f(0.);
  if(hasWall){
    var texX=select(frame.player.x+distance*ray.x,frame.player.y+distance*ray.y,side==0);
@@ -275,12 +293,17 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
        result=vec4f(cp11Shade(result.rgb,wallPoint,normal,material),1.);
      }else{result=vec4f(result.rgb*surfaceLighting(wallPoint,normal,rough,vec3f(1.),frame),1.);}
    }
+   let condition=(roomFields(wallRoom,i32(frame.viewport.z))>>15u)&3u;
+   if(condition==1u){result=vec4f(result.rgb*vec3f(.86,.96,1.05),1.);}
+   if(condition==2u){
+     let wear=.88+.11*abs(sin(texX*9.2+wallV*12.));
+     result=vec4f(result.rgb*wear,1.);
+   }
    let fog=clamp((distance-1.5)/32.,0.,.88);
    result=vec4f(mix(result.rgb,vec3f(.10,.10,.09),fog),1.);
    if(side==1){result=vec4f(result.rgb*.83,1.);}
  }else{
-   result=sceneryAt(pixel.xy,ray3);
-   distance=surfaceDepth;
+   result=scenerySurface(ray3,ray3.z<0.,distance);
  }
  // Static 3D boxes are ray-traced against the actual wall distance. These
  // objects stay put when the camera turns, unlike screen-facing billboards.

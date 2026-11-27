@@ -63,6 +63,7 @@ function scatterLevelDecor(){
    cells.push({x,y});
   }
   shuffle(cells);
+  for(const cell of cells)cell.room=roomAt(cell.x+.5,cell.y+.5);
   const keys=decorModelsFor(stage),plan=[];
   // Give each supplied model a chance before repeats. Last Encounter mixes
   // the old sectors with its own, giving its native objects extra weight.
@@ -78,7 +79,15 @@ function scatterLevelDecor(){
    const standingCabinet=kind==='cabinet'&&!fallenCabinet;
    const againstWall=kind==='bench'||kind==='pipe'||standingCabinet;
    let selected=null;
-   for(const cell of cells){
+   const preferred=cells.filter(cell=>cell.room?.decor?.includes(kind));
+   for(const cell of [...preferred,...cells]){
+    if(cell.room&&['SAFE','TRANSITION'].some(tag=>cell.room.categories.includes(tag)))continue;
+    if(!isWall&&!fallenCabinet&&spec.height+.02>ROOM_CEILING_HEIGHTS[cell.room?.height??0])continue;
+    if(cell.room?.links?.some(id=>{
+     const edge=s.roomLayout.connections[id-1];
+     const door=edge.a===cell.room.id?edge.from:edge.to;
+     return Math.hypot(door.x-cell.x,door.y-cell.y)<1.85;
+    }))continue;
     const {x,y}=cell;if(world[y][x]!==0)continue;
     if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<2.6))continue;
     const walls=DECOR_DIRS.filter(([dx,dy])=>world[y+dy]?.[x+dx]===1);
@@ -90,7 +99,7 @@ function scatterLevelDecor(){
    if(!selected)continue; // safe skip, never force a prop into a passage
    const {x,y,wall}=selected;let px=x+.5,py=y+.5,z=0,yaw=Math.floor(random()*4)*Math.PI/2;
    let size=1,tilt=0,radius=spec.radius; // converter bounds each floor object within its collision tile
-   if(isWall){const pose=mountedDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;}
+   if(isWall){const pose=mountedDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;z=Math.min(pose.z+(kind==='camera'?ROOM_CEILING_HEIGHTS[selected.room?.height??0]-1:0),ROOM_CEILING_HEIGHTS[selected.room?.height??0]-spec.height-.02);yaw=pose.yaw;}
    else {
     world[y][x]=5;
     if(againstWall){const pose=wallFloorDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;yaw=pose.yaw;}

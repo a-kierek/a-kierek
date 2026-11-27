@@ -263,7 +263,7 @@ class CatroomsWebGPURenderer {
   }
   syncStaticBuffers(scene=gameSession){
     const upload=(buffer,data)=>{this.device.queue.writeBuffer(buffer,0,data);this.stats.staticBytes+=data.byteLength;};
-    if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N){
+    if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N||this.roomRevision!==scene.roomLayout?.revision){
       this.tilesData.fill(0);
       for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++){
         const tile=scene.world[y][x];
@@ -274,11 +274,13 @@ class CatroomsWebGPURenderer {
       // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
       // geometry map unchanged; only the GPU visibility map carries the flag.
       this.gpuTilesData.set(this.tilesData);
+      const fields=scene.roomLayout?.fields;
+      if(fields)for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++)this.gpuTilesData[y*128+x]|=fields[y*scene.N+x];
       for(const d of this.doorLayout){
         const tile=scene.world[d.y][d.x];
         if(tile===3||tile===4)this.gpuTilesData[d.y*128+d.x]|=256;
       }
-      upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;
+      upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;this.roomRevision=scene.roomLayout?.revision;
     }
     const furniture=scene.safeRoomFurniture;
     if(this.furnitureSource!==furniture||this.furnitureLength!==furniture.length){
@@ -299,7 +301,7 @@ class CatroomsWebGPURenderer {
       else if(p.type==='decor'&&p.solid)addDecal(p,Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12),2);
     }
     for(const item of scene.fuses||[])if(!item.taken&&objectivePickupModel(item))addDecal(item,.48,3);
-    for(const item of scene.bonusItems||[])if(!item.taken&&bonusPickupModel(item))addDecal(item,.42,3);
+    for(const item of scene.bonusItems||[])if(!item.taken&&!item.attachment&&bonusPickupModel(item))addDecal(item,.42,3);
     let changed=this.decalWorld!==scene.world||this.decalCount!==count;
     for(let i=0;!changed&&i<count*4;i++)if(this.decalScratch[i]!==this.decalData[i])changed=true;
     if(changed){
@@ -408,7 +410,7 @@ class CatroomsWebGPURenderer {
     const phase=item.phase||0;
     const {c,s,z}=poses[Math.floor(phase*1000)%poses.length];
     const yaw=model==='terminal'?(item.yaw??Math.PI):phase;
-    return [item.x,item.y,z,WORLD_ITEM_SCALE[model],Math.cos(yaw),Math.sin(yaw),WORLD_ITEM_KINDS[model],
+    return [item.x,item.y,z+(item.z||0),WORLD_ITEM_SCALE[model],Math.cos(yaw),Math.sin(yaw),WORLD_ITEM_KINDS[model],
       active?2:item.used?1:0,c,s,0,0];
   }
   roomPose(room,kind){

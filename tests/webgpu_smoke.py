@@ -66,6 +66,54 @@ try:
         assert page.evaluate("CatroomsPBR.available && CatroomsTerrainExperiment.available && CatroomsPostFX.available")
         print('PASS WebGPU compiles classic, 3D geometry, PBR, sprite, mesh and HDR pipelines', flush=True)
 
+        depths = page.evaluate('''async ()=>{
+          const r=gpuRenderer,d=r.device,original=gameSession;
+          CatroomsGraphicsBench.running=true;
+          const read=d.createBuffer({size:4,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+          const output=d.createBuffer({size:4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+          const shader=d.createShaderModule({code:`
+            @group(0) @binding(0) var depth:texture_2d<f32>;
+            @group(0) @binding(1) var<storage,read_write> result:array<f32>;
+            @compute @workgroup_size(1) fn sampleRoof(){
+              let center=vec2i(textureDimensions(depth,0)/2u);
+              result[0]=textureLoad(depth,center,0).r;
+            }`});
+          const kernel=d.createComputePipeline({layout:'auto',compute:{module:shader,entryPoint:'sampleRoof'}});
+          const wasRaster=r.worldGeometry.enabled;
+          try{
+            gameSession=populateGraphicsDemo(new GameSession());
+            gameSession.state='playing';gameSession.player.pitch=1.1;
+            gameSession.fuses=[];gameSession.props=[];gameSession.safeRoom=null;
+            const n=gameSession.N,fields=new Uint32Array(n*n);
+            gameSession.roomLayout={fields,revision:0};
+            const out=[];
+            for(const height of [1,4]){
+              fields.fill(height<<9);gameSession.roomLayout.revision++;
+              for(const raster of [false,true]){
+                r.worldGeometry.enabled=raster;r.render();
+                const bind=d.createBindGroup({layout:kernel.getBindGroupLayout(0),entries:[
+                  {binding:0,resource:r.distanceTexture.createView()},{binding:1,resource:{buffer:output}}
+                ]});
+                const encoder=d.createCommandEncoder(),pass=encoder.beginComputePass();
+                pass.setPipeline(kernel);pass.setBindGroup(0,bind);pass.dispatchWorkgroups(1);pass.end();
+                encoder.copyBufferToBuffer(output,0,read,0,4);d.queue.submit([encoder.finish()]);
+                await read.mapAsync(GPUMapMode.READ);
+                out.push(new Float32Array(read.getMappedRange())[0]*RENDER_DEPTH.wallScale);
+                read.unmap();
+              }
+            }
+            return out;
+          }finally{
+            gameSession=original;r.worldGeometry.enabled=wasRaster;CatroomsGraphicsBench.running=false;
+            read.destroy();output.destroy();
+          }
+        }''')
+        low_classic, low_raster, high_classic, high_raster = depths
+        assert high_classic - low_classic > .35, depths
+        assert abs(low_classic - low_raster) < .02 and abs(high_classic - high_raster) < .02, depths
+        print('PASS Classic and raster rendering agree on two room ceiling heights', depths, flush=True)
+
+
         visibility = page.evaluate("""async ()=>{
           const device=gpuRenderer.device;
           const storage=GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST;

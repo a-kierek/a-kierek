@@ -41,7 +41,9 @@ const syncDetectionHUD=(()=>{
   wasDetected=detected;el.hidden=gameSession.elapsed>=until;
   const details=$('mapRunDetails');if(details&&!details.hidden){
    const level=$('levelLabel').textContent,status=gameSession.player.hidden?'HIDDEN':detected?'DETECTED':gameSession.guards.some(g=>g.state==='search'||g.state==='suspicious')?'SEARCHING':'UNDETECTED';
-   if($('mapLevelDetails').textContent!==level)$('mapLevelDetails').textContent=level;
+   const room=gameSession.currentRoom;
+  const roomLevel=room?level+' · '+room.name+' · FLOOR '+room.floor:level+(gameSession.roomLayout?' · FLOOR '+gameSession.cameraFloor:'');
+  if($('mapLevelDetails').textContent!==roomLevel)$('mapLevelDetails').textContent=roomLevel;
    if($('mapDetectionDetails').textContent!==status)$('mapDetectionDetails').textContent=status;
   }
  };

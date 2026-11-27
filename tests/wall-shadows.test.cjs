@@ -5,7 +5,7 @@ for(const shader of ['TERRAIN_WGSL','MODEL_WGSL','SPRITES_WGSL','geometryTerrain
  const source=vm.runInContext(shader,ctx);
  assert.equal((source.match(/var<storage,read> worldTiles:array<u32>/g)||[]).length,1);
  assert.match(source,/wallLightVisible\(p.xy,source.xy,size\)/);
- assert.match(source,/tile!=0u&&tile!=5u/);
+ assert.match(source,/solid!=0u&&solid!=5u/);
  assert.match(source,/i<24/);assert.match(source,/min\(nextCross.x,nextCross.y\)>=1.-.000001/);
 }
 // CPU translation of the bounded WGSL traversal; compare against independent

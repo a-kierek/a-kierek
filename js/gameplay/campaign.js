@@ -27,8 +27,8 @@ function collectObjectivePickup(item){
 }
 
 const interactionLabels={
- lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
- door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR'
+ push:'PUSH OBJECT',lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
+ secret:'CHECK LOOSE PANEL',door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR'
 };
 const REACTOR_HOLD_SECONDS=5.75;
 function needsInteractionHold(target){
@@ -121,6 +121,11 @@ function findInteractable(){
     if(item.taken||Math.hypot(item.x-x,item.y-y)>=1.1)continue;
     all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:'PICK UP '+(item.name||item.type).toUpperCase()});
   }
+  for(const prop of gameSession.props){
+   if(prop.pushable&&Math.hypot(prop.x-x,prop.y-y)<.95){
+    all.push({type:'push',ref:prop,x:prop.x,y:prop.y,title:'PUSH OBJECT'});
+   }
+  }
   for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
   const exit=gameSession.exitCell;
   if(gameSession.world[exit.y]?.[exit.x]===3&&
@@ -134,7 +139,7 @@ function findInteractable(){
     const gate=o.type==='door'||o.type==='lockedExit';
     const range=o.type==='pickup'?1.1:gate?1.65:1.4;
     return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<range&&
-      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:['slot','panel','repair'].includes(o.type)});
+      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor'||o.type==='secret'||o.type==='push'||!!o.ref?.attachment,allowTargetFurniture:['slot','panel','repair'].includes(o.type)});
   })||null;
 }
 
@@ -152,6 +157,7 @@ function interact(){
     if(toggleGraphicsDemoDoor())playDoorMovement(gameSession.safeRoom.open);
     return;
   }
+  if(target?.type==='push'){pushRoomProp(target.ref);return;}
   if(target?.type==='safeDoor'){safeRoomInteraction(target.ref);return;}
   if(target?.type==='slot'){slotMachineSpin(target.ref);return;}
   if(target?.type==='lockedExit'){
@@ -167,11 +173,20 @@ function interact(){
   }
   if(target.type==='unhide'){gameSession.player.hidden=false;showToast('YOU LEFT HIDING',1.6);return}
   if(target.type==='hide'){gameSession.player.hidden=true;gameSession.player.flash=false;showToast('HIDDEN · PRESS E TO LEAVE',2.5);return}
+  if(target.type==='secret'){
+    if(o.used)return;
+    o.used=true;o.gate.open=true;
+    gameSession.world[o.gate.y][o.gate.x]=0;
+    markWorldChanged();playDoorMovement(true);
+    showToast('SECRET PASSAGE OPEN',2.8);
+    return;
+  }
   if(target.type==='stairs'){
     // Stairwells only teleport after the power network connects the decks.
-    if(!gameSession.terminals.some(t=>t.id==='reactor2'&&t.used)){showToast('STAIRS LOCKED · REACTOR II OFFLINE',2.8);return}
+    if(!o.roomStairs&&!gameSession.terminals.some(t=>t.id==='reactor2'&&t.used)){showToast('STAIRS LOCKED · REACTOR II OFFLINE',2.8);return}
     if(gameSession.world[Math.floor(o.dest.y)]?.[Math.floor(o.dest.x)]!==0){showToast('UPPER FLOOR BLOCKED',2);return}
-    gameSession.player.x=o.dest.x;gameSession.player.y=o.dest.y;gameSession.cameraFloor=gameSession.player.y>40?2:1;
+    gameSession.player.x=o.dest.x;gameSession.player.y=o.dest.y;gameSession.cameraFloor=o.dest.floor??(gameSession.player.y>40?2:1);
+    gameSession.resetInterpolation();
     gameSession.flashUntil=gameSession.elapsed+.5;showToast('ACCESS TO SECTION '+(gameSession.cameraFloor===2?'B':'A'),2.5);playUnlock();return;
   }
   if(target.type==='door'){

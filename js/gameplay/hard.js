@@ -2,46 +2,11 @@
 // Server-independent: this mode is solo-only until the dormant CO-OP is reenabled.
 const HARD_VARIANTS=['red','green','yellow','gray','classic','pink'];
 function hardGenerateMap(runSeed,stage=1){
- seed=runSeed|0;gameSession.N=gameSession.level===13?customGameConfig.size:([0,65,73,81,89,97][stage]||65);
- gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
- const n=stage<3?5:6;const step=Math.floor((gameSession.N-14)/(n-1));const centers=Array.from({length:n},(_,i)=>7+i*step),edges=[];
- const carve=(x,y,w,h)=>{for(let yy=Math.max(1,y);yy<Math.min(gameSession.N-1,y+h);yy++)for(let xx=Math.max(1,x);xx<Math.min(gameSession.N-1,x+w);xx++)gameSession.world[yy][xx]=0};
- // Every room connects through a deterministic random spanning tree.
- for(const y of centers)for(const x of centers){const w=5+Math.floor(rnd()*5),h=5+Math.floor(rnd()*5);carve(x-(w>>1),y-(h>>1),w,h)}
- const visited=new Set(['0,0']),stack=[[0,0]],links=new Set();
- const edge=(a,b)=>[a.join(','),b.join(',')].sort().join('::');
- while(stack.length){
-   const [x,y]=stack.at(-1);
-   const options=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a,b])=>a>=0&&b>=0&&a<n&&b<n&&!visited.has(a+','+b));
-   if(!options.length){stack.pop();continue}
-   const next=options[Math.floor(rnd()*options.length)];links.add(edge([x,y],next));visited.add(next.join(','));stack.push(next);
- }
- for(let y=0;y<n;y++)for(let x=0;x<n;x++){
-   if(x<n-1&&(links.has(edge([x,y],[x+1,y]))||rnd()<.12))edges.push([x,y,x+1,y]);
-   if(y<n-1&&(links.has(edge([x,y],[x,y+1]))||rnd()<.12))edges.push([x,y,x,y+1]);
- }
- for(const [x,y,xx,yy] of edges){
-   const ax=centers[x],ay=centers[y],bx=centers[xx],by=centers[yy];
-   if(ax===bx)carve(ax-1,Math.min(ay,by),3,Math.abs(by-ay)+1);
-   else carve(Math.min(ax,bx),ay-1,Math.abs(bx-ax)+1,3);
- }
- // Side branches terminate in dead ends; do NOT disconnect the main graph.
- let branches=0;
- for(let i=0;i<1100&&branches<34;i++){
-   const x=3+Math.floor(rnd()*(gameSession.N-6)),y=3+Math.floor(rnd()*(gameSession.N-6));
-   if(gameSession.world[y][x]!==0)continue;
-   const dirs=[[1,0],[-1,0],[0,1],[0,-1]], [dx,dy]=dirs[Math.floor(rnd()*dirs.length)];
-   const sx=-dy,sy=dx,len=2+Math.floor(rnd()*5),path=[];
-   let valid=true;
-   for(let d=1;d<=len;d++){
-     const xx=x+dx*d,yy=y+dy*d;
-     // Each branch must have walls on both sides, guaranteeing a dead end.
-     if(xx<=2||yy<=2||xx>=gameSession.N-3||yy>=gameSession.N-3||gameSession.world[yy][xx]!==1||gameSession.world[yy+sy][xx+sx]!==1||gameSession.world[yy-sy][xx-sx]!==1){valid=false;break}
-     path.push([xx,yy]);
-   }
-   if(valid){for(const [xx,yy] of path)gameSession.world[yy][xx]=0;branches++;}
- }
- carve(5,5,5,5); // guaranteed starting room
+ seed=runSeed|0;
+ const size=gameSession.level===13?customGameConfig.size:[0,65,73,81,89,97][stage]||65;
+ const layout=startRoomLayout(size,runSeed);
+ const centers=roomCenters(7,size-8,stage<3?5:6);
+ buildRoomRegion(layout,stage,centers,centers);
 }
 
 // Keep the same enemy cast for each HARD campaign stage, but roll champion

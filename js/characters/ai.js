@@ -38,7 +38,7 @@ function randomPatrolPoint(g){
 }
 
 function addNoise(x,y,radius,type='urzadzenie'){
-  gameSession.noiseEvents.push({x,y,radius,expiry:gameSession.elapsed+2.4,type});gameSession.stats.noises++;
+  gameSession.noiseEvents.push({x,y,radius:radius*(ROOM_ACOUSTICS[roomAt(x,y)?.acoustic]??1),expiry:gameSession.elapsed+2.4,type});gameSession.stats.noises++;
   if(gameSession.noiseEvents.length>25)gameSession.noiseEvents.shift();
 }
 

@@ -1,9 +1,9 @@
-# THE CATROOMS v1.7 Alpha 1
+# THE CATROOMS v1.8 Beta
 
 ## Uruchomienie
 
-- **Offline** — otwórz plik `THE_CATROOMS_V1_7_ALPHA1.html` w aktualnym Chrome lub Edge z WebGPU. Plik zawiera grę i wszystkie potrzebne zasoby.
-- **Projekt** — rozpakuj cały katalog projektu. Uruchom `START_HOST_WINDOWS.bat`, `./START_HOST_MAC_LINUX.sh` lub `node server/server.js` i wejdź na `http://localhost:8765`. Endpoint `/health` zwraca wersję `1.7.0-alpha.1`.
+- **Offline** — otwórz plik `THE_CATROOMS_V1_8_BETA.html` w aktualnym Chrome lub Edge z WebGPU. Plik zawiera grę i wszystkie potrzebne zasoby.
+- **Projekt** — rozpakuj cały katalog projektu. Uruchom `START_HOST_WINDOWS.bat`, `./START_HOST_MAC_LINUX.sh` lub `node server/server.js` i wejdź na `http://localhost:8765`. Endpoint `/health` zwraca wersję `1.8.0-beta`.
 - Zapisy w przeglądarce zależą od ścieżki pliku offline lub adresu serwera. Aktualizacja projektu nie zmienia kluczy kampanii ani profilu.
 - Podnoś przedmioty klawiszem `E`. Reaktory wymagają przytrzymania `E` przez 5,75 sekundy.
 - Scrollem wybierasz slot ekwipunku, a prawym przyciskiem myszy używasz wybranego przedmiotu. Tarcza daje 12 sekund ochrony po użyciu. Na ekranie dotykowym użyj przycisku interakcji i stuknij w przedmiot w ekwipunku.
@@ -19,4 +19,4 @@
 
 W katalogu projektu uruchom `python tools/build_standalone.py`, aby odtworzyć paczkę skryptów i plik offline w katalogu nadrzędnym. Polecenie `python tools/check_release.py` wykonuje kompilację, testy regresji, kontrolę zasobów i test serwera. Opcje `--browser` i `--webgpu` uruchamiają odpowiednio test interfejsu z atrapą GPU i test renderera WebGPU w Chromium ze SwiftShaderem. Testy przeglądarkowe wymagają pakietu Playwright dla Pythona.
 
-Szczegóły zmian, ograniczenia i wyniki weryfikacji znajdują się w [notatkach wydania](docs/alpha1-release.md).
+Szczegóły projektu, zakres bety i lista brakujących assetów są w [notatkach Room System 2.0](docs/room-system-2-beta.md).

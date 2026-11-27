@@ -157,6 +157,8 @@ class GameSession {
   this.guardSight=0;
   this.guardNoise=0;
   this.world=[];
+  this.roomLayout=null;
+  this.currentRoom=null;
   this.fuses=[];
   this.exitCell={x:0,y:0};
   this.seen=[];
@@ -314,7 +316,7 @@ let tutorialCompleted=progressRead('catroomsTutorialDone')==='1',controlsHintsTo
 function rnd(){seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296}
 
 // Randomness used when generating seeded maps; ordinary campaign loot keeps its random rolls.
-function mapRandom(){return gameSession.level===5||gameSession.level===12||gameSession.level===13||isHardMode()?rnd():Math.random();}
+function mapRandom(){return gameSession.roomLayout?rnd():Math.random();}
 
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 
@@ -595,19 +597,540 @@ function lineOfSight(ax,ay,bx,by,options={}){
 }
 
 ;
-// SOURCE: js/maps/level1.js
-function buildMap(){gameSession.N=51;gameSession.GOAL=7;seed=19472;gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));let stack=[[1,1]];gameSession.world[1][1]=0;while(stack.length){let [x,y]=stack[stack.length-1];let steps=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>rnd()-.5);let next=steps.find(([dx,dy])=>{let nx=x+dx,ny=y+dy;return nx>0&&ny>0&&nx<gameSession.N-1&&ny<gameSession.N-1&&gameSession.world[ny][nx]===1});if(!next){stack.pop();continue}let [dx,dy]=next;gameSession.world[y+dy/2][x+dx/2]=0;gameSession.world[y+dy][x+dx]=0;stack.push([x+dx,y+dy])}
- for(let k=0;k<54;k++){let x=2+Math.floor(rnd()*(gameSession.N-7)),y=2+Math.floor(rnd()*(gameSession.N-7)),rw=2+Math.floor(rnd()*5),rh=2+Math.floor(rnd()*5);for(let j=y;j<Math.min(gameSession.N-1,y+rh);j++)for(let i=x;i<Math.min(gameSession.N-1,x+rw);i++)gameSession.world[j][i]=0}
- for(let k=0;k<120;k++){let x=2+Math.floor(rnd()*(gameSession.N-4)),y=2+Math.floor(rnd()*(gameSession.N-4));if(gameSession.world[y][x]===1&&((gameSession.world[y][x-1]===0&&gameSession.world[y][x+1]===0)||(gameSession.world[y-1][x]===0&&gameSession.world[y+1][x]===0)))gameSession.world[y][x]=0}
- for(let y=1;y<5;y++)for(let x=1;x<5;x++)gameSession.world[y][x]=0;
- let dist=bfsDistances(2,2),max=-1,far={x:gameSession.N-4,y:gameSession.N-4};for(let y=1;y<gameSession.N-1;y++)for(let x=1;x<gameSession.N-1;x++){if(gameSession.world[y][x]===0&&dist[y][x]>max){max=dist[y][x];far={x,y}}}gameSession.exitCell=far;gameSession.world[far.y][far.x]=3;
- let candidates=[];for(let y=1;y<gameSession.N-1;y++)for(let x=1;x<gameSession.N-1;x++)if(gameSession.world[y][x]===0&&dist[y][x]>12){candidates.push({x,y,d:dist[y][x]})}candidates.sort((a,b)=>b.d-a.d);gameSession.fuses=[];
- for(let s=0;s<gameSession.GOAL;s++){let possible=candidates.filter(c=>gameSession.fuses.every(f=>Math.hypot(c.x-f.x,c.y-f.y)>9)&&Math.hypot(c.x-2,c.y-2)>11);if(!possible.length)possible=candidates.filter(c=>gameSession.fuses.every(f=>Math.hypot(c.x-f.x,c.y-f.y)>6));let idx=Math.min(possible.length-1,Math.floor(possible.length*(.05+s*.12+rnd()*.08)));let p=possible[Math.max(0,idx)];gameSession.fuses.push({x:p.x+.5,y:p.y+.5,taken:false,phase:rnd()*TAU})}
- scatterEnvironmentalProps(18,8,gameSession.fuses);
- gameSession.seen=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(false));
+// SOURCE: js/maps/room-templates.js
+// All templates use the existing material and model libraries. Each list is
+// ordered from entrance-side rooms through the sector's deeper areas.
+const ROOM_TEMPLATES = Object.freeze({
+ reception:['Reception',['OFFICE','STANDARD'],[5,8],[5,8],['rectangle'],['desk','yellowClock'],'fluorescent','carpet'],
+ office:['Abandoned Office',['OFFICE','STANDARD'],[5,8],[5,9],['rectangle','l'],['desk','cabinet','yellowClock'],'fluorescent','carpet'],
+ conference:['Conference Room',['OFFICE','LANDMARK'],[7,10],[6,10],['rectangle','t'],['desk','yellowClock'],'fluorescent','carpet'],
+ empty:['Empty Hall',['STANDARD','LANDMARK'],[8,12],[7,11],['rectangle','oval','courtyard'],[],'dim','hall'],
+ archive:['Records Storage',['STORAGE','OFFICE'],[5,8],[5,8],['rectangle','l'],['cabinet','box'],'dim','carpet'],
+ service:['Service Room',['TECHNICAL','STORAGE'],[5,8],[5,8],['rectangle','l'],['box','cabinet'],'flicker','hard'],
+ intake:['Flooded Intake',['INDUSTRIAL','STANDARD'],[7,11],[6,9],['rectangle','l','polygon'],['bench','lifebuoy','pipe'],'cold','tile'],
+ pump:['Pump Station',['TECHNICAL','INDUSTRIAL','OBJECTIVE'],[7,11],[6,10],['rectangle','t'],['pump','pipe','lifebuoy'],'cold','tile'],
+ reservoir:['Reservoir Walkway',['HAZARD','INDUSTRIAL','LANDMARK'],[8,11],[7,11],['rectangle','u','oval'],['pipe','lifebuoy'],'dim','hall'],
+ filtration:['Filtration Room',['TECHNICAL','SANITARY'],[5,8],[6,9],['rectangle','l'],['pipe','pump'],'flicker','tile'],
+ reactor:['Reactor Hall',['INDUSTRIAL','LANDMARK','OBJECTIVE'],[7,12],[7,11],['rectangle','polygon','t'],['barrel','metalTable'],'emergency','hall'],
+ workshop:['Maintenance Workshop',['TECHNICAL','INDUSTRIAL'],[6,9],[5,9],['rectangle','l'],['metalTable','barrel'],'flicker','hard'],
+ containment:['Containment Bay',['HAZARD','INDUSTRIAL'],[6,10],[6,9],['rectangle','u'],['barrel'],'emergency','hard'],
+ cargo:['Cargo Store',['STORAGE','INDUSTRIAL'],[7,11],[6,10],['rectangle','t'],['barrel','metalTable'],'dim','hall'],
+ checkpoint:['Security Checkpoint',['TECHNICAL','LANDMARK'],[5,8],[5,8],['rectangle','l'],['camera','crt'],'flicker','hard'],
+ serviceHall:['Service Hall',['STANDARD','LANDMARK'],[7,11],[6,9],['rectangle','u'],['camera'],'dim','hall'],
+ shop:['Abandoned Store',['COMMERCIAL','STANDARD'],[6,10],[6,10],['rectangle','l','t'],['mannequin','lastClock'],'cold','hard'],
+ residence:['Empty Apartment',['RESIDENTIAL','STANDARD'],[5,8],[6,8],['rectangle','l'],['desk','lastClock'],'dim','carpet'],
+ clinic:['Abandoned Clinic',['MEDICAL','STANDARD'],[5,9],[6,9],['rectangle','l'],['metalTable','cabinet'],'cold','tile'],
+ anomaly:['Distorted Gallery',['ANOMALOUS','LANDMARK'],[7,11],[6,10],['oval','polygon','courtyard'],['mannequin','lastClock'],'flicker','hall'],
+ secret:['Hidden Stockroom',['SECRET','STORAGE'],[5,7],[5,7],['rectangle','l'],['box','cabinet'],'dim','carpet'],
+ safe:['Safe Room',['SAFE'],[5,11],[5,11],['rectangle'],[],'fluorescent','carpet'],
+ transition:['Sector Transfer',['TRANSITION'],[5,8],[5,8],['rectangle'],[],'emergency','hard']
+});
+const ROOM_SECTORS = {
+ 1:[['Office',['reception','office','conference']],['Storage',['archive','office','empty']],['Service',['service','archive','empty']]],
+ 2:[['Intake',['intake','filtration']],['Drainage',['pump','intake']],['Reservoir',['reservoir','filtration','pump']]],
+ 3:[['Maintenance',['workshop','cargo']],['Power',['reactor','workshop']],['Containment',['containment','reactor','cargo']]],
+ 4:[['Security',['checkpoint','serviceHall']],['Service',['serviceHall','checkpoint']],['Storage',['cargo','checkpoint']]],
+ 5:[['Retail',['shop','residence']],['Abandoned',['clinic','residence','shop']],['Anomaly',['anomaly','shop']]]
+};
+const ROOM_LIGHTS = {fluorescent:0,dim:1,cold:2,emergency:3,flicker:4,dark:5};
+const ROOM_ACOUSTICS = {carpet:.78,hard:1,tile:1.12,hall:1.18};
+
+;
+// SOURCE: js/maps/room-system.js
+// Design the sector with rooms first. The tile grid remains the authoritative
+// collision map for movement, ray casts, physics and the offline renderer.
+const ROOM_DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+
+function roomRandom(initialSeed){
+ let state=initialSeed|0;
+ return ()=>{
+  state=(state+0x6d2b79f5)|0;
+  let n=Math.imul(state^(state>>>15),state|1);
+  n^=n+Math.imul(n^(n>>>7),n|61);
+  return ((n^(n>>>14))>>>0)/4294967296;
+ };
 }
 
-function resetBase(){if(gameSession.level===2){resetLevel2();return}document.body.classList.remove("level2");gameSession.GOAL=7;gameSession.guards=[];gameSession.terminals=[];gameSession.props=[];gameSession.doors=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.crouching=false;buildMap();gameSession.player={x:2.5,y:2.5,a:.6,stamina:isHardMode()?150:100,maxStamina:isHardMode()?150:100,collected:0,moving:false,flash:true,hp:100,maxHp:100};let distances=bfsDistances(2,2),opts=[];for(let y=1;y<gameSession.N-1;y++)for(let x=1;x<gameSession.N-1;x++)if(distances[y][x]>35&&gameSession.world[y][x]===0)opts.push({x,y,d:distances[y][x]});opts.sort((a,b)=>b.d-a.d);let cp=opts[Math.floor(opts.length*.15)]||{x:30,y:30};gameSession.cat=makeGuard(cp.x+.5,cp.y+.5,"cat");gameSession.elapsed=0;gameSession.clock=0;gameSession.awake=false;gameSession.wakeAt=Infinity;gameSession.catPath=[];gameSession.pathTimer=0;gameSession.walkPhase=0;gameSession.nearCat=0;gameSession.alertUntil=0;gameSession.toastTimeout=0;gameSession.flashUntil=0;gameSession.mapOn=false;UI.map.classList.remove('visible');UI.count.textContent='0';$('required').textContent=String(gameSession.GOAL);setUIIcon(document.querySelector('.chip .gem'),'battery');$('levelLabel').textContent='LEVEL 1 / YELLOW CORRIDORS';UI.goal.textContent='TUTORIAL · FIND 7 BATTERIES';UI.clock.textContent='00:00';UI.stamina.style.width=staminaWidth();UI.danger.style.opacity=0;UI.toast.classList.remove('visible');$('stealthStatus').textContent='● UNDETECTED';$('interactHint').style.display='none';primeHealth();setupLevel1Tutorial();updateSeen();updateTutorialVisibility()}
+function startRoomLayout(size,runSeed){
+ gameSession.N=size;
+ gameSession.world=Array.from({length:size},()=>Array(size).fill(1));
+ gameSession.roomLayout={seed:runSeed>>>0,rooms:[],connections:[],zones:[],floorCount:1,revision:0};
+ return gameSession.roomLayout;
+}
+
+function roomCenters(first,last,count){
+ return Array.from({length:count},(_,i)=>Math.round(first+(last-first)*i/(count-1)));
+}
+
+function openRoomCell(x,y){
+ if(x>0&&y>0&&x<gameSession.N-1&&y<gameSession.N-1)gameSession.world[y][x]=0;
+}
+
+function roomShapeCell(shape,x,y,xRadius,yRadius){
+ const dx=x/xRadius,dy=y/yRadius;
+ if(shape==='l')return !(dx>.35&&dy>.35);
+ if(shape==='t')return dy<-.24||Math.abs(dx)<.55||Math.abs(dy)<.16;
+ if(shape==='u')return !(Math.abs(dx)<.54&&dy>.28);
+ if(shape==='oval')return dx*dx+dy*dy<=1;
+ if(shape==='polygon')return Math.abs(dx)+Math.abs(dy)<=1.5;
+ if(shape==='courtyard')return !(Math.abs(x)===2&&Math.abs(y)===2);
+ return true;
+}
+
+function createRoom(layout,options,random){
+ const {sector,zone,template,x,y,maxW,maxH,floor=1,rectangular=false}=options;
+ const [name,categories,widths,lengths,shapes,decor,lighting,acoustic]=ROOM_TEMPLATES[template];
+ const dimension=([min,max],cap)=>{
+  const length=Math.min(cap,min+Math.floor(random()*(max-min+1)));
+  return Math.max(5,length%2?length:length-1);
+ };
+ const w=dimension(widths,maxW),h=dimension(lengths,maxH);
+ const xr=w>>1,yr=h>>1,rotation=Math.floor(random()*4);
+ const shape=rectangular?'rectangle':shapes[Math.floor(random()*shapes.length)];
+ const id=layout.rooms.length+1;
+ const room={
+  id,template,name,categories,sector,zone:zone.id,floor,rotation:rotation*90,
+  seed:Math.floor(random()*4294967296),x,y,w,h,shape,decor,lighting,acoustic,
+  height:rectangular?2:Math.floor(random()*5),condition:random()<.27?'damaged':sector===2?'damp':'abandoned',
+  links:[],objects:[],visited:false,powered:true
+ };
+ for(let dy=-yr;dy<=yr;dy++)for(let dx=-xr;dx<=xr;dx++){
+  // Continuous centre lanes keep all registered connectors inside this room,
+  // even when the corners use a cut-out or rotated template.
+  const axes=rotation%2?[dy,dx,yr,xr]:[dx,dy,xr,yr];
+  if(rotation>=2){axes[0]*=-1;axes[1]*=-1;}
+  if(Math.abs(dx)<=1||Math.abs(dy)<=1||roomShapeCell(shape,...axes))openRoomCell(x+dx,y+dy);
+ }
+ if(['empty','reactor','reservoir','conference'].includes(template)&&w>=9&&h>=7){
+  for(const side of [-1,1]){
+   const col=x+side*3,row=y-2;
+   if(gameSession.world[row]?.[col]===0)gameSession.world[row][col]=1;
+  }
+ }
+ layout.rooms.push(room);
+ zone.rooms.push(id);
+ return room;
+}
+
+function connectRooms(layout,a,b,kind,width=3){
+ const horizontal=a.y===b.y;
+ const sign=horizontal?Math.sign(b.x-a.x):Math.sign(b.y-a.y);
+ const point=(room,step)=>({
+  x:room.x+(horizontal?step*(room.w>>1):0),
+  y:room.y+(horizontal?0:step*(room.h>>1)),
+  direction:horizontal?[step,0]:[0,step],width,height:Math.min(1,ROOM_CEILING_HEIGHTS[a.height],ROOM_CEILING_HEIGHTS[b.height]),type:'corridor'
+ });
+ const from=point(a,sign),to=point(b,-sign);
+ for(let x=Math.min(from.x,to.x);x<=Math.max(from.x,to.x);x++)
+  for(let y=Math.min(from.y,to.y);y<=Math.max(from.y,to.y);y++)
+   for(let lane=0;lane<width;lane++)openRoomCell(x+(horizontal?0:lane-Math.floor(width/2)),y+(horizontal?lane-Math.floor(width/2):0));
+ const edge={id:layout.connections.length+1,a:a.id,b:b.id,kind,type:'corridor',from,to};
+ layout.connections.push(edge);
+ a.links.push(edge.id);
+ b.links.push(edge.id);
+}
+
+function buildRoomRegion(layout,sector,xs,ys,{campaign=false}={}){
+ const random=roomRandom(layout.seed^Math.imul(sector,0x9e3779b9));
+ const definitions=ROOM_SECTORS[sector]??ROOM_SECTORS[5];
+ const zones=definitions.map(([name,library],index)=>{
+  const zone={id:sector+'-'+index,sector,name,rooms:[],library};
+  layout.zones.push(zone);
+  return zone;
+ });
+ const spacing=centers=>Math.min(...centers.slice(1).map((c,i)=>c-centers[i]));
+ const maxW=Math.min(spacing(xs)-2,2*Math.min(xs[0]-1,gameSession.N-2-xs.at(-1))+1);
+ const maxH=Math.min(spacing(ys)-2,2*Math.min(ys[0]-1,gameSession.N-2-ys.at(-1))+1);
+ const rooms=ys.map((y,row)=>xs.map((x,col)=>{
+  const zone=zones[Math.floor(row*zones.length/ys.length)];
+  const template=col===0&&row===0?zone.library[0]:
+   zone.library[Math.floor(random()*zone.library.length)];
+  return createRoom(layout,{sector,zone,x,y,template,maxW,maxH,rectangular:campaign&&row%2===0&&col%2===0},random);
+ }));
+ const all=rooms.flat();
+ const options=[];
+ for(let row=0;row<ys.length;row++)for(let col=0;col<xs.length;col++){
+  if(col+1<xs.length)options.push([rooms[row][col],rooms[row][col+1],campaign&&row%2===0]);
+  if(row+1<ys.length)options.push([rooms[row][col],rooms[row+1][col],campaign&&col%2===0]);
+ }
+ // Build a spanning tree, then add cross-connections for alternate routes.
+ // Campaign anchor rows/columns also carry the authored objective gates.
+ const parents=Object.fromEntries(all.map(room=>[room.id,room.id]));
+ function root(id){while(id!==parents[id])id=parents[id];return id;}
+ const remaining=[];
+ const ordered=options.map(option=>({option,order:random()})).sort((a,b)=>a.order-b.order);
+ for(const {option:[a,b,required]} of ordered){
+  const u=root(a.id),v=root(b.id);
+  if(u!==v||required){
+   connectRooms(layout,a,b,'main');
+   parents[v]=u;
+  }else remaining.push([a,b]);
+ }
+ for(const [a,b] of remaining)if(random()<.55)connectRooms(layout,a,b,'alternate');
+ return rooms;
+}
+
+function chooseRoomExit(cells,x,y){
+ const candidates=cells.slice().sort((a,b)=>b.d-a.d);
+ for(const cell of candidates){
+  gameSession.world[cell.y][cell.x]=3;
+  const distances=bfsDistances(x,y);
+  gameSession.world[cell.y][cell.x]=0;
+  if(cells.every(c=>c===cell||distances[c.y][c.x]>=0))return cell;
+ }
+ throw Error('The room layout has no reachable exit');
+}
+
+;
+// SOURCE: js/maps/room-runtime.js
+// Room identity and links are retained after generation. Tiles describe
+// physical clearance, while the graph describes room access and dependencies.
+function roomAt(x,y,scene=gameSession){
+ const layout=scene.roomLayout;
+ const col=Math.floor(x),row=Math.floor(y);
+ if(!layout?.cells||!Number.isInteger(col)||!Number.isInteger(row)||
+    col<0||row<0||col>=scene.N||row>=scene.N)return null;
+ return layout.rooms[layout.cells[row*scene.N+col]-1]??null;
+}
+
+function attachRoomLink(layout,a,b,type,kind,from,to,gate=null){
+ const edge={id:layout.connections.length+1,a:a.id,b:b.id,type,kind,from,to};
+ if(gate)edge.gate=gate;
+ layout.connections.push(edge);
+ a.links.push(edge.id);
+ b.links.push(edge.id);
+ return edge;
+}
+
+function nearestLayoutRoom(layout,x,y,eligible=()=>true){
+ let nearest=null,best=Infinity;
+ for(const room of layout.rooms){
+  if(!eligible(room))continue;
+  const distance=Math.abs(x-room.x)+Math.abs(y-room.y);
+  if(distance<best){nearest=room;best=distance;}
+ }
+ return nearest;
+}
+
+function addRoomDeck(){
+ const s=gameSession,layout=s.roomLayout;
+ if(!layout||![2,3,7,8].includes(s.level)||s.N+9>127)return;
+ const occupied=[...s.fuses,...s.terminals,...s.bonusItems,...s.interactables,
+  ...s.emergencyReactors,...s.guards,s.player];
+ const sx=Math.floor(s.player.x),sy=Math.floor(s.player.y);
+ const distances=bfsDistances(sx,sy);
+ const eligible=layout.rooms.filter(room=>distances[room.y]?.[room.x]>12&&
+  s.world[room.y][room.x]===0&&occupied.every(o=>Math.hypot(o.x-room.x-.5,o.y-room.y-.5)>2));
+ const parent=eligible[Math.floor(eligible.length/2)];
+ if(!parent)return;
+
+ const oldSize=s.N;
+ s.N+=9;
+ for(const row of s.world)row.push(...Array(9).fill(1));
+ for(let i=oldSize;i<s.N;i++)s.world.push(Array(s.N).fill(1));
+ s.seen=Array.from({length:s.N},(_,y)=>Array.from({length:s.N},(_,x)=>s.seen[y]?.[x]||false));
+ const floor=2,sector=parent.sector;
+ const zone={id:sector+'-deck',sector,name:'Maintenance Deck',rooms:[]};
+ layout.zones.push(zone);
+ const random=roomRandom(layout.seed^0x3e312e01);
+ const col=oldSize+3;
+ const deck=createRoom(layout,{sector,zone,template:sector===2?'filtration':'workshop',
+  x:col,y:12,maxW:5,maxH:7,floor,rectangular:true},random);
+ const secret=createRoom(layout,{sector,zone,template:'secret',
+  x:col,y:23,maxW:5,maxH:5,floor,rectangular:true},random);
+ connectRooms(layout,deck,secret,'secret',1);
+ const passage=layout.connections.at(-1);
+ const gx=col,gy=18;
+ const seal={x:gx,y:gy,open:false};
+ passage.type='hidden_passage';
+ passage.gate=seal;
+ s.world[gy][gx]=1;
+ s.interactables.push({id:'room-secret',type:'secret',x:gx+.5,y:gy+.5,
+  title:'CHECK THE LOOSE PANEL',gate:seal,used:false});
+ const ground={x:parent.x+.5,y:parent.y+.5};
+ const upper={x:deck.x+.5,y:deck.y+.5};
+ for(const [id,from,to,level] of [['room-stairs-up',ground,upper,2],['room-stairs-down',upper,ground,1]]){
+  s.interactables.push({id,type:'stairs',title:level===2?'MAINTENANCE DECK':'GROUND FLOOR',
+   ...from,dest:{...to,floor:level},roomStairs:true,used:false});
+ }
+ attachRoomLink(layout,parent,deck,'stairs','exploration',ground,upper);
+ s.bonusItems.push({id:'room-secret-shield',type:'shield',name:'SHIELD',x:secret.x+.5,y:secret.y+.5,
+  quantity:1,taken:false,phase:random()*Math.PI*2});
+ layout.floorCount=2;
+}
+
+function registerSafeRoom(layout,safe){
+ const sector=safe.rushSector||renderStage();
+ const zone={id:'safe-'+sector,sector,name:'Safe Room',rooms:[]};
+ layout.zones.push(zone);
+ const parent=nearestLayoutRoom(layout,safe.doorX,safe.doorY,room=>room.sector===sector&&room.floor===1);
+ const id=layout.rooms.length+1;
+ const room={id,template:'safe',name:'Safe Room',categories:ROOM_TEMPLATES.safe[1],sector,
+  zone:zone.id,floor:1,rotation:0,seed:layout.seed^id,x:Math.floor(safe.centerX),y:Math.floor(safe.centerY),
+  w:safe.side-2,h:safe.side-2,shape:'rectangle',decor:[],lighting:'fluorescent',
+  acoustic:'carpet',height:0,condition:'protected',links:[],objects:[],visited:false,powered:true};
+ layout.rooms.push(room);zone.rooms.push(id);
+ if(parent)attachRoomLink(layout,parent,room,'safe_door','exploration',
+  {x:safe.doorX,y:safe.doorY},{x:room.x,y:room.y},safe);
+}
+
+function registerRoomGate(layout,gate){
+ if(gate.bossGate){
+  const left=bossRushArea(gate.x),right=left+1;
+  const a=nearestLayoutRoom(layout,gate.x,gate.y,r=>r.sector===left);
+  const b=nearestLayoutRoom(layout,gate.x,gate.y,r=>r.sector===right);
+  if(a&&b)attachRoomLink(layout,a,b,'sector_gate','locked',{x:gate.x-1,y:gate.y},{x:gate.x+1,y:gate.y},gate);
+  return;
+ }
+ for(const edge of layout.connections){
+  if(edge.type!=='corridor')continue;
+  const {from,to}=edge;
+  if(gate.x>=Math.min(from.x,to.x)&&gate.x<=Math.max(from.x,to.x)&&
+     gate.y>=Math.min(from.y,to.y)&&gate.y<=Math.max(from.y,to.y)){
+   edge.type='locked_door';edge.kind='locked';edge.gate=gate;
+   return;
+  }
+ }
+}
+
+function indexRoomLayout(){
+ const s=gameSession,layout=s.roomLayout;
+ if(!layout)return;
+ layout.cells=new Uint16Array(s.N*s.N);
+ layout.fields=new Uint32Array(s.N*s.N);
+ for(const room of layout.rooms){
+  const xRadius=room.w>>1,yRadius=room.h>>1;
+  for(let y=room.y-yRadius;y<=room.y+yRadius;y++)for(let x=room.x-xRadius;x<=room.x+xRadius;x++){
+   if(![0,3,4,5].includes(s.world[y]?.[x]))continue;
+   const index=y*s.N+x;
+   layout.cells[index]=room.id;
+   const condition=room.condition==='damp'?1:room.condition==='damaged'?2:0;
+   layout.fields[index]=(room.height<<9)|(ROOM_LIGHTS[room.lighting]<<12)|(condition<<15);
+  }
+ }
+ // Modelled doors and stair landings need a full-height frame.
+ for(const object of [...s.doors,...s.interactables.filter(o=>o.type==='stairs')]){
+  const x=Math.floor(object.x),y=Math.floor(object.y);
+  if(y>=0&&x>=0&&x<s.N&&y<s.N)layout.fields[y*s.N+x]&=~(7<<9);
+ }
+ layout.revision++;
+}
+
+function prepareRoomLayout(){
+ const s=gameSession,layout=s.roomLayout;
+ if(!layout)return;
+ for(const safe of bossRushRooms())registerSafeRoom(layout,safe);
+ addRoomDeck();
+ for(const gate of s.doors)registerRoomGate(layout,gate);
+ const control=s.terminals.find(t=>['power','reactor1','sector5-generator','hard-panel-0'].includes(t.id));
+ layout.systems={power:{control,active:!control}};
+ layout.sectors=[...new Set(layout.rooms.map(room=>room.sector))].map(id=>{
+  const rooms=layout.rooms.filter(room=>room.sector===id);
+  return {id,zones:layout.zones.filter(zone=>zone.sector===id).map(zone=>zone.id),
+   floors:[...new Set(rooms.map(room=>room.floor))].map(number=>({
+    number,rooms:rooms.filter(room=>room.floor===number).map(room=>room.id)
+   }))};
+ });
+ indexRoomLayout();
+}
+
+function validateRoomLayout(scene=gameSession){
+ const layout=scene.roomLayout;
+ const missing=[];
+ if(!layout?.rooms.length)return ['Missing room layout'];
+ const linked=new Set([1]),queue=[1];
+ for(let i=0;i<queue.length;i++){
+  for(const id of layout.rooms[queue[i]-1].links){
+   const edge=layout.connections[id-1];
+   const next=edge.a===queue[i]?edge.b:edge.a;
+   if(!linked.has(next)){linked.add(next);queue.push(next);}
+  }
+ }
+ if(linked.size!==layout.rooms.length)missing.push('Disconnected room graph');
+ const size=scene.N;
+ const seen=new Uint8Array(size*size);
+ const pending=new Int32Array(size*size);
+ const stairs=new Map(scene.interactables.filter(o=>o.type==='stairs'&&o.roomStairs)
+  .map(o=>[Math.floor(o.y)*size+Math.floor(o.x),o.dest]));
+ const gates=new Map(scene.doors.map(o=>[o.y*size+o.x,o]));
+ const permits=new Set(),items=new Set(),panels=new Set(),keys=new Set();
+ const reach=(x,y)=>x>=0&&y>=0&&x<size&&y<size&&seen[y*size+x]!==0;
+ const adjacent=(x,y)=>ROOM_DIRS.some(([dx,dy])=>reach(x+dx,y+dy));
+ const reachable=object=>reach(Math.floor(object.x),Math.floor(object.y));
+ const visit=(x,y)=>{
+  if(x<0||y<0||x>=size||y>=size)return;
+  const index=y*size+x,tile=scene.world[y][x];
+  if(seen[index]||(![0,5].includes(tile)&&!permits.has(index)))return;
+  seen[index]=1;pending[tail++]=index;
+ };
+ let tail=0,head=0;
+ visit(Math.floor(scene.player.x),Math.floor(scene.player.y));
+ while(true){
+  for(;head<tail;head++){
+   const index=pending[head],x=index%size,y=Math.floor(index/size);
+   for(const [dx,dy] of ROOM_DIRS)visit(x+dx,y+dy);
+   const destination=stairs.get(index);
+   if(destination)visit(Math.floor(destination.x),Math.floor(destination.y));
+  }
+  for(const item of scene.fuses)if(reachable(item))items.add(item);
+  for(const item of scene.bonusItems)if(item.type==='key'&&reachable(item))keys.add(item.id);
+  for(const object of scene.terminals){
+   if(reachable(object)&&(scene.level!==3||object.order<=panels.size+1))panels.add(object);
+  }
+  const before=tail;
+  for(const [index,gate] of gates){
+   if(permits.has(index)||!adjacent(gate.x,gate.y))continue;
+   const req=gate.requires||{};
+   if(gate.bossGate){
+    const sector=bossRushArea(gate.x);
+    if(scene.fuses.some(o=>o.rushSector===sector&&!items.has(o))||
+       scene.terminals.some(o=>o.rushSector===sector&&!panels.has(o)))continue;
+   }
+   if((req.cards??0)>items.size||(req.panels??0)>panels.size||
+      (req.key&&!keys.has(req.key))||(req.item&&![...items].some(o=>o.id===req.item))||
+      (req.panel&&![...panels].some(o=>o.id===req.panel)))continue;
+   permits.add(index);visit(gate.x,gate.y);
+  }
+  if(tail===before)break;
+ }
+ for(const item of [...scene.fuses,...scene.terminals]){
+  if(!reachable(item))missing.push('Unreachable objective '+(item.id||item.x+','+item.y));
+ }
+ if(!adjacent(scene.exitCell.x,scene.exitCell.y))missing.push('Unreachable sector exit');
+ return missing;
+}
+
+function finishRoomLayout(){
+ const s=gameSession,layout=s.roomLayout;
+ if(!layout)return;
+ indexRoomLayout();
+ furnishRoomSurfaces(s);
+ for(const object of [...s.props,...s.fuses,...s.terminals,...s.bonusItems,...s.interactables,...s.emergencyReactors]){
+  const room=roomAt(object.x,object.y);
+  if(room)room.objects.push(object);
+ }
+ for(const object of s.interactables){
+  if(!object.roomStairs)continue;
+  const room=roomAt(object.x,object.y),destination=roomAt(object.dest.x,object.dest.y);
+  if(room&&destination)object.title=destination.name;
+ }
+ layout.issues=validateRoomLayout(s);
+ if(layout.issues.length)throw Error(layout.issues.join('; '));
+}
+
+function updateRoomEnvironment(){
+ const s=gameSession,layout=s.roomLayout;
+ if(!layout)return;
+ const room=roomAt(s.player.x,s.player.y);
+ let started=false;
+ if(room&&s.currentRoom!==room){
+  s.cameraFloor=room.floor;
+  if(!room.visited&&room.categories.includes('ANOMALOUS')){
+   room.event='lighting-failure';room.eventUntil=s.elapsed+4;
+   started=true;
+  }
+  room.visited=true;
+ }
+ s.currentRoom=room;
+ const outage=s.hardEmergency?roomAt(s.hardEmergency.x,s.hardEmergency.y)?.zone:null;
+ const mains=layout.systems.power.control?.used??true;
+ if(!started&&layout.outage===outage&&layout.mains===mains&&s.elapsed<(layout.nextRoomEvent??Infinity))return;
+ layout.outage=outage;
+ layout.mains=mains;
+ layout.systems.power.active=mains;
+ layout.nextRoomEvent=Infinity;
+ let changed=false;
+ for(const candidate of layout.rooms){
+  const active=candidate.event==='lighting-failure'&&s.elapsed<candidate.eventUntil;
+  if(active)layout.nextRoomEvent=Math.min(layout.nextRoomEvent,candidate.eventUntil);
+  else candidate.event=null;
+  const powered=!active&&candidate.zone!==outage&&(mains||!candidate.categories.includes('TECHNICAL'));
+  const light=powered?ROOM_LIGHTS[candidate.lighting]:active?ROOM_LIGHTS.dark:ROOM_LIGHTS.emergency;
+  if(light!==candidate.light){candidate.light=light;changed=true;}
+  candidate.powered=powered;
+ }
+ if(!changed)return;
+ for(let index=0;index<layout.cells.length;index++){
+  const target=layout.rooms[layout.cells[index]-1];
+  if(target)layout.fields[index]=(layout.fields[index]&~(7<<12))|(target.light<<12);
+ }
+ layout.revision++;
+}
+
+const ROOM_OBJECTS={
+ box:{type:'PHYSICS',pushable:true,surface:true},
+ barrel:{type:'PHYSICS',pushable:true},desk:{type:'STATIC',surface:true},
+ metalTable:{type:'STATIC',surface:true},pump:{type:'SYSTEM'},pipe:{type:'SYSTEM'},
+ cabinet:{type:'STATIC'},camera:{type:'DECORATIVE'},mannequin:{type:'ANOMALOUS'}
+};
+
+function furnishRoomSurfaces(scene){
+ const random=roomRandom(scene.roomLayout.seed^0x56c3ec41);
+ let total=0;
+ for(const prop of scene.props){
+  if(prop.type!=='decor')continue;
+  const rules=ROOM_OBJECTS[prop.model];
+  prop.objectType=rules?.type??'DECORATIVE';
+  prop.pushable=!!rules?.pushable;
+  if(total>=2||!rules?.surface||prop.tilt||random()>.38)continue;
+  const height=DECOR_MODELS[prop.model].height*prop.size;
+  const item={id:'room-surface-'+total,type:'stamina',name:'ENERGY DRINK',
+   x:prop.x,y:prop.y,z:height,phase:random()*Math.PI*2,taken:false,quantity:1,attachment:true};
+  prop.attachments=[item];
+  scene.bonusItems.push(item);
+  total++;
+ }
+}
+
+function pushRoomProp(prop){
+ const s=gameSession,p=s.player;
+ const dx=prop.x-p.x,dy=prop.y-p.y;
+ const x=prop.cellX+(Math.abs(dx)>=Math.abs(dy)?Math.sign(dx):0);
+ const y=prop.cellY+(Math.abs(dx)<Math.abs(dy)?Math.sign(dy):0);
+ const occupied=[s.player,...s.guards,...s.fuses,...s.terminals,...s.interactables,...s.emergencyReactors,...s.bonusItems];
+ if((x===prop.cellX&&y===prop.cellY)||!decorFloorAllowed(s.world,x,y,true)||
+    occupied.some(o=>!o.attachment&&!o.taken&&Math.hypot(o.x-x-.5,o.y-y-.5)<1.0)){
+  showToast('OBJECT BLOCKED',1.35);return false;
+ }
+ const original=roomAt(prop.x,prop.y);
+ const shiftX=x-prop.cellX,shiftY=y-prop.cellY;
+ s.world[prop.cellY][prop.cellX]=0;
+ s.world[y][x]=5;
+ prop.x+=shiftX;prop.y+=shiftY;prop.cellX=x;prop.cellY=y;
+ const destination=roomAt(prop.x,prop.y);
+ for(const item of [prop,...(prop.attachments||[])]){
+  if(item!==prop){item.x+=shiftX;item.y+=shiftY;}
+  if(original!==destination){
+   if(original)original.objects=original.objects.filter(o=>o!==item);
+   if(destination)destination.objects.push(item);
+  }
+ }
+ markWorldChanged();addNoise(prop.x,prop.y,6,'furniture');
+ return true;
+}
+
+;
+// SOURCE: js/maps/level1.js
+function buildMap(){
+ seed=19472;
+ const layout=startRoomLayout(51,seed);
+ const centers=roomCenters(3,47,5);
+ buildRoomRegion(layout,1,centers,centers);
+ const candidates=dungeonEmptyCells(2,2);
+ const exit=chooseRoomExit(candidates,2,2);
+ gameSession.exitCell={x:exit.x,y:exit.y};
+ const available=candidates.filter(p=>p!==exit);
+ const objectives=chooseFarCells(available,gameSession.GOAL,8,[{x:2,y:2},exit]);
+ for(let i=0;i<objectives.length;i++){
+  const {x,y}=objectives[i];
+  gameSession.fuses.push({x:x+.5,y:y+.5,taken:false,phase:rnd()*TAU});
+ }
+ gameSession.world[exit.y][exit.x]=3;
+ scatterEnvironmentalProps(18,8,gameSession.fuses);
+ gameSession.seen=gameSession.world.map(row=>row.map(()=>false));
+}
+
+function resetBase(){if(gameSession.level===2){resetLevel2();return}document.body.classList.remove("level2");gameSession.GOAL=7;gameSession.guards=[];gameSession.terminals=[];gameSession.props=[];gameSession.doors=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.fuses=[];gameSession.crouching=false;buildMap();gameSession.player={x:2.5,y:2.5,a:.6,stamina:isHardMode()?150:100,maxStamina:isHardMode()?150:100,collected:0,moving:false,flash:true,hp:100,maxHp:100};let distances=bfsDistances(2,2),opts=[];for(let y=1;y<gameSession.N-1;y++)for(let x=1;x<gameSession.N-1;x++)if(distances[y][x]>35&&gameSession.world[y][x]===0)opts.push({x,y,d:distances[y][x]});opts.sort((a,b)=>b.d-a.d);let cp=opts[Math.floor(opts.length*.15)]||{x:30,y:30};gameSession.cat=makeGuard(cp.x+.5,cp.y+.5,"cat");gameSession.elapsed=0;gameSession.clock=0;gameSession.awake=false;gameSession.wakeAt=Infinity;gameSession.catPath=[];gameSession.pathTimer=0;gameSession.walkPhase=0;gameSession.nearCat=0;gameSession.alertUntil=0;gameSession.toastTimeout=0;gameSession.flashUntil=0;gameSession.mapOn=false;UI.map.classList.remove('visible');UI.count.textContent='0';$('required').textContent=String(gameSession.GOAL);setUIIcon(document.querySelector('.chip .gem'),'battery');$('levelLabel').textContent='LEVEL 1 / YELLOW CORRIDORS';UI.goal.textContent='TUTORIAL · FIND 7 BATTERIES';UI.clock.textContent='00:00';UI.stamina.style.width=staminaWidth();UI.danger.style.opacity=0;UI.toast.classList.remove('visible');$('stealthStatus').textContent='● UNDETECTED';$('interactHint').style.display='none';primeHealth();setupLevel1Tutorial();updateSeen();updateTutorialVisibility()}
 
 ;
 // SOURCE: js/maps/shared.js
@@ -848,41 +1371,14 @@ function resetLevel3(){
 
 ;
 // SOURCE: js/maps/navigable.js
-// Shared, human-readable layout for campaign levels 2, 3 and 4.
-// Three wide north/south and east/west routes make a connected grid with loops.
-function carveFriendlyLayout(size, mapSeed) {
-  gameSession.N=size; seed=mapSeed;
-  gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
-  const hubs=[4,Math.floor(gameSession.N/2),gameSession.N-5];
-  const rect=(x,y,w,h)=>{
-    for(let yy=Math.max(1,y);yy<Math.min(gameSession.N-1,y+h);yy++)
-      for(let xx=Math.max(1,x);xx<Math.min(gameSession.N-1,x+w);xx++) gameSession.world[yy][xx]=0;
-  };
-  // Continuous broad corridors with no unavoidable locked branches.
-  for(const x of hubs)rect(x-1,2,3,gameSession.N-4);
-  for(const y of hubs)rect(2,y-1,gameSession.N-4,3);
-  for(let yi=0;yi<2;yi++)for(let xi=0;xi<2;xi++){
-    const cx=Math.round((hubs[xi]+hubs[xi+1])/2);
-    const cy=Math.round((hubs[yi]+hubs[yi+1])/2);
-    const w=7+Math.floor(rnd()*3),h=7+Math.floor(rnd()*3);
-    rect(cx-Math.floor(w/2),cy-Math.floor(h/2),w,h);
-    rect(cx-1,hubs[yi],3,cy-hubs[yi]+1);
-    rect(cx-1,cy,3,hubs[yi+1]-cy+1);
-    rect(hubs[xi],cy-1,cx-hubs[xi]+1,3);
-    rect(cx,cy-1,hubs[xi+1]-cx+1,3);
-    // Decorative columns away from main room exits.
-    if(w>=8&&h>=8&&rnd()>.45){
-      const px=cx+2,py=cy+2;if(gameSession.world[py]?.[px]===0)gameSession.world[py][px]=1;
-    }
-  }
-  // Sightline landmarks: a few optional shortcuts and double-width passages.
-  for(let i=0;i<8;i++){
-    const x=6+Math.floor(rnd()*(gameSession.N-12)),y=6+Math.floor(rnd()*(gameSession.N-12));
-    if(gameSession.world[y][x]===0)rect(x,y,2,2);
-  }
-  return hubs;
+// Mission coordinates use the three authored anchor rows and columns.
+function carveFriendlyLayout(size,mapSeed){
+ seed=mapSeed;
+ const layout=startRoomLayout(size,mapSeed);
+ const centers=roomCenters(4,size-5,5);
+ buildRoomRegion(layout,renderStage(),centers,centers,{campaign:true});
+ return [centers[0],centers[2],centers[4]];
 }
-
 
 function createPigWorld(){
   const [lo,mid,hi]=carveFriendlyLayout(53,923401);
@@ -996,7 +1492,7 @@ function randomPatrolPoint(g){
 }
 
 function addNoise(x,y,radius,type='urzadzenie'){
-  gameSession.noiseEvents.push({x,y,radius,expiry:gameSession.elapsed+2.4,type});gameSession.stats.noises++;
+  gameSession.noiseEvents.push({x,y,radius:radius*(ROOM_ACOUSTICS[roomAt(x,y)?.acoustic]??1),expiry:gameSession.elapsed+2.4,type});gameSession.stats.noises++;
   if(gameSession.noiseEvents.length>25)gameSession.noiseEvents.shift();
 }
 
@@ -1148,8 +1644,8 @@ function collectObjectivePickup(item){
 }
 
 const interactionLabels={
- lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
- door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR'
+ push:'PUSH OBJECT',lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
+ secret:'CHECK LOOSE PANEL',door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR'
 };
 const REACTOR_HOLD_SECONDS=5.75;
 function needsInteractionHold(target){
@@ -1242,6 +1738,11 @@ function findInteractable(){
     if(item.taken||Math.hypot(item.x-x,item.y-y)>=1.1)continue;
     all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:'PICK UP '+(item.name||item.type).toUpperCase()});
   }
+  for(const prop of gameSession.props){
+   if(prop.pushable&&Math.hypot(prop.x-x,prop.y-y)<.95){
+    all.push({type:'push',ref:prop,x:prop.x,y:prop.y,title:'PUSH OBJECT'});
+   }
+  }
   for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
   const exit=gameSession.exitCell;
   if(gameSession.world[exit.y]?.[exit.x]===3&&
@@ -1255,7 +1756,7 @@ function findInteractable(){
     const gate=o.type==='door'||o.type==='lockedExit';
     const range=o.type==='pickup'?1.1:gate?1.65:1.4;
     return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<range&&
-      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:['slot','panel','repair'].includes(o.type)});
+      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor'||o.type==='secret'||o.type==='push'||!!o.ref?.attachment,allowTargetFurniture:['slot','panel','repair'].includes(o.type)});
   })||null;
 }
 
@@ -1273,6 +1774,7 @@ function interact(){
     if(toggleGraphicsDemoDoor())playDoorMovement(gameSession.safeRoom.open);
     return;
   }
+  if(target?.type==='push'){pushRoomProp(target.ref);return;}
   if(target?.type==='safeDoor'){safeRoomInteraction(target.ref);return;}
   if(target?.type==='slot'){slotMachineSpin(target.ref);return;}
   if(target?.type==='lockedExit'){
@@ -1288,11 +1790,20 @@ function interact(){
   }
   if(target.type==='unhide'){gameSession.player.hidden=false;showToast('YOU LEFT HIDING',1.6);return}
   if(target.type==='hide'){gameSession.player.hidden=true;gameSession.player.flash=false;showToast('HIDDEN · PRESS E TO LEAVE',2.5);return}
+  if(target.type==='secret'){
+    if(o.used)return;
+    o.used=true;o.gate.open=true;
+    gameSession.world[o.gate.y][o.gate.x]=0;
+    markWorldChanged();playDoorMovement(true);
+    showToast('SECRET PASSAGE OPEN',2.8);
+    return;
+  }
   if(target.type==='stairs'){
     // Stairwells only teleport after the power network connects the decks.
-    if(!gameSession.terminals.some(t=>t.id==='reactor2'&&t.used)){showToast('STAIRS LOCKED · REACTOR II OFFLINE',2.8);return}
+    if(!o.roomStairs&&!gameSession.terminals.some(t=>t.id==='reactor2'&&t.used)){showToast('STAIRS LOCKED · REACTOR II OFFLINE',2.8);return}
     if(gameSession.world[Math.floor(o.dest.y)]?.[Math.floor(o.dest.x)]!==0){showToast('UPPER FLOOR BLOCKED',2);return}
-    gameSession.player.x=o.dest.x;gameSession.player.y=o.dest.y;gameSession.cameraFloor=gameSession.player.y>40?2:1;
+    gameSession.player.x=o.dest.x;gameSession.player.y=o.dest.y;gameSession.cameraFloor=o.dest.floor??(gameSession.player.y>40?2:1);
+    gameSession.resetInterpolation();
     gameSession.flashUntil=gameSession.elapsed+.5;showToast('ACCESS TO SECTION '+(gameSession.cameraFloor===2?'B':'A'),2.5);playUnlock();return;
   }
   if(target.type==='door'){
@@ -1608,7 +2119,7 @@ function uploadMaterialMips(device,texture,source,w,h,layer,cover=false){
 }
 async function loadHdAlbedo(path,w,h){
  const img=new Image();
- img.src=path.startsWith('data:')?path:path+'?v=1.7.0-alpha.1.4';
+ img.src=path.startsWith('data:')?path:path+'?v=1.8.0-beta';
  await img.decode();
  if(img.naturalWidth!==w||img.naturalHeight!==h)throw Error('Invalid HD material dimensions');
  return img;
@@ -1842,8 +2353,26 @@ const LIGHTING_WGSL=/* wgsl */ `
 fn shadowSolid(cell:vec2i,size:i32)->bool {
  if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return true;}
  let tile=worldTiles[u32(cell.y)*128u+u32(cell.x)];
- // The upper bits flag a closed mesh door hidden from terrain rendering.
- return tile!=0u&&tile!=5u;
+ // The low byte is the terrain type and bit eight is a closed mesh door.
+ let solid=tile&511u;
+ return solid!=0u&&solid!=5u;
+}
+fn roomFields(cell:vec2i,size:i32)->u32 {
+ if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return 0u;}
+ return worldTiles[u32(cell.y)*128u+u32(cell.x)];
+}
+fn roomCeiling(cell:vec2i,size:i32)->f32 {
+ let code=(roomFields(cell,size)>>9u)&7u;
+ return array<f32,8>(1.,.84,.92,1.10,1.22,1.36,1.,1.)[code];
+}
+fn roomLamp(p:vec2f,size:i32,time:f32)->vec3f {
+ let mode=(roomFields(vec2i(floor(p)),size)>>12u)&7u;
+ if(mode==1u){return vec3f(.34);}
+ if(mode==2u){return vec3f(.58,.85,1.);}
+ if(mode==3u){return vec3f(.93,.21,.11);}
+ if(mode==4u){return vec3f(select(.15,.85,sin(time*2.3+p.x*.34+p.y*.63)>.12));}
+ if(mode==5u){return vec3f(.025);}
+ return vec3f(1.);
 }
 // Trace only the finite segment toward the light, not the entire map.
 // A small forward bias avoids re-hitting the shaded wall itself, including
@@ -1999,11 +2528,11 @@ fn sceneLight(p:vec3f,n:vec3f,rough:f32,f:SceneFrame)->vec3f {
  for(var y:i32=-1;y<=2;y++){for(var x:i32=-1;x<=2;x++){
   let cell=grid+vec2f(f32(x),f32(y));
   let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
-  let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
+  let source=vec3f(pos,roomCeiling(vec2i(floor(pos)),i32(f.viewport.z))-.03);let weight=fixtureWeight(p,source);
   if(weight<=0.||(f.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(f.viewport.z)))){continue;}
   let flicker=fixtureFlicker(cell,f.player.w);
   let power=select(2.1,.12,f.weather.x>.5)*flicker;
-  light+=pointContribution(p,n,eye,rough,source,tint,power*weight,f);
+  light+=pointContribution(p,n,eye,rough,source,tint*roomLamp(pos,i32(f.viewport.z),f.player.w),power*weight,f);
  }}
  if(f.lighting.w>.5){
   let flicker=1.1+.22*sin(f.player.w*13.)+.16*sin(f.player.w*23.);
@@ -2140,10 +2669,10 @@ fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
   light=base*vec3f(.16,.16,.18);
   for(var y:i32=-1;y<=2;y++){for(var x:i32=-1;x<=2;x++){
    let cell=grid+vec2f(f32(x),f32(y));let pos=cell*vec2f(5.,4.)+vec2f(2.5,1.45);
-   let source=vec3f(pos,.97);let weight=fixtureWeight(p,source);
+   let source=vec3f(pos,roomCeiling(vec2i(floor(pos)),i32(frame.viewport.z))-.03);let weight=fixtureWeight(p,source);
    if(weight<=0.||(frame.lighting.x>1.5&&shadowSolid(vec2i(floor(pos)),i32(frame.viewport.z)))){continue;}
    let flicker=fixtureFlicker(cell,frame.player.w);
-   light+=cp11Point(p,geom,material,base,eye,source,tint,select(2.1,.12,frame.weather.x>.5)*flicker*weight);
+   light+=cp11Point(p,geom,material,base,eye,source,tint*roomLamp(pos,i32(frame.viewport.z),frame.player.w),select(2.1,.12,frame.weather.x>.5)*flicker*weight);
   }}
   if(frame.lighting.w>.5){
    let flicker=1.1+.22*sin(frame.player.w*13.)+.16*sin(frame.player.w*23.);
@@ -2193,11 +2722,17 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(frame.lighting.x>.5||frame.flashlight.w>.5){
    let n=vec3f(0.,0.,select(-1.,1.,isFloor));
    let rough=select(.86,.32,sector==2.&&isFloor);
-   let point=vec3f(worldPt,select(1.,0.,isFloor));
+   let point=vec3f(worldPt,select(.5+ray.z*rd,0.,isFloor));
    if(detailAvailable()){
      let material=readSurfaceDetail(uv,layer+4,floorLod,n,vec3f(1.,0.,0.),vec3f(0.,1.,0.));
      c=cp11Shade(c,point,n,material);
    }else{c*=surfaceLighting(point,n,rough,vec3f(1.),frame);}
+ }
+ let condition=(roomFields(vec2i(floor(worldPt)),i32(frame.viewport.z))>>15u)&3u;
+ if(condition==1u&&isFloor){c*=vec3f(.83,.95,1.09);}
+ if(condition==2u){
+   let wear=.92+.08*sin(worldPt.x*3.4)*sin(worldPt.y*2.8);
+   c*=wear;
  }
  // Keep the familiar tiled floors, grout seams and rectangular fluorescent lights.
  let seams=uv.x<.017 || uv.y<.017;
@@ -2207,11 +2742,11 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if((cell.x+100)%5==2 && (cell.y+100)%4==1 && uv.x>.19 && uv.x<.82 && uv.y>.22 && uv.y<.68){
      if(frame.progress.w<0.&&frame.lighting.x>.5){
        let fixture=floor((worldPt-vec2f(2.,1.))/vec2f(5.,4.));
-       let lit=fixtureFlicker(fixture,frame.player.w);
+       let lit=fixtureFlicker(fixture,frame.player.w)*roomLamp(worldPt,i32(frame.viewport.z),frame.player.w);
        let edge=min(min(uv.x-.19,.82-uv.x),min(uv.y-.22,.68-uv.y));
        c=mix(vec3f(.16,.12,.08),vec3f(2.1,1.85,1.4)*lit,smoothstep(0.,.034,edge));
      }else{
-       c=mix(c,vec3f(1.,.95,.73),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
+       c=mix(c,vec3f(1.,.95,.73)*roomLamp(worldPt,i32(frame.viewport.z),frame.player.w),select(.75,.05,frame.flashlight.w>.5&&frame.weather.x>.5));
      }
    }
  } else {
@@ -2250,8 +2785,10 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  let uv=pixel.xy/frame.viewport.xy;
  let ray3=worldRay(uv,frame);
  let ray=ray3.xy;
- let surfaceDepth=planeDepth(ray3);
  var cell=vec2i(floor(frame.player.xy));
+ let size=i32(frame.viewport.z);
+ let floorDepth=planeDepth(ray3);
+ let upward=ray3.z>0.;
  let delta=vec2f(1.)/max(abs(ray),vec2f(.00001));
  let gridStep=vec2i(select(1,-1,ray.x<0.),select(1,-1,ray.y<0.));
  var tMax=vec2f(0.);
@@ -2260,19 +2797,29 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  if(ray.y<0.){tMax.y=(frame.player.y-f32(cell.y))*delta.y;}
  else{tMax.y=(f32(cell.y)+1.-frame.player.y)*delta.y;}
  var side=0;
- var hit=1u;
+ var hit=0u;
+ var distance=select(floorDepth,VIEW_FAR,upward);
+ var roof=roomCeiling(cell,size);
  for(var i:i32=0;i<190;i++){
+   let edge=min(tMax.x,tMax.y);
+   let roofDepth=(roof-.5)/max(ray3.z,.000001);
+   if(upward&&roofDepth<=edge){distance=min(distance,roofDepth);break;}
+   if(edge>distance){break;}
    if(tMax.x<tMax.y){tMax.x+=delta.x;cell.x+=gridStep.x;side=0;}
    else{tMax.y+=delta.y;cell.y+=gridStep.y;side=1;}
    hit=tileAt(cell.x,cell.y);
-   if(hit!=0u){break;}
-   if(min(tMax.x,tMax.y)>surfaceDepth){break;}
+   roof=roomCeiling(cell,size);
+   if(hit!=0u||(upward&&.5+ray3.z*edge>=roof)){
+    if(hit==0u){hit=1u;}
+    distance=max(VIEW_NEAR,edge);break;
+   }
  }
- var distance=max(VIEW_NEAR,select(tMax.y-delta.y,tMax.x-delta.x,side==0));
- let hasWall=hit!=0u && distance<=surfaceDepth;
+ let hasWall=hit!=0u;
  let wallPoint=vec3f(frame.player.xy,.5)+ray3*distance;
- let wallV=clamp(1.-wallPoint.z,0.,1.);
- let wallH=frame.viewport.x/(2.*frame.camera.x*distance);
+ let wallRoom=vec2i(floor(wallPoint.xy-ray.xy*.015));
+ let wallCeiling=roomCeiling(wallRoom,i32(frame.viewport.z));
+ let wallV=clamp(1.-wallPoint.z/wallCeiling,0.,1.);
+ let wallH=wallCeiling*frame.viewport.x/(2.*frame.camera.x*distance);
  var result=vec4f(0.);
  if(hasWall){
    var texX=select(frame.player.x+distance*ray.x,frame.player.y+distance*ray.y,side==0);
@@ -2317,12 +2864,17 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
        result=vec4f(cp11Shade(result.rgb,wallPoint,normal,material),1.);
      }else{result=vec4f(result.rgb*surfaceLighting(wallPoint,normal,rough,vec3f(1.),frame),1.);}
    }
+   let condition=(roomFields(wallRoom,i32(frame.viewport.z))>>15u)&3u;
+   if(condition==1u){result=vec4f(result.rgb*vec3f(.86,.96,1.05),1.);}
+   if(condition==2u){
+     let wear=.88+.11*abs(sin(texX*9.2+wallV*12.));
+     result=vec4f(result.rgb*wear,1.);
+   }
    let fog=clamp((distance-1.5)/32.,0.,.88);
    result=vec4f(mix(result.rgb,vec3f(.10,.10,.09),fog),1.);
    if(side==1){result=vec4f(result.rgb*.83,1.);}
  }else{
-   result=sceneryAt(pixel.xy,ray3);
-   distance=surfaceDepth;
+   result=scenerySurface(ray3,ray3.z<0.,distance);
  }
  // Static 3D boxes are ray-traced against the actual wall distance. These
  // objects stay put when the camera turns, unlike screen-facing billboards.
@@ -2645,7 +3197,7 @@ function geometryTerrainSource(){
  let hasPlane=hasSurface && rasterHit.w>=1.5;
  let cell=vec2i(rasterHit.yz);
  let side=i32(rasterHit.w);
- let hit=tileAt(cell.x,cell.y);
+ let hit=max(1u,tileAt(cell.x,cell.y));
  var distance=WALL_DEPTH_SCALE;
  if(hasWall){
    let along=select(ray.y,ray.x,side==0);
@@ -2655,19 +3207,19 @@ function geometryTerrainSource(){
    distance=max(VIEW_NEAR,(boundary-axisOrigin)/along);
  }
 `+TERRAIN_WGSL.slice(end);
- const oldResolve='result=sceneryAt(pixel.xy,ray3);\n   distance=surfaceDepth;';
+ const oldResolve='result=scenerySurface(ray3,ray3.z<0.,distance);';
  if(!source.includes(oldResolve))throw Error('Terrain surface resolve contract changed');
  return source.replace(oldResolve,`if(hasPlane){
      let isFloor=rasterHit.w<2.5;
      // Raster tag selects the actual visible quad; use exact depth for
      // stable material coordinates, lighting and sprite occlusion.
-     distance=planeDepth(ray3);
+     distance=select(min(VIEW_FAR,(roomCeiling(cell,i32(frame.viewport.z))-.5)/max(ray3.z,.000001)),planeDepth(ray3),isFloor);
      result=scenerySurface(ray3,isFloor,distance);
    }else{
      // Preserve the classic distant fog/near clip fallback when no triangle
      // covers the pixel (including views beyond VIEW_FAR).
      result=sceneryAt(pixel.xy,ray3);
-     distance=surfaceDepth;
+     distance=planeDepth(ray3);
    }`);
 }
 
@@ -2676,45 +3228,58 @@ function geometryTerrainSource(){
 // Build only wall faces adjacent to walkable/render-empty cells. The exact
 // uploaded render tiles are authoritative (including animated-door openings
 // and tile 5, which is a collision-only decoration, not a visible wall).
-function buildWorldWallVertices(tiles,size,stride=128){
+const ROOM_CEILING_HEIGHTS=[1,.84,.92,1.10,1.22,1.36,1,1];
+function buildWorldWallVertices(tiles,size,stride=128,fields=tiles){
  if(!Number.isInteger(size)||size<1||size>stride||tiles.length<size*stride)throw Error('Invalid wall grid');
  const data=[];
  const tile=(x,y)=>x<0||y<0||x>=size||y>=size?1:tiles[y*stride+x];
  const open=(x,y)=>{const t=tile(x,y);return t===0||t===5;};
- const face=(ax,ay,bx,by,cx,cy,side)=>{
-  for(const [x,y,z] of [[ax,ay,0],[bx,by,0],[ax,ay,1],[ax,ay,1],[bx,by,0],[bx,by,1]])data.push(x,y,z,cx,cy,side);
+ const height=(x,y)=>ROOM_CEILING_HEIGHTS[(fields[y*stride+x]>>>9)&7];
+ const face=(ax,ay,bx,by,cx,cy,side,low,high)=>{
+  for(const [x,y,z] of [[ax,ay,low],[bx,by,low],[ax,ay,high],[ax,ay,high],[bx,by,low],[bx,by,high]])data.push(x,y,z,cx,cy,side);
  };
  for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(open(x,y)){
-  if(!open(x-1,y))face(x,y,x,y+1,x-1,y,0);
-  if(!open(x+1,y))face(x+1,y,x+1,y+1,x+1,y,0);
-  if(!open(x,y-1))face(x,y,x+1,y,x,y-1,1);
-  if(!open(x,y+1))face(x,y+1,x+1,y+1,x,y+1,1);
+  const high=height(x,y);
+  for(const [ax,ay,bx,by,nx,ny,side] of [
+   [x,y,x,y+1,x-1,y,0],[x+1,y,x+1,y+1,x+1,y,0],
+   [x,y,x+1,y,x,y-1,1],[x,y+1,x+1,y+1,x,y+1,1]
+  ]){
+   const low=open(nx,ny)?height(nx,ny):0;
+   if(low<high)face(ax,ay,bx,by,nx,ny,side,low,high);
+  }
  }
  return new Float32Array(data);
 }
 // A plane tag needs no per-cell material data. Merge adjacent plane quads
 // into rectangles while preserving holes, collision-only cells and winding.
-function buildWorldSurfaceMesh(tiles,size,stride=128){
- const walls=buildWorldWallVertices(tiles,size,stride);
- const open=new Uint8Array(size*size);
+function buildWorldSurfaceMesh(tiles,size,stride=128,fields=tiles){
+ const walls=buildWorldWallVertices(tiles,size,stride,fields);
+ const open=new Uint8Array(size*size), ceilings=new Uint8Array(size*size);
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
   const tile=tiles[y*stride+x];
   open[y*size+x]=Number(tile===0||tile===5);
+  ceilings[y*size+x]=open[y*size+x]?1+((fields[y*stride+x]>>>9)&7):0;
  }
  const planes=[];
- for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-  if(!open[y*size+x])continue;
-  let right=x+1;
-  while(right<size&&open[y*size+right])right++;
-  let bottom=y+1;
-  rows:for(;bottom<size;bottom++){
-   for(let column=x;column<right;column++)if(!open[bottom*size+column])break rows;
+ function mergePlanes(cells,isFloor){
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+   const code=cells[y*size+x];
+   if(!code)continue;
+   let right=x+1;
+   while(right<size&&cells[y*size+right]===code)right++;
+   let bottom=y+1;
+   rows:for(;bottom<size;bottom++){
+    for(let column=x;column<right;column++)if(cells[bottom*size+column]!==code)break rows;
+   }
+   for(let row=y;row<bottom;row++)cells.fill(0,row*size+x,row*size+right);
+   const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
+   const order=isFloor?[0,1,2,2,1,3]:[0,2,1,1,2,3];
+   const z=isFloor?0:ROOM_CEILING_HEIGHTS[code-1];
+   for(const i of order)planes.push(...corners[i],z,x,y,isFloor?2:3);
   }
-  for(let row=y;row<bottom;row++)open.fill(0,row*size+x,row*size+right);
-  const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
-  for(const i of [0,1,2,2,1,3])planes.push(...corners[i],0,x,y,2);
-  for(const i of [0,2,1,1,2,3])planes.push(...corners[i],1,x,y,3);
  }
+ mergePlanes(open,true);
+ mergePlanes(ceilings,false);
  const vertices=new Float32Array(walls.length+planes.length);
  vertices.set(walls);vertices.set(planes,walls.length);
  return {vertices,wallVertices:walls.length/6,planeVertices:planes.length/6};
@@ -2741,7 +3306,7 @@ class WorldGeometryExperiment {
  prepare(){
   const r=this.renderer,d=this.device;
   if(this.uploadRevision!==r.stats.mapUploads){
-   const {vertices,wallVertices,planeVertices}=buildWorldSurfaceMesh(r.tilesData,r.mapSize);
+   const {vertices,wallVertices,planeVertices}=buildWorldSurfaceMesh(r.tilesData,r.mapSize,128,r.gpuTilesData);
    const newBuffer=d.createBuffer({label:'CP10 static world triangles',size:Math.max(24,vertices.byteLength),usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
    if(vertices.length)d.queue.writeBuffer(newBuffer,0,vertices);
    if(this.vertexBuffer)this.vertexBuffer.destroy();
@@ -3133,7 +3698,7 @@ class CatroomsWebGPURenderer {
   }
   syncStaticBuffers(scene=gameSession){
     const upload=(buffer,data)=>{this.device.queue.writeBuffer(buffer,0,data);this.stats.staticBytes+=data.byteLength;};
-    if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N){
+    if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N||this.roomRevision!==scene.roomLayout?.revision){
       this.tilesData.fill(0);
       for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++){
         const tile=scene.world[y][x];
@@ -3144,11 +3709,13 @@ class CatroomsWebGPURenderer {
       // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
       // geometry map unchanged; only the GPU visibility map carries the flag.
       this.gpuTilesData.set(this.tilesData);
+      const fields=scene.roomLayout?.fields;
+      if(fields)for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++)this.gpuTilesData[y*128+x]|=fields[y*scene.N+x];
       for(const d of this.doorLayout){
         const tile=scene.world[d.y][d.x];
         if(tile===3||tile===4)this.gpuTilesData[d.y*128+d.x]|=256;
       }
-      upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;
+      upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;this.roomRevision=scene.roomLayout?.revision;
     }
     const furniture=scene.safeRoomFurniture;
     if(this.furnitureSource!==furniture||this.furnitureLength!==furniture.length){
@@ -3169,7 +3736,7 @@ class CatroomsWebGPURenderer {
       else if(p.type==='decor'&&p.solid)addDecal(p,Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12),2);
     }
     for(const item of scene.fuses||[])if(!item.taken&&objectivePickupModel(item))addDecal(item,.48,3);
-    for(const item of scene.bonusItems||[])if(!item.taken&&bonusPickupModel(item))addDecal(item,.42,3);
+    for(const item of scene.bonusItems||[])if(!item.taken&&!item.attachment&&bonusPickupModel(item))addDecal(item,.42,3);
     let changed=this.decalWorld!==scene.world||this.decalCount!==count;
     for(let i=0;!changed&&i<count*4;i++)if(this.decalScratch[i]!==this.decalData[i])changed=true;
     if(changed){
@@ -3278,7 +3845,7 @@ class CatroomsWebGPURenderer {
     const phase=item.phase||0;
     const {c,s,z}=poses[Math.floor(phase*1000)%poses.length];
     const yaw=model==='terminal'?(item.yaw??Math.PI):phase;
-    return [item.x,item.y,z,WORLD_ITEM_SCALE[model],Math.cos(yaw),Math.sin(yaw),WORLD_ITEM_KINDS[model],
+    return [item.x,item.y,z+(item.z||0),WORLD_ITEM_SCALE[model],Math.cos(yaw),Math.sin(yaw),WORLD_ITEM_KINDS[model],
       active?2:item.used?1:0,c,s,0,0];
   }
   roomPose(room,kind){
@@ -3999,7 +4566,7 @@ function syncBackgroundTracks(dt=.04){
   menu:gameSession.state==='menu'?.25:0,
   game:playing?(chase?.055:.23):0,
   chase:chase?.35:0,
-  hum:playing?(sector===2?.28:.12):0
+  hum:playing?(sector===2?.28:.12)*(ROOM_ACOUSTICS[gameSession.currentRoom?.acoustic]??1):0
  };
  const hum=sector===2?'humFlooded':gameSession.level===3?'humBloody':'humDefault';
  for(const [id,key,category] of [['menu','menuMusic','ambient'],['game','gameMusic','ambient'],
@@ -4054,33 +4621,11 @@ function prepareRun(){gameSession.runCheated=false;godMode=false;lastShieldToast
 // randomized enemy casts, pickup locations, consumables and escape positions.
 let proceduralSeed=0,requestedSeed=null;
 function dungeonBuild(runSeed){
-  seed=runSeed|0;
-  gameSession.N=49;gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
-  const centers=[6,18,30,42],segments=[];
-  const carve=(x,y,w,h)=>{for(let yy=Math.max(1,y);yy<Math.min(gameSession.N-1,y+h);yy++)for(let xx=Math.max(1,x);xx<Math.min(gameSession.N-1,x+w);xx++)gameSession.world[yy][xx]=0};
-  for(let yi=0;yi<4;yi++)for(let xi=0;xi<4;xi++){
-    const x=centers[xi],y=centers[yi],w=5+Math.floor(rnd()*4),h=5+Math.floor(rnd()*4);
-    carve(x-Math.floor(w/2),y-Math.floor(h/2),w,h);
-  }
-  // Randomized spanning tree ensures ALL rooms are connected on every seed.
-  const visited=new Set(['0,0']),stack=[[0,0]],connections=new Set();
-  const edge=(a,b)=>[a.join(','),b.join(',')].sort().join('::');
-  while(stack.length){
-    const [x,y]=stack.at(-1),neighbors=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([u,v])=>u>=0&&u<4&&v>=0&&v<4&&!visited.has(`${u},${v}`));
-    if(!neighbors.length){stack.pop();continue}
-    const next=neighbors[Math.floor(rnd()*neighbors.length)];
-    connections.add(edge([x,y],next));visited.add(next.join(','));stack.push(next);
-  }
-  for(let y=0;y<4;y++)for(let x=0;x<4;x++){
-    if(x<3&&(rnd()<.47||connections.has(edge([x,y],[x+1,y]))))segments.push([x,y,x+1,y]);
-    if(y<3&&(rnd()<.47||connections.has(edge([x,y],[x,y+1]))))segments.push([x,y,x,y+1]);
-  }
-  for(const [x,y,u,v] of segments){
-    const sx=centers[x],sy=centers[y],ex=centers[u],ey=centers[v];
-    if(x===u)carve(sx-1,Math.min(sy,ey),3,Math.abs(ey-sy)+1);
-    else carve(Math.min(sx,ex),sy-1,Math.abs(ex-sx)+1,3);
-  }
-  return centers;
+ seed=runSeed|0;
+ const layout=startRoomLayout(49,runSeed);
+ const centers=roomCenters(6,42,4);
+ buildRoomRegion(layout,5,centers,centers);
+ return centers;
 }
 function dungeonEmptyCells(fromX=5,fromY=5){
   const dist=bfsDistances(fromX,fromY),out=[];
@@ -4162,46 +4707,11 @@ function resetProcedural(){
 // Server-independent: this mode is solo-only until the dormant CO-OP is reenabled.
 const HARD_VARIANTS=['red','green','yellow','gray','classic','pink'];
 function hardGenerateMap(runSeed,stage=1){
- seed=runSeed|0;gameSession.N=gameSession.level===13?customGameConfig.size:([0,65,73,81,89,97][stage]||65);
- gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
- const n=stage<3?5:6;const step=Math.floor((gameSession.N-14)/(n-1));const centers=Array.from({length:n},(_,i)=>7+i*step),edges=[];
- const carve=(x,y,w,h)=>{for(let yy=Math.max(1,y);yy<Math.min(gameSession.N-1,y+h);yy++)for(let xx=Math.max(1,x);xx<Math.min(gameSession.N-1,x+w);xx++)gameSession.world[yy][xx]=0};
- // Every room connects through a deterministic random spanning tree.
- for(const y of centers)for(const x of centers){const w=5+Math.floor(rnd()*5),h=5+Math.floor(rnd()*5);carve(x-(w>>1),y-(h>>1),w,h)}
- const visited=new Set(['0,0']),stack=[[0,0]],links=new Set();
- const edge=(a,b)=>[a.join(','),b.join(',')].sort().join('::');
- while(stack.length){
-   const [x,y]=stack.at(-1);
-   const options=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a,b])=>a>=0&&b>=0&&a<n&&b<n&&!visited.has(a+','+b));
-   if(!options.length){stack.pop();continue}
-   const next=options[Math.floor(rnd()*options.length)];links.add(edge([x,y],next));visited.add(next.join(','));stack.push(next);
- }
- for(let y=0;y<n;y++)for(let x=0;x<n;x++){
-   if(x<n-1&&(links.has(edge([x,y],[x+1,y]))||rnd()<.12))edges.push([x,y,x+1,y]);
-   if(y<n-1&&(links.has(edge([x,y],[x,y+1]))||rnd()<.12))edges.push([x,y,x,y+1]);
- }
- for(const [x,y,xx,yy] of edges){
-   const ax=centers[x],ay=centers[y],bx=centers[xx],by=centers[yy];
-   if(ax===bx)carve(ax-1,Math.min(ay,by),3,Math.abs(by-ay)+1);
-   else carve(Math.min(ax,bx),ay-1,Math.abs(bx-ax)+1,3);
- }
- // Side branches terminate in dead ends; do NOT disconnect the main graph.
- let branches=0;
- for(let i=0;i<1100&&branches<34;i++){
-   const x=3+Math.floor(rnd()*(gameSession.N-6)),y=3+Math.floor(rnd()*(gameSession.N-6));
-   if(gameSession.world[y][x]!==0)continue;
-   const dirs=[[1,0],[-1,0],[0,1],[0,-1]], [dx,dy]=dirs[Math.floor(rnd()*dirs.length)];
-   const sx=-dy,sy=dx,len=2+Math.floor(rnd()*5),path=[];
-   let valid=true;
-   for(let d=1;d<=len;d++){
-     const xx=x+dx*d,yy=y+dy*d;
-     // Each branch must have walls on both sides, guaranteeing a dead end.
-     if(xx<=2||yy<=2||xx>=gameSession.N-3||yy>=gameSession.N-3||gameSession.world[yy][xx]!==1||gameSession.world[yy+sy][xx+sx]!==1||gameSession.world[yy-sy][xx-sx]!==1){valid=false;break}
-     path.push([xx,yy]);
-   }
-   if(valid){for(const [xx,yy] of path)gameSession.world[yy][xx]=0;branches++;}
- }
- carve(5,5,5,5); // guaranteed starting room
+ seed=runSeed|0;
+ const size=gameSession.level===13?customGameConfig.size:[0,65,73,81,89,97][stage]||65;
+ const layout=startRoomLayout(size,runSeed);
+ const centers=roomCenters(7,size-8,stage<3?5:6);
+ buildRoomRegion(layout,stage,centers,centers);
 }
 
 // Keep the same enemy cast for each HARD campaign stage, but roll champion
@@ -4766,25 +5276,14 @@ function bossRushSafeRoom(stage){
  [[left+inset,top+2.0,.028,.52],[left+inset,top+side-2.0,.028,.56],[left+side-inset,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
  return room;
 }
-function bossRushGenerateMap(){
- gameSession.N=BOSS_RUSH_SIZE;
- gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
- const makeRoom=(cx,cy,w,h)=>bossRushCarve(cx-(w>>1),cy-(h>>1),w,h);
+function bossRushGenerateMap(runSeed){
+ const layout=startRoomLayout(BOSS_RUSH_SIZE,runSeed);
  for(let stage=1;stage<=5;stage++){
-  const L=BOSS_RUSH_STAGE_LEFT[stage];
-  // Two parallel corridors plus rooms and cross-passages, including dead ends.
-  bossRushCarve(L+5,11,2,80);
-  bossRushCarve(L+15,11,2,80);
-  for(const y of [18,39,60,82]){
-    bossRushCarve(L+4,y-1,15,3);
-    makeRoom(L+11,y,11+(Math.floor(rnd()*3)*2),9);
-  }
-  for(const [i,y] of [27,49,72].entries()){
-    if((stage+i)%2===0){bossRushCarve(L+3,y,4,2);makeRoom(L+4,y,5,5)}
-    else{bossRushCarve(L+16,y,5,2);makeRoom(L+18,y,5,5)}
-  }
-  // Guaranteed connections from gate approach to the vertical corridors.
-  bossRushCarve(L+5,60,14,2);
+  const left=BOSS_RUSH_STAGE_LEFT[stage];
+  buildRoomRegion(layout,stage,[left+5,left+16],[18,29,40,51,60,72,84],{campaign:true});
+  bossRushCarve(left+5,60,17,1);
+  bossRushCarve(left+12,84,1,14);
+  bossRushCarve(left+5,84,12,1);
  }
  for(let stage=1;stage<5;stage++){
   const end=BOSS_RUSH_STAGE_LEFT[stage]+22;
@@ -4806,9 +5305,11 @@ function bossRushPlaceObjectives(stage){
  const cells=bossRushFreeCells(stage).filter(c=>c.y>22&&c.y<91&&Math.hypot(c.x-9,c.y-18)>9);
  for(let i=cells.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]];}
  const chosen=[];
+ const themed=gameSession.roomLayout.rooms.filter(room=>room.sector===stage);
  const place=(spacing)=>{
-  const q=cells.find(c=>chosen.every(p=>Math.hypot(c.x-p.x,c.y-p.y)>spacing)&&
+  const available=cells.filter(c=>chosen.every(p=>Math.hypot(c.x-p.x,c.y-p.y)>spacing)&&
     Math.abs(c.x-(BOSS_RUSH_STAGE_LEFT[stage]+11))<8);
+  const q=available.find(c=>themed.some(room=>Math.abs(room.x-c.x)<2&&Math.abs(room.y-c.y)<2))||available[0];
   if(!q)return null;
   chosen.push(q);cells.splice(cells.indexOf(q),1);return q;
  };
@@ -4853,7 +5354,7 @@ function resetBossRush(){
  gameSession.bossRush=null;
  const runSeed=requestedSeed!=null?(requestedSeed|0):((Date.now()^Math.floor(Math.random()*2147483647))|0);
  requestedSeed=null;seed=runSeed;
- bossRushGenerateMap();
+ bossRushGenerateMap(runSeed);
  gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.guards=[];
  gameSession.safeRoom=null;gameSession.safeRoomFurniture=[];gameSession.rushSafeRooms=[];
  gameSession.GOAL=BOSS_RUSH_GOALS.reduce((a,b)=>a+b,0);
@@ -5049,6 +5550,7 @@ function scatterLevelDecor(){
    cells.push({x,y});
   }
   shuffle(cells);
+  for(const cell of cells)cell.room=roomAt(cell.x+.5,cell.y+.5);
   const keys=decorModelsFor(stage),plan=[];
   // Give each supplied model a chance before repeats. Last Encounter mixes
   // the old sectors with its own, giving its native objects extra weight.
@@ -5064,7 +5566,15 @@ function scatterLevelDecor(){
    const standingCabinet=kind==='cabinet'&&!fallenCabinet;
    const againstWall=kind==='bench'||kind==='pipe'||standingCabinet;
    let selected=null;
-   for(const cell of cells){
+   const preferred=cells.filter(cell=>cell.room?.decor?.includes(kind));
+   for(const cell of [...preferred,...cells]){
+    if(cell.room&&['SAFE','TRANSITION'].some(tag=>cell.room.categories.includes(tag)))continue;
+    if(!isWall&&!fallenCabinet&&spec.height+.02>ROOM_CEILING_HEIGHTS[cell.room?.height??0])continue;
+    if(cell.room?.links?.some(id=>{
+     const edge=s.roomLayout.connections[id-1];
+     const door=edge.a===cell.room.id?edge.from:edge.to;
+     return Math.hypot(door.x-cell.x,door.y-cell.y)<1.85;
+    }))continue;
     const {x,y}=cell;if(world[y][x]!==0)continue;
     if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<2.6))continue;
     const walls=DECOR_DIRS.filter(([dx,dy])=>world[y+dy]?.[x+dx]===1);
@@ -5076,7 +5586,7 @@ function scatterLevelDecor(){
    if(!selected)continue; // safe skip, never force a prop into a passage
    const {x,y,wall}=selected;let px=x+.5,py=y+.5,z=0,yaw=Math.floor(random()*4)*Math.PI/2;
    let size=1,tilt=0,radius=spec.radius; // converter bounds each floor object within its collision tile
-   if(isWall){const pose=mountedDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;}
+   if(isWall){const pose=mountedDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;z=Math.min(pose.z+(kind==='camera'?ROOM_CEILING_HEIGHTS[selected.room?.height??0]-1:0),ROOM_CEILING_HEIGHTS[selected.room?.height??0]-spec.height-.02);yaw=pose.yaw;}
    else {
     world[y][x]=5;
     if(againstWall){const pose=wallFloorDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;yaw=pose.yaw;}
@@ -5335,13 +5845,16 @@ function reset(){
 }
 function finishMapPlacement(){
  placeEmergencyReactors();
+ prepareRoomLayout();
  scatterLevelDecor();
  placeTerminalPoses();
+ finishRoomLayout();
 }
 function update(dt){
  if(gameSession.graphicsDemo)updateGraphicsDemo(dt);
  else modeFor(gameSession.level).step(dt);
  if(gameSession.interactionHold)updateInteractionHold(dt);
+ if(gameSession.state==='playing'&&!gameSession.graphicsDemo)updateRoomEnvironment();
 }
 
 ;
@@ -6055,7 +6568,7 @@ function startSectorTransition(id){if(!graphicsReadyForPlay()||$('transition').c
  const sound=new Audio('assets/audio/menu-beep.mp3');sound.preload='auto';let lastBeep=-Infinity;
  function beep(){const now=performance.now();if(muted||now-lastBeep<85)return;lastBeep=now;sound.pause();sound.currentTime=0;sound.volume=.11*(gameSettings.master/100)*(gameSettings.effects/100);sound.play().catch(()=>{});}
  function select(name){if(!panels[name])return;for(const [key,panel] of Object.entries(panels)){panel.hidden=key!==name;tabs[key].classList.toggle('selected',key===name);if(key===name)tabs[key].setAttribute('aria-current','page');else tabs[key].removeAttribute('aria-current');}$('pixelLiveStatus').textContent={play:'SELECT LEVEL',settings:'SETTINGS',player:'PLAYER PROFILE',custom:'CUSTOM GAME',credits:'CREDITS'}[name];if(name==='play')syncSectorSelection();if(name==='player')renderPlayerProfile();}
- const notes=$('releaseNotes'),notesButton=$('releaseNotesOpen'),notesClose=$('releaseNotesClose'),notesKey='catroomsReleaseNotesSeen_1.7.0-alpha.1';let notesSeen=progressRead(notesKey,'0')==='1';
+ const notes=$('releaseNotes'),notesButton=$('releaseNotesOpen'),notesClose=$('releaseNotesClose'),notesKey='catroomsReleaseNotesSeen_1.8.0-beta';let notesSeen=progressRead(notesKey,'0')==='1';
  function showNotes(){notes.hidden=false;notesButton.hidden=true;hub.inert=true;splash.inert=true;notesClose.focus();}
  function closeNotes(){notes.hidden=true;notesSeen=true;progressWrite(notesKey,'1');notesButton.hidden=false;hub.inert=false;splash.inert=false;notesButton.focus();}
  function onReady(){if(!notesSeen)showNotes();else notesButton.hidden=false;}
@@ -6285,7 +6798,9 @@ const syncDetectionHUD=(()=>{
   wasDetected=detected;el.hidden=gameSession.elapsed>=until;
   const details=$('mapRunDetails');if(details&&!details.hidden){
    const level=$('levelLabel').textContent,status=gameSession.player.hidden?'HIDDEN':detected?'DETECTED':gameSession.guards.some(g=>g.state==='search'||g.state==='suspicious')?'SEARCHING':'UNDETECTED';
-   if($('mapLevelDetails').textContent!==level)$('mapLevelDetails').textContent=level;
+   const room=gameSession.currentRoom;
+  const roomLevel=room?level+' · '+room.name+' · FLOOR '+room.floor:level+(gameSession.roomLayout?' · FLOOR '+gameSession.cameraFloor:'');
+  if($('mapLevelDetails').textContent!==roomLevel)$('mapLevelDetails').textContent=roomLevel;
    if($('mapDetectionDetails').textContent!==status)$('mapDetectionDetails').textContent=status;
   }
  };

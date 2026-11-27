@@ -11,7 +11,7 @@ run(`let godMode=false,lastShieldToast=-100,touchCrouch=false;
 const noop=()=>{};
 const setUIIcon=noop,setUIIconText=noop,makeUIIcon=noop,uiIcon=()=>'',stopGameSounds=noop,stopLossScream=noop,playWin=noop,playLossScream=noop,playSting=noop,playHurt=noop,playPickup=noop,playUnlock=noop,playDoorMovement=noop,playReactorRepair=noop,playCoinPickup=noop,playCoinSlot=noop,createGameSample=noop,resetMobileInputs=noop,drawMap=noop;
 `);
-const scripts=['engine/session','core/state','characters/actors','core/navigation','maps/level1','maps/shared','maps/level2','maps/level3','maps/navigable','maps/level5','characters/ai','gameplay/campaign','progression/streak','gameplay/procedural','gameplay/hard','gameplay/inventory','network/coop','gameplay/safe-room','gameplay/boss-rush','gameplay/custom-mode','graphics/decor-data','gameplay/decor','engine/modes','engine/loop','ui/interface'];
+const scripts=['engine/session','core/state','characters/actors','core/navigation','maps/room-templates','maps/room-system','maps/room-runtime','maps/level1','maps/shared','maps/level2','maps/level3','maps/navigable','maps/level5','characters/ai','gameplay/campaign','progression/streak','gameplay/procedural','gameplay/hard','gameplay/inventory','network/coop','gameplay/safe-room','gameplay/boss-rush','gameplay/custom-mode','graphics/decor-data','graphics/world-geometry','gameplay/decor','engine/modes','engine/loop','ui/interface'];
 for(const f of scripts)vm.runInContext(fs.readFileSync(path.join(root,'js',f+'.js'),'utf8'),ctx,{filename:f+'.js'});
 // Legacy names are test-only views of the actual session object, for Alpha 2/3 fixtures.
 for(const field of ["state", "level", "clock", "elapsed", "worldRevision", "runCheated", "runTestEntry", "world", "player", "guards", "fuses", "doors", "terminals", "props", "bonusItems", "interactables", "seen", "exitCell", "safeRoom", "safeRoomFurniture", "rushSafeRooms", "bossRush", "N", "GOAL", "deathBy", "crouching", "noiseEvents", "eventState", "hardEmergency", "hardRocks", "cat", "walkPhase", "awake", "wakeAt", "nearCat", "alertUntil", "toastTimeout", "flashUntil", "mapOn", "keysOwned", "eventTimer", "cameraFloor", "stats", "guardCallCooldown", "interactReady", "alarmTimer", "guardSight", "guardNoise", "hardSlowUntil", "hardPulseUntil", "hardPulseNext", "hardNextEmergency", "catPath", "pathTimer"])run(`Object.defineProperty(globalThis,'${field}',{get:()=>gameSession.${field},set:v=>{gameSession.${field}=v},configurable:true})`);
@@ -144,9 +144,26 @@ check('real map resets: NORMAL, procedural, HARD, Boss Rush and custom',()=>{
  run(`customGameConfig.safeRooms=false;level=13;requestedSeed=12345;reset();`);
  assert.equal(run('safeRoomFurniture.every(o=>o.collisionOnly)'),true);assert.equal(run('safeRoom'),null);assert.equal(run('player.coins'),0);
 });
+check('room graph validates prerequisites, themes, and two-way maintenance stairs',()=>{
+ run(`level=2;reset();state='playing';`);
+ assert.equal(run('gameSession.roomLayout.issues.length'),0);
+ assert.equal(run('gameSession.roomLayout.floorCount'),2);
+ assert.ok(run('gameSession.roomLayout.rooms.some(r=>r.shape!=="rectangle")'));
+ assert.ok(run('gameSession.roomLayout.connections.some(c=>c.kind==="alternate")'));
+ assert.ok(run('gameSession.roomLayout.connections.some(c=>c.type==="hidden_passage"&&!c.gate.open)'));
+ run(`const betaStairs=interactables.find(o=>o.id==="room-stairs-up");player.x=betaStairs.x;player.y=betaStairs.y;interact();updateRoomEnvironment();`);
+ assert.equal(run('gameSession.currentRoom.floor'),2);
+ run('interact();updateRoomEnvironment()');
+ assert.equal(run('gameSession.currentRoom.floor'),1);
+ assert.equal(run(`interact();
+  const secretLink=gameSession.roomLayout.connections.find(c=>c.type==="hidden_passage");
+  player.x=secretLink.gate.x+.5;player.y=secretLink.gate.y-.5;
+  const sealed=world[secretLink.gate.y][secretLink.gate.x]===1;
+  interact();sealed&&secretLink.gate.open&&world[secretLink.gate.y][secretLink.gate.x]===0`),true);
+});
 check('same seed reproduces map, rooms, furniture, loot and initial enemies',()=>{
  const snapshot=`JSON.stringify({world,fuses,bonusItems,interactables,safeRoomFurniture,guards,rooms:bossRushRooms(),props,reactors:gameSession.emergencyReactors})`;
- for(const l of [5,6,12]){run(`level=${l};requestedSeed=54321;reset();`);const a=run(snapshot);run(`player.x=20;player.y=20;requestedSeed=54321;reset();`);assert.equal(run(snapshot),a,`seed ${l}`);}
+ for(const l of [1,2,5,6,12]){run(`level=${l};requestedSeed=54321;reset();`);const a=run(snapshot);run(`player.x=20;player.y=20;requestedSeed=54321;reset();`);assert.equal(run(snapshot),a,`seed ${l}`);}
 });
 // Real map generation regression: remove only our prop tiles, then compare
 // every original connected component, including locked gates treated as open.
@@ -174,9 +191,9 @@ check('decor preserves components, avoids objectives and covers themed models',(
     if(!spec||!decorModelsFor(o.stage).includes(o.model))throw Error('wrong theme');
     if(s.level===12&&bossRushArea(o.cellX)!==o.stage)throw Error('wrong sector');
     if(o.solid){if(s.world[o.cellY][o.cellX]!==5||spec.radius>.45)throw Error('bad solid');baseline[o.cellY][o.cellX]=0;}
-    else{if(s.world[o.cellY][o.cellX]!==0||o.z<0||o.z+spec.height>1.001)throw Error('bad wall fixture');}
+    else{if(s.world[o.cellY][o.cellX]!==0||o.z<0||o.z+spec.height>ROOM_CEILING_HEIGHTS[roomAt(o.x,o.y)?.height??0]+.001)throw Error('bad wall fixture');}
     if(o.model==='bench'||o.model==='pipe'){const dx=Math.round(-Math.sin(o.yaw)),dy=Math.round(Math.cos(o.yaw));if(s.world[o.cellY+dy]?.[o.cellX+dx]!==1)throw Error('missing backing wall');const contact=(o.x-o.cellX-.5)*dx+(o.y-o.cellY-.5)*dy+spec.depth;if(Math.abs(contact-(o.model==='pipe'?.5:.485))>1e-6||!o.solid)throw Error('incorrect wall contact');}
-    if([s.player,...s.fuses,...s.terminals,...s.bonusItems,...s.guards,...s.interactables].some(a=>Math.hypot(a.x-o.cellX-.5,a.y-o.cellY-.5)<1.999))throw Error('reserved item overlap');
+    if([s.player,...s.fuses,...s.terminals,...s.bonusItems.filter(a=>!a.attachment),...s.guards,...s.interactables].some(a=>Math.hypot(a.x-o.cellX-.5,a.y-o.cellY-.5)<1.999))throw Error('reserved item overlap');
     stats.byStage[o.stage]=(stats.byStage[o.stage]||0)+1;
    }
    const a=components(baseline),b=components(s.world),mapping=new Map();

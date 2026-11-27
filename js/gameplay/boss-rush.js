@@ -46,25 +46,14 @@ function bossRushSafeRoom(stage){
  [[left+inset,top+2.0,.028,.52],[left+inset,top+side-2.0,.028,.56],[left+side-inset,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
  return room;
 }
-function bossRushGenerateMap(){
- gameSession.N=BOSS_RUSH_SIZE;
- gameSession.world=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(1));
- const makeRoom=(cx,cy,w,h)=>bossRushCarve(cx-(w>>1),cy-(h>>1),w,h);
+function bossRushGenerateMap(runSeed){
+ const layout=startRoomLayout(BOSS_RUSH_SIZE,runSeed);
  for(let stage=1;stage<=5;stage++){
-  const L=BOSS_RUSH_STAGE_LEFT[stage];
-  // Two parallel corridors plus rooms and cross-passages, including dead ends.
-  bossRushCarve(L+5,11,2,80);
-  bossRushCarve(L+15,11,2,80);
-  for(const y of [18,39,60,82]){
-    bossRushCarve(L+4,y-1,15,3);
-    makeRoom(L+11,y,11+(Math.floor(rnd()*3)*2),9);
-  }
-  for(const [i,y] of [27,49,72].entries()){
-    if((stage+i)%2===0){bossRushCarve(L+3,y,4,2);makeRoom(L+4,y,5,5)}
-    else{bossRushCarve(L+16,y,5,2);makeRoom(L+18,y,5,5)}
-  }
-  // Guaranteed connections from gate approach to the vertical corridors.
-  bossRushCarve(L+5,60,14,2);
+  const left=BOSS_RUSH_STAGE_LEFT[stage];
+  buildRoomRegion(layout,stage,[left+5,left+16],[18,29,40,51,60,72,84],{campaign:true});
+  bossRushCarve(left+5,60,17,1);
+  bossRushCarve(left+12,84,1,14);
+  bossRushCarve(left+5,84,12,1);
  }
  for(let stage=1;stage<5;stage++){
   const end=BOSS_RUSH_STAGE_LEFT[stage]+22;
@@ -86,9 +75,11 @@ function bossRushPlaceObjectives(stage){
  const cells=bossRushFreeCells(stage).filter(c=>c.y>22&&c.y<91&&Math.hypot(c.x-9,c.y-18)>9);
  for(let i=cells.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]];}
  const chosen=[];
+ const themed=gameSession.roomLayout.rooms.filter(room=>room.sector===stage);
  const place=(spacing)=>{
-  const q=cells.find(c=>chosen.every(p=>Math.hypot(c.x-p.x,c.y-p.y)>spacing)&&
+  const available=cells.filter(c=>chosen.every(p=>Math.hypot(c.x-p.x,c.y-p.y)>spacing)&&
     Math.abs(c.x-(BOSS_RUSH_STAGE_LEFT[stage]+11))<8);
+  const q=available.find(c=>themed.some(room=>Math.abs(room.x-c.x)<2&&Math.abs(room.y-c.y)<2))||available[0];
   if(!q)return null;
   chosen.push(q);cells.splice(cells.indexOf(q),1);return q;
  };
@@ -133,7 +124,7 @@ function resetBossRush(){
  gameSession.bossRush=null;
  const runSeed=requestedSeed!=null?(requestedSeed|0):((Date.now()^Math.floor(Math.random()*2147483647))|0);
  requestedSeed=null;seed=runSeed;
- bossRushGenerateMap();
+ bossRushGenerateMap(runSeed);
  gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.guards=[];
  gameSession.safeRoom=null;gameSession.safeRoomFurniture=[];gameSession.rushSafeRooms=[];
  gameSession.GOAL=BOSS_RUSH_GOALS.reduce((a,b)=>a+b,0);

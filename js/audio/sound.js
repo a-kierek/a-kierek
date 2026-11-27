@@ -367,7 +367,7 @@ function syncBackgroundTracks(dt=.04){
   menu:gameSession.state==='menu'?.25:0,
   game:playing?(chase?.055:.23):0,
   chase:chase?.35:0,
-  hum:playing?(sector===2?.28:.12):0
+  hum:playing?(sector===2?.28:.12)*(ROOM_ACOUSTICS[gameSession.currentRoom?.acoustic]??1):0
  };
  const hum=sector===2?'humFlooded':gameSession.level===3?'humBloody':'humDefault';
  for(const [id,key,category] of [['menu','menuMusic','ambient'],['game','gameMusic','ambient'],

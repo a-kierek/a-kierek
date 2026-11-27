@@ -15,8 +15,8 @@ function verify(tiles,n,stride){
  const old=run('buildWorldWallVertices(tiles,n,stride)');assert.deepEqual(Array.from(v.subarray(0,old.length)),Array.from(old));
  for(const tag of [2,3]){
   const covered=new Set();
-  for(let i=mesh.wallVertices*6;i<v.length;i+=72){
-   const base=i+(tag-2)*36;
+  for(let base=mesh.wallVertices*6;base<v.length;base+=36){
+   if(v[base+5]!==tag)continue;
    const xs=[],ys=[];
    for(let k=0;k<6;k++){
     const offset=base+k*6;
@@ -39,6 +39,19 @@ function verify(tiles,n,stride){
 }
 const t=new Uint32Array(8*8).fill(1);t[9]=0;t[10]=5;t[11]=3;t[17]=4;t[18]=0;verify(t,5,8);t[11]=0;verify(t,5,8);t.fill(1);verify(t,8,8);t.fill(0);verify(t,8,8);
 let seed=7331;for(let i=0;i<48;i++){for(let k=0;k<t.length;k++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;t[k]=[0,1,3,4,5,8][seed%6];}verify(t,8,8);}
-const shader=run('geometryTerrainSource()');assert.ok(shader.includes('rasterHit.w<1.5'));assert.ok(shader.includes('rasterHit.w>=1.5'));assert.ok(shader.includes('let isFloor=rasterHit.w<2.5'));assert.ok(shader.includes('distance=planeDepth(ray3)'));assert.ok(shader.includes('result=scenerySurface(ray3,isFloor,distance)'));assert.ok(shader.includes('result=sceneryAt(pixel.xy,ray3)'));
+// Two adjacent cells with different ceilings require two roof planes and a
+// vertical face across the height discontinuity.
+const pair=new Uint32Array(16).fill(1); pair[5]=pair[6]=0;
+const fields=pair.slice(); fields[5]=1<<9; fields[6]=4<<9;
+ctx.pair=pair;ctx.fields=fields;
+const varied=run('buildWorldSurfaceMesh(pair,4,4,fields)');
+assert.equal(varied.wallVertices,7*6);
+assert.equal(varied.planeVertices,3*6);
+const roofHeights=[];
+for(let i=varied.wallVertices*6;i<varied.vertices.length;i+=36){
+ if(varied.vertices[i+5]===3)roofHeights.push(varied.vertices[i+2].toFixed(2));
+}
+assert.deepEqual(roofHeights,['0.84','1.22']);
+const shader=run('geometryTerrainSource()');assert.ok(shader.includes('rasterHit.w<1.5'));assert.ok(shader.includes('rasterHit.w>=1.5'));assert.ok(shader.includes('let isFloor=rasterHit.w<2.5'));assert.ok(shader.includes('roomCeiling(cell,i32(frame.viewport.z))'));assert.ok(shader.includes('result=scenerySurface(ray3,isFloor,distance)'));assert.ok(shader.includes('result=sceneryAt(pixel.xy,ray3)'));
 assert.ok(!run('TERRAIN_WGSL').includes('hasPlane'));
 console.log('PASS 52 world-surface grids: wall preservation, merged floor/ceiling coverage, winding, tags, collision-only cells, door revisions and shader resolve');

@@ -26,7 +26,7 @@ for(const pitch of [-75,-45,-15,0,15,45,75].map(a=>a*Math.PI/180)){
 }
 for(const n of ['TERRAIN_WGSL','MODEL_WGSL','SPRITES_WGSL','WORLD_GEOMETRY_WGSL'])assert.ok(get(n).includes(get('PROJECTION_WGSL')));
 for(const n of ['TERRAIN_WGSL','MODEL_WGSL','SPRITES_WGSL'])assert.ok(get(n).includes(get('LIGHTING_WGSL')));
-assert.ok(get('TERRAIN_WGSL').includes('distance=surfaceDepth;'));
+assert.ok(get('TERRAIN_WGSL').includes('result=scenerySurface(ray3,ray3.z<0.,distance)'));
 assert.ok(get('geometryTerrainSource()').includes('(boundary-axisOrigin)/along'));
 assert.ok(get('SPRITES_WGSL').includes('if(input.depth>=depth-.012)'));
 assert.ok(get('LIGHTING_WGSL').includes('f.weather.x>.5'));

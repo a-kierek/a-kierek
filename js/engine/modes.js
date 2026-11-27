@@ -43,11 +43,14 @@ function reset(){
 }
 function finishMapPlacement(){
  placeEmergencyReactors();
+ prepareRoomLayout();
  scatterLevelDecor();
  placeTerminalPoses();
+ finishRoomLayout();
 }
 function update(dt){
  if(gameSession.graphicsDemo)updateGraphicsDemo(dt);
  else modeFor(gameSession.level).step(dt);
  if(gameSession.interactionHold)updateInteractionHold(dt);
+ if(gameSession.state==='playing'&&!gameSession.graphicsDemo)updateRoomEnvironment();
 }

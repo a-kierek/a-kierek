@@ -12,7 +12,7 @@ function startSectorTransition(id){if(!graphicsReadyForPlay()||$('transition').c
  const sound=new Audio('assets/audio/menu-beep.mp3');sound.preload='auto';let lastBeep=-Infinity;
  function beep(){const now=performance.now();if(muted||now-lastBeep<85)return;lastBeep=now;sound.pause();sound.currentTime=0;sound.volume=.11*(gameSettings.master/100)*(gameSettings.effects/100);sound.play().catch(()=>{});}
  function select(name){if(!panels[name])return;for(const [key,panel] of Object.entries(panels)){panel.hidden=key!==name;tabs[key].classList.toggle('selected',key===name);if(key===name)tabs[key].setAttribute('aria-current','page');else tabs[key].removeAttribute('aria-current');}$('pixelLiveStatus').textContent={play:'SELECT LEVEL',settings:'SETTINGS',player:'PLAYER PROFILE',custom:'CUSTOM GAME',credits:'CREDITS'}[name];if(name==='play')syncSectorSelection();if(name==='player')renderPlayerProfile();}
- const notes=$('releaseNotes'),notesButton=$('releaseNotesOpen'),notesClose=$('releaseNotesClose'),notesKey='catroomsReleaseNotesSeen_1.7.0-alpha.1';let notesSeen=progressRead(notesKey,'0')==='1';
+ const notes=$('releaseNotes'),notesButton=$('releaseNotesOpen'),notesClose=$('releaseNotesClose'),notesKey='catroomsReleaseNotesSeen_1.8.0-beta';let notesSeen=progressRead(notesKey,'0')==='1';
  function showNotes(){notes.hidden=false;notesButton.hidden=true;hub.inert=true;splash.inert=true;notesClose.focus();}
  function closeNotes(){notes.hidden=true;notesSeen=true;progressWrite(notesKey,'1');notesButton.hidden=false;hub.inert=false;splash.inert=false;notesButton.focus();}
  function onReady(){if(!notesSeen)showNotes();else notesButton.hidden=false;}

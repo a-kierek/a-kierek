@@ -79,7 +79,7 @@ let tutorialCompleted=progressRead('catroomsTutorialDone')==='1',controlsHintsTo
 function rnd(){seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296}
 
 // Randomness used when generating seeded maps; ordinary campaign loot keeps its random rolls.
-function mapRandom(){return gameSession.level===5||gameSession.level===12||gameSession.level===13||isHardMode()?rnd():Math.random();}
+function mapRandom(){return gameSession.roomLayout?rnd():Math.random();}
 
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 

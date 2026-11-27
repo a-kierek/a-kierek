@@ -29,6 +29,8 @@ class GameSession {
   this.guardSight=0;
   this.guardNoise=0;
   this.world=[];
+  this.roomLayout=null;
+  this.currentRoom=null;
   this.fuses=[];
   this.exitCell={x:0,y:0};
   this.seen=[];

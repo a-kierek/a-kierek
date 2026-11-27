@@ -36,7 +36,7 @@ function geometryTerrainSource(){
  let hasPlane=hasSurface && rasterHit.w>=1.5;
  let cell=vec2i(rasterHit.yz);
  let side=i32(rasterHit.w);
- let hit=tileAt(cell.x,cell.y);
+ let hit=max(1u,tileAt(cell.x,cell.y));
  var distance=WALL_DEPTH_SCALE;
  if(hasWall){
    let along=select(ray.y,ray.x,side==0);
@@ -46,18 +46,18 @@ function geometryTerrainSource(){
    distance=max(VIEW_NEAR,(boundary-axisOrigin)/along);
  }
 `+TERRAIN_WGSL.slice(end);
- const oldResolve='result=sceneryAt(pixel.xy,ray3);\n   distance=surfaceDepth;';
+ const oldResolve='result=scenerySurface(ray3,ray3.z<0.,distance);';
  if(!source.includes(oldResolve))throw Error('Terrain surface resolve contract changed');
  return source.replace(oldResolve,`if(hasPlane){
      let isFloor=rasterHit.w<2.5;
      // Raster tag selects the actual visible quad; use exact depth for
      // stable material coordinates, lighting and sprite occlusion.
-     distance=planeDepth(ray3);
+     distance=select(min(VIEW_FAR,(roomCeiling(cell,i32(frame.viewport.z))-.5)/max(ray3.z,.000001)),planeDepth(ray3),isFloor);
      result=scenerySurface(ray3,isFloor,distance);
    }else{
      // Preserve the classic distant fog/near clip fallback when no triangle
      // covers the pixel (including views beyond VIEW_FAR).
      result=sceneryAt(pixel.xy,ray3);
-     distance=surfaceDepth;
+     distance=planeDepth(ray3);
    }`);
 }
