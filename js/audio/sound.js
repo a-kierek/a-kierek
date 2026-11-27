@@ -1,5 +1,5 @@
 // THE CATROOMS - sound effects and distance-aware character voices.
-// All samples are user-provided, kept under assets/audio/ and also embedded in the standalone build.
+// Recorded samples are kept under assets/audio/ and embedded by the standalone build.
 // BLYSK (watcher) and SZEPT (listener) use the supplied voice lines with distance attenuation.
 const SFX_FILES = {
   pickup: 'assets/audio/battery-charge.wav',
@@ -29,6 +29,22 @@ const SFX_FILES = {
   gameMusic:'assets/audio/music/game-ambient.mp3',
   chaseMusic:'assets/audio/music/chase-trailer.mp3'
 };
+// Missing replacements are set to null by the build, so their cues stay silent.
+const REPLACEMENT_SFX_FILES = {
+  unlock: 'assets/audio/replacements/unlock.mp3',
+  warning: 'assets/audio/replacements/warning.mp3',
+  roundStart: 'assets/audio/replacements/round-start.mp3',
+  reactorWrongOrder: 'assets/audio/replacements/reactor-wrong-order.mp3',
+  win: 'assets/audio/replacements/win.mp3',
+  doorLocked: 'assets/audio/replacements/door-locked.mp3',
+  eventSiren: 'assets/audio/replacements/event-siren.mp3',
+  eventBlackout: 'assets/audio/replacements/event-blackout.mp3',
+  yellowPulse: 'assets/audio/replacements/yellow-pulse.mp3',
+  slotNoPrize: 'assets/audio/replacements/slot-no-prize.mp3',
+  humDefault: 'assets/audio/replacements/hum-default.mp3',
+  humFlooded: 'assets/audio/replacements/hum-flooded.mp3',
+  humBloody: 'assets/audio/replacements/hum-bloody.mp3'
+};
 const VOICE_LINES = Object.freeze({
   listener: ['szeptJadymy', 'szeptNieLubi', 'szeptVamos'],
   watcher: ['blyskOni', 'blyskKurwy', 'blyskPijany']
@@ -37,7 +53,7 @@ const sfxTemplates = Object.create(null);
 const activeEnemySounds = [];
 let walkingAudio = null, walkingPlaying = false, lossScreamAudio = null, hardHeartbeatAudio = null, hardHeartbeatPlaying = false;
 const safeRoomTracks={music:null,fire:null};
-const bgTracks={menu:null,game:null,chase:null};
+const bgTracks={menu:null,game:null,chase:null,hum:null};
 let menuMusicUnlocked=false;
 const activeOneShots=new Set();
 function audioCategory(id){
@@ -59,17 +75,16 @@ function refreshAudioMix(){
    track.volume=clamp((track._baseVolume||0)*audioMix(kind==='music'?'ambient':'effects'),0,1);
  }
  for(const [id,a] of Object.entries(bgTracks))if(a)a.volume=clamp((a._baseVolume||0)*audioMix(id==='chase'?'effects':'ambient'),0,1);
- for(const node of ambientNodes)node.gain.gain.value=node.baseGain*audioMix('ambient');
 }
 
 
 // HTMLMediaElement playback works both in an offline ZIP opened as file://
 // and in the self-contained HTML build (where these URLs become data: URIs).
 function preloadGameSounds() {
-  for (const [id, url] of Object.entries(SFX_FILES)) {
-    if (sfxTemplates[id]) continue;
+  for (const [id, url] of Object.entries({...SFX_FILES,...REPLACEMENT_SFX_FILES})) {
+    if (!url || sfxTemplates[id]) continue;
     const audio = new Audio();
-    audio.preload = ['menuMusic','gameMusic','chaseMusic','safeMusic','safeCrackle'].includes(id)?'none':'auto';
+    audio.preload = Object.hasOwn(REPLACEMENT_SFX_FILES,id)||['menuMusic','gameMusic','chaseMusic','safeMusic','safeCrackle'].includes(id)?'none':'auto';
     audio.src = url;
     sfxTemplates[id] = audio;
   }
@@ -117,8 +132,6 @@ function playLossScream() {
   stopLossScream();
   if (muted) return;
   lossScreamAudio = createGameSample('appearScream', 1, 1);
-  // The earlier synthesized scare remains available for non-death scripted events.
-  if (!lossScreamAudio) playScare();
 }
 
 function stopWalkingSound() {
@@ -127,49 +140,11 @@ function stopWalkingSound() {
 }
 
 function stopGameSounds() {
- for(const id of ['game','chase'])if(bgTracks[id])bgTracks[id].pause();
+  for(const id of ['game','chase','hum'])if(bgTracks[id])bgTracks[id].pause();
   stopSafeRoomTracks();
   if(hardHeartbeatAudio){hardHeartbeatAudio.pause();hardHeartbeatPlaying=false;}
   stopEnemySounds();
   stopWalkingSound();
-}
-
-function initAudio() {
-  if (muted) return;
-  preloadGameSounds();
-  try {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const b = audioCtx.createBuffer(1, audioCtx.sampleRate * .4, audioCtx.sampleRate);
-      const d = b.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.5);
-      noiseBuffer = b;
-    }
-    audioCtx.resume();
-    if (ambientNodes.length) return;
-    for (const freq of (gameSession.level === 3 ? [47.5, 71.5, 95.2] : gameSession.level === 2 ? [41.2, 82.5, 125.1] : [59.9, 119.7, 60.3])) {
-      const o = audioCtx.createOscillator(), gain = audioCtx.createGain(), filter = audioCtx.createBiquadFilter();
-      o.type = 'sine'; o.frequency.value = freq;
-      filter.type = 'lowpass'; filter.frequency.value = 200;
-      const baseGain=gameSession.level === 3 ? (freq < 60 ? .026 : .013) : gameSession.level === 2 ? (freq < 50 ? .023 : .012) : (freq < 60 ? .018 : .01);
-      gain.gain.value=baseGain*audioMix('ambient');
-      o.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination); o.start();
-      ambientNodes.push({o,gain,baseGain});
-    }
-  } catch (e) { /* Browser may block WebAudio until another gesture. MP3/WAV still work. */ }
-}
-
-function stopHum() { for (const n of ambientNodes) { try { n.o.stop(); } catch (e) {} } ambientNodes = []; }
-
-// Existing synthesized cues remain for door unlocks, wins, and the original events.
-// No new jumpscare files or jumpscare triggers have been added.
-function sound(freq = 320, dur = .13, type = 'sine', volume = .11, slide = 0) {
-  if (muted || !audioCtx) return;
-  const t = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
-  o.type = type; o.frequency.setValueAtTime(freq, t);
-  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(35, freq + slide), t + dur);
-  g.gain.setValueAtTime(Math.max(.0001,volume*audioMix('effects')), t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
-  o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + dur + .01);
 }
 
 function syncWalkingAudio() {
@@ -193,14 +168,11 @@ function syncWalkingAudio() {
   }
 }
 
-function playPickup() {
-  if (!createGameSample('pickup', .16)) sound(430, .18, 'triangle', .06, 260);
-}
-function playHurt(){ if(!createGameSample('hurt', .72, 1)) sound(180,.22,'square',.18,-70); }
-function playUnlock() { sound(380, .6, 'sawtooth', .08, 500); }
-function playSting(loud = true) { sound(loud ? 110 : 220, loud ? .8 : .2, 'sawtooth', loud ? .12 : .03, loud ? -60 : -30); }
-function playScare() { sound(85, .8, 'sawtooth', .27, 800); sound(48, .65, 'square', .20, 240); }
-function playWin() { sound(550, .25, 'triangle', .16, 200); setTimeout(() => sound(740, .4, 'triangle', .15, 300), 130); }
+function playPickup(){createGameSample('pickup',.16);}
+function playHurt(){createGameSample('hurt',.72);}
+function playUnlock(){createGameSample('unlock',.32);}
+function playSting(loud=true){createGameSample(loud?'warning':'roundStart',loud?.38:.25);}
+function playWin(){createGameSample('win',.45);}
 
 // Volume falls smoothly from near distance to silence beyond maxRange;
 // a wall between player and monster dampens the sound further.
@@ -365,18 +337,23 @@ function unlockMenuMusic(){
 }
 function syncBackgroundTracks(dt=.04){
  if(!menuMusicUnlocked)return;
- const chase=gameSession.state==='playing'&&(gameSession.guards.some(g=>g.state==='chase'&&!g.frozen&&g.variant!=='gray'&&
+ const playing=gameSession.state==='playing';
+ const chase=playing&&(gameSession.guards.some(g=>g.state==='chase'&&!g.frozen&&g.variant!=='gray'&&
    (gameSession.level!==12||g.rushSector===gameSession.bossRush?.stage))||(gameSession.level===1&&gameSession.awake&&gameSession.cat?.state==='chase'));
  const targets={
   menu:gameSession.state==='menu'?.25:0,
-  game:gameSession.state==='playing'?(chase?.055:.23):0,
-  chase:chase?.35:0
+  game:playing?(chase?.055:.23):0,
+  chase:chase?.35:0,
+  hum:playing?.12:0
  };
- for(const [id,key,category] of [['menu','menuMusic','ambient'],['game','gameMusic','ambient'],['chase','chaseMusic','effects']]){
+ const hum=gameSession.level===2?'humFlooded':gameSession.level===3?'humBloody':'humDefault';
+ for(const [id,key,category] of [['menu','menuMusic','ambient'],['game','gameMusic','ambient'],
+   ['chase','chaseMusic','effects'],['hum',hum,'ambient']]){
    let a=bgTracks[id];
+   if(a&&a._sampleKey!==key){a.pause();bgTracks[id]=a=null;}
    if(!a&&sfxTemplates[key]&&!muted&&targets[id]>.002){
      a=sfxTemplates[key].cloneNode(true);a.loop=true;a.preload='auto';a._baseVolume=0;
-     bgTracks[id]=a;
+     a._sampleKey=key;bgTracks[id]=a;
    }
    if(!a)continue;
    const target=muted?0:targets[id];

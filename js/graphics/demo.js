@@ -63,7 +63,6 @@ function beginGraphicsDemo(){
  updateInventoryUI();
  updateSeen();
  setState('playing');
- initAudio();
  if(!isCoarse)requestGamePointerLock();
  return true;
 }

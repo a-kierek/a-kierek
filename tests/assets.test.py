@@ -49,7 +49,7 @@ assert len(decor['models'])==14 and decor['materials']==19
 with Image.open(root/'assets/models/decor/albedo.webp') as im:
  im.load();assert list(im.size)==decor['atlas']
 for name,meta in decor['models'].items():
- b=(root/'assets/models/decor'/f'{name}.mesh').read_bytes()
+ b=(root/'assets/models/decor'/meta.get('mesh',f'{name}.mesh')).read_bytes()
  magic,n,k=struct.unpack_from('<4sII',b)
  assert magic==b'CRM2' and len(b)==12+44*n+4*k and k==3*meta['triangles']
  v=np.frombuffer(b,dtype='<f4',offset=12,count=n*11).reshape(-1,11)

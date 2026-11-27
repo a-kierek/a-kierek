@@ -234,7 +234,7 @@ function updateHard(dt){
   if(g.variant==='yellow'&&gameSession.elapsed>=g.nextPulse&&yellowCanSeePlayer(g)){
    g.nextPulse=gameSession.elapsed+30+rnd()*60;gameSession.hardPulseUntil=gameSession.elapsed+7;
    showToast('ZOLTA ANOMALIA · ZWOLNIONO PLAYERA',3);
-   sound(170,.4,'sawtooth',.09,-80);
+   createGameSample('yellowPulse',.34);
   }
  }
  gameSession.props=gameSession.props.filter(p=>!p.expires||p.expires>gameSession.elapsed);

@@ -9,6 +9,10 @@ root=Path(__file__).resolve().parents[1]
 html=(root.parent/'THE_CATROOMS_V1_7_ALPHA1.html').read_text()
 shim=r'''<script>
 const noGpuOp=()=>{};
+let synthAttempts=0;
+const failAudioSynthesis=function(){synthAttempts++;throw Error('Unexpected audio synthesis');};
+Object.defineProperty(window,'AudioContext',{value:failAudioSynthesis,configurable:true});
+Object.defineProperty(window,'webkitAudioContext',{value:failAudioSynthesis,configurable:true});
 const mockTexture=()=>({createView:()=>({}),destroy:noGpuOp});
 const mockPipeline=()=>({getBindGroupLayout:()=>({})});
 const mockPass=()=>({setPipeline:noGpuOp,setBindGroup:noGpuOp,draw:noGpuOp,end:noGpuOp,setVertexBuffer:noGpuOp,setIndexBuffer:noGpuOp,drawIndexed:noGpuOp});
@@ -176,6 +180,10 @@ with sync_playwright() as p:
  print('PASS M toggles details, one-second detection pulse, re-detection and no gameplay version strip')
  print('PASS actual menu Start, Custom and unlocked Boss Rush click handlers')
  print('PASS cold and saved HARD/unlocked Boss Rush startup')
+ assert page.evaluate("""synthAttempts===0 &&
+  ['pickup','hurt','appearScream','menuMusic'].every(key=>sfxTemplates[key].src.startsWith('data:audio/')) &&
+  Object.entries(REPLACEMENT_SFX_FILES).every(([id,url])=>url===null?!sfxTemplates[id]:url.startsWith('data:audio/')&&!!sfxTemplates[id])""")
+ print('PASS recorded audio and optional replacements load offline without JS audio synthesis')
  print('PASS full standalone DOM startup, real image decode and model loading (mock GPU)')
  for level in [1,2,3,4,5,6,7,8,9,10,11,12,13]:
   result=page.evaluate('n=>{requestedSeed=12345;begin(n,{testRun:true});godMode=true;return {state:gameSession.state,level:gameSession.level,size:gameSession.world.length};}',level)

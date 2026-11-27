@@ -18,7 +18,7 @@ try:
     assert status==200 and json.loads(health)['version']=='1.7.0-alpha.1'
     status,html=get(''); assert status==200
     html=html.decode(); scripts=re.findall(r'<script src="([^"]+)"></script>',html)
-    assert scripts==['js/game.bundle.js?v=1.7.0-alpha.1','js/core/boot.js?v=1.7.0-alpha.1']
+    assert scripts==['js/game.bundle.js?v=1.7.0-alpha.1.1','js/core/boot.js?v=1.7.0-alpha.1.1']
     for path in scripts+re.findall(r'<link href="([^"]+)" rel="stylesheet"',html)+json.loads((root/'tools/script-order.json').read_text()):
         status,body=get(path); assert status==200 and body==(root/path.split('?')[0]).read_bytes(),path
     for path in ['slot-optimized.mesh','tree-optimized.mesh','campfire-optimized.mesh','slot-albedo.webp']:
@@ -34,6 +34,8 @@ try:
     print(f'PASS all {len(asset_files)} production media files via HTTP, genuine missing file returns 404')
     paths=json.loads((root/'tools/script-order.json').read_text())
     expected='\n;\n'.join('// SOURCE: '+path+'\n'+(root/path).read_text() for path in paths[:-1])+'\n;\nwindow.CatroomsScriptsReady = true;\n'
+    expected=re.sub(r"""(['"])(assets/audio/replacements/[^'"\s]+\.mp3)\1""",
+                    lambda m: m[0] if (root/m[2]).is_file() else 'null', expected)
     assert (root/'js/game.bundle.js').read_text()==expected
     print('PASS actual HTTP server: version, index, both scripts, all source scripts, CSS, models, favicon, bundle integrity')
 finally:

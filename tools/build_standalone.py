@@ -27,13 +27,19 @@ def inline_css(match):
         css=css.replace("../assets/ui/"+rel, data_url('assets/ui/'+rel))
     return '<style>\n' + css + '\n</style>'
 
-def script_source(path):
+def script_source(path, *, embed_assets=False):
     js = (root / path).read_text(encoding='utf-8')
-    # Embed quoted local asset paths, including binary model manifests.
-    # Cache URLs so multiple references do not repeatedly read/encode a file.
-    js = re.sub(r"(['\"])(assets/[^'\"\s]+\.(?:png|svg|webp|wav|mp3|ogg|mesh))\1",
-                lambda m: m.group(1) + data_url(m.group(2)) + m.group(1), js)
-    if '</script' in js.lower():
+
+    def asset_reference(match):
+        quote, asset = match.groups()
+        # Optional sound cues are silent until a replacement has been added.
+        if asset.startswith('assets/audio/replacements/') and not (root / asset).is_file():
+            return 'null'
+        return quote + data_url(asset) + quote if embed_assets else match[0]
+
+    js = re.sub(r"""(['"])(assets/[^'"\s]+\.(?:png|svg|webp|wav|mp3|ogg|mesh))\1""",
+                asset_reference, js)
+    if embed_assets and '</script' in js.lower():
         raise ValueError(f'Unsafe script ending in {path}')
     return js
 
@@ -48,11 +54,11 @@ assert 'js/gameplay/custom-mode.js' in paths
 ready = '\n;\nwindow.CatroomsScriptsReady = true;\n'
 def combine(reader):
     return '\n;\n'.join('// SOURCE: '+path+'\n'+reader(path) for path in paths[:-1])+ready
-online = combine(lambda path: (root/path).read_text(encoding='utf-8'))
+online = combine(script_source)
 (root/'js/game.bundle.js').write_text(online, encoding='utf-8')
-pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1"></script>'
-bundle = combine(script_source)
-boot = script_source(paths[-1])
+pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1\.1"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1\.1"></script>'
+bundle = combine(lambda path: script_source(path, embed_assets=True))
+boot = script_source(paths[-1], embed_assets=True)
 text, count = re.subn(pattern, lambda _: '<script>\n'+bundle+'\n</script>\n<script>\n'+boot+'\n</script>', text)
 assert count == 1, 'Expected online bundle and boot tags in index.html'
 output.write_text(text, encoding='utf-8')

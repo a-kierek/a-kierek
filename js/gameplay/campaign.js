@@ -81,7 +81,7 @@ function interact(){
   }
   if(target.type==='door'){
     let why=requirementReason(o);
-    if(why){sound(130,.17,'square',.09,-40);showToast('⛔ '+why.toUpperCase(),3);return}
+    if(why){createGameSample('doorLocked',.32);showToast('⛔ '+why.toUpperCase(),3);return}
     o.open=true;gameSession.world[o.y][o.x]=0;markWorldChanged();gameSession.stats.doors++;addNoise(o.x+.5,o.y+.5,11,'brama');
     playUnlock();showToast('✓ OPENED: '+o.title,2.8);updateObjectiveFacility();return;
   }
@@ -89,7 +89,7 @@ function interact(){
     if(o.used)return;
     if(gameSession.level===3){
       const next=gameSession.terminals.filter(t=>t.used).length+1;
-      if(o.order!==next){gameSession.alarmTimer=9;addNoise(o.x,o.y,14,'alarm');playScare();showToast(`⚠ WRONG ORDER! REACTOR ${next} MUST BE FIRST`,3.4);return}
+      if(o.order!==next){gameSession.alarmTimer=9;addNoise(o.x,o.y,14,'alarm');createGameSample('reactorWrongOrder',.48);showToast(`⚠ WRONG ORDER! REACTOR ${next} MUST BE FIRST`,3.4);return}
     }
     o.used=true;gameSession.stats.panels++;addNoise(o.x,o.y,gameSession.level===3?15:10,'urzadzenie');
     playUnlock();showToast('✓ ACTIVATED: '+o.title,3.2);
@@ -181,9 +181,9 @@ function triggerFinalEvent(){
   if(typeof createGameSample==='function')createGameSample('metalCrack',.32);
   if(gameSession.eventState.kind==='siren'){
     let t=gameSession.terminals[Math.floor(rnd()*gameSession.terminals.length)];addNoise(t.x,t.y,22,'syrena');gameSession.alarmTimer=9;
-    sound(310,.8,'sawtooth',.12,-150);
+    createGameSample('eventSiren',.38);
   }
-  if(gameSession.eventState.kind==='blackout')sound(68,1.1,'sawtooth',.15,-40);
+  if(gameSession.eventState.kind==='blackout')createGameSample('eventBlackout',.38);
   if(gameSession.eventState.kind==='pressure')for(let g of gameSession.guards){g.patrolTarget=null;g.pathTimer=0}
   showToast('⚠ WYDARZENIE: '+gameSession.eventState.label,4);
 }

@@ -79,8 +79,9 @@
       "vertices": 8166,
       "radius": 0.22854135930538177,
       "height": 0.8999999761581421,
-      "depth": 0.10717111825942993,
-      "bytes": 515076
+      "depth": 0.2018551528453827,
+      "bytes": 515076,
+      "mesh": "pipe-flanged.mesh"
     },
     "pump": {
       "source": "floodedcomplex/water_motor_pump.glb",

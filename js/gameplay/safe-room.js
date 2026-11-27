@@ -213,6 +213,6 @@ function slotMachineSpin(slot){
  }else if(roll<50){
   gameSession.player.slowCharges=(gameSession.player.slowCharges||0)+1;ensureInventory().slow=gameSession.player.slowCharges;
   showToast('777 · WYGRANA: SLOW DEVICE',3);playUnlock();
- }else{showToast('NO PRIZE · LOST 1 COIN',2.5);sound(145,.18,'square',.09,-80)}
+ }else{showToast('NO PRIZE · LOST 1 COIN',2.5);createGameSample('slotNoPrize',.29)}
  updateInventoryUI();
 }

@@ -87,7 +87,7 @@ function begin(targetLevel=1,{testRun=false}={}){
  if(!transitionExecuting)cancelTransition();
  if(typeof unlockMenuMusic==='function')unlockMenuMusic();
  if(typeof profileCheckpoint==='function')profileCheckpoint();
- stopGameSounds();stopLossScream();stopHum();resetRage();prepareRun();
+ stopGameSounds();stopLossScream();resetRage();prepareRun();
  gameSession.runCheated=testRun;gameSession.runTestEntry=testRun;gameSession.level=id;
  if(id===13&&Number.isInteger(customGameConfig.fixedSeed))requestedSeed=customGameConfig.fixedSeed;
  reset();
@@ -104,7 +104,7 @@ function begin(targetLevel=1,{testRun=false}={}){
  updateInventoryUI();
  gameSession.player.pitch=0;rearPeek=false;touchCrouch=false;keys={};resetMobileInputs();
  $('crouchBtn').classList.remove('pressed');$('crouchBtn').textContent='SNEAK';
- setState('playing');setMapVisibility(true);mapClockVisible=false;$('mapClock').hidden=true;if($('mapRunDetails'))$('mapRunDetails').hidden=true;updateTutorialVisibility();resetSimulationClock();initAudio();playSting(false);
+ setState('playing');setMapVisibility(true);mapClockVisible=false;$('mapClock').hidden=true;if($('mapRunDetails'))$('mapRunDetails').hidden=true;updateTutorialVisibility();resetSimulationClock();playSting(false);
  if(!isCoarse)requestGamePointerLock();
  return true;
 }
@@ -145,7 +145,6 @@ function finish(good){
  $('bestTime').textContent=!qualifiesForProgress()?'TEST / BEZ REKORDU':best?'REKORD '+formatTime(best):'';
  if(typeof renderRoundSummary==='function')renderRoundSummary(good,previousBest);
  if(coop.role==='host')coop.roundEnd(good,gameSession.deathBy);else if(coop.role==='guest')coop.guestEnd();
- stopHum();
 }
 
 function win(){if(gameSession.state==='playing'){playWin();finish(true)}}
@@ -157,7 +156,7 @@ function lose(killerId='cat'){
  $('jump').style.background=gameSession.deathBy==='watcher'?'#032732':gameSession.deathBy==='listener'?'#42111f':gameSession.deathBy==='pig'?'#54301e':gameSession.deathBy==='hazard'?'#1d4720':'#4c0909';
  $('jumpName').textContent=(gameSession.deathBy==='hazard'?'WYKONCZYL CIE: ':'CAUGHT BY: ')+actor.name;
  UI.hud.classList.remove('show');UI.mobile.classList.remove('playing');$('jump').classList.add('show');
- stopGameSounds();stopHum();playLossScream();if(document.pointerLockElement===C)document.exitPointerLock?.();
+ stopGameSounds();playLossScream();if(document.pointerLockElement===C)document.exitPointerLock?.();
  const generation=gameSession.generation;
  sessionTimers.defer('death',930,()=>{if(gameSession.generation===generation&&gameSession.state==='jumpscare'){ $('jump').classList.remove('show');finish(false); }});
  return true;

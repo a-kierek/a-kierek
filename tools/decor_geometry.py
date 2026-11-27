@@ -24,6 +24,11 @@ def correct_mesh(name, vertices, faces, radius):
         # Reflect the dial (including the hands) with its UVs attached.
         vertices[:, [0, 3]] *= -1
         faces[:, [1, 2]] = faces[:, [2, 1]]
+    if name == 'pipe':
+        # The mounting flange points along local -X in the imported asset.
+        # Rotate it to +Y, the direction the placement code puts against a wall.
+        for x, y in ((0, 1), (3, 4)):
+            vertices[:, [x, y]] = vertices[:, [y, x]] * [1, -1]
     if name == 'bench':
         # Local +X is missing its leg. Find the angle at which the two
         # halves have the same lowest point, then rest that plane on Z=0.

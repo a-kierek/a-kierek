@@ -54,7 +54,10 @@ struct MeshVertexOut {
  let pixel=vec2i(floor(input.position.xy));
  if(any(pixel<vec2i(0))||any(pixel>=vec2i(frame.viewport.xy))){discard;}
  let wall=textureLoad(wallDistance,pixel,0).r*WALL_DEPTH_SCALE;
- if(input.depth>wall-.025){discard;}
+ // Wall-mounted decor can be thinner than the original mesh bias. Keep
+ // only enough clearance for quantization of the half-float terrain depth.
+ let bias=select(.025,max(.001,wall/2048.),input.kind==5u);
+ if(input.depth>wall-bias){discard;}
  var base=input.tint;
  if(input.kind==1u||input.kind==3u||input.kind==5u){
    base*=textureSampleLevel(slotAlbedo,albedoSampler,input.uv,0.).rgb;

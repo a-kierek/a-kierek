@@ -9,7 +9,7 @@ const ctx=vm.createContext({console,Image:class{},document:{getElementById:get,q
 const run=s=>vm.runInContext(s,ctx,{timeout:180000});
 run(`let godMode=false,lastShieldToast=-100,touchCrouch=false;
 const noop=()=>{};
-const setUIIcon=noop,setUIIconText=noop,makeUIIcon=noop,uiIcon=()=>'',stopGameSounds=noop,stopLossScream=noop,stopHum=noop,playWin=noop,playLossScream=noop,playSting=noop,playHurt=noop,playPickup=noop,playUnlock=noop,playScare=noop,playCoinPickup=noop,playCoinSlot=noop,sound=noop,resetMobileInputs=noop,drawMap=noop,initAudio=noop;
+const setUIIcon=noop,setUIIconText=noop,makeUIIcon=noop,uiIcon=()=>'',stopGameSounds=noop,stopLossScream=noop,playWin=noop,playLossScream=noop,playSting=noop,playHurt=noop,playPickup=noop,playUnlock=noop,playCoinPickup=noop,playCoinSlot=noop,createGameSample=noop,resetMobileInputs=noop,drawMap=noop;
 `);
 const scripts=['engine/session','core/state','characters/actors','core/navigation','maps/level1','maps/shared','maps/level2','maps/level3','maps/navigable','maps/level5','characters/ai','gameplay/campaign','progression/streak','gameplay/procedural','gameplay/hard','gameplay/inventory','network/coop','gameplay/safe-room','gameplay/boss-rush','gameplay/custom-mode','graphics/decor-data','gameplay/decor','engine/modes','engine/loop','ui/interface'];
 for(const f of scripts)vm.runInContext(fs.readFileSync(path.join(root,'js',f+'.js'),'utf8'),ctx,{filename:f+'.js'});

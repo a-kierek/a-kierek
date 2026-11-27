@@ -31,7 +31,7 @@ function looseDecorPose(kind,spec,random){
  const jitter=Math.max(0,.44-radius);
  return {size,yaw,tilt,z,dx:(random()*2-1)*jitter,dy:(random()*2-1)*jitter,radius};
 }
-// Local +Y is the back of each mesh, facing the backing wall.
+// Local +Y is the back of the bench and the pipe flange, facing the backing wall.
 function wallFloorDecorPose(kind,spec,wall){
  const [dx,dy]=wall;
  const offset=.5-spec.depth-(kind==='pipe'?0:.015);

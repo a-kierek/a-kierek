@@ -16,7 +16,7 @@ $('level2Btn').addEventListener('click',()=>{if(selectedDifficulty==='hard'?hard
 $('finalBtn').addEventListener('click',()=>{if(selectedDifficulty==='hard'?hardUnlocked[3]:unlocked3)openDossier(3)});
 $('dossierPlay').addEventListener('click',()=>transit(()=>begin(dossierLevel===5?(selectedDifficulty==='hard'?11:10):dossierLevel),dossierLevel===3?'NONE DROGI POWROTNEJ':'DOORS CLOSE BEHIND YOU'));
 $('dossierBack').addEventListener('click',()=>setState('menu'));
-$('pauseMenuBtn').addEventListener('click',()=>{stopHum();setState('menu');refreshLevelButton()});
+$('pauseMenuBtn').addEventListener('click',()=>{setState('menu');refreshLevelButton()});
 $('dossierPortraitCat').src=CAT_PNG;
 $('dossierPortraitWatcher').src=PERSON_B_PNG;
 $('dossierPortraitListener').src=PERSON_A_PNG;

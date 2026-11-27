@@ -26,7 +26,7 @@ $('resumeBtn').addEventListener('click',resume);
 $('againBtn').addEventListener('click',()=>begin(gameSession.level,{testRun:gameSession.runTestEntry}));
 $('mapToggle').addEventListener('click',toggleMap);
 $('miniMapButton').addEventListener('click',toggleMap);
-$('soundToggle').addEventListener('click',()=>{muted=!muted;setUIIcon($('soundToggle'),muted?'mute':'sound');$('soundToggle').setAttribute('aria-label',muted?'Wlacz dzwiek':'Wycisz dzwiek');if(muted){stopHum();stopGameSounds();stopLossScream()}else initAudio()});
+$('soundToggle').addEventListener('click',()=>{muted=!muted;setUIIcon($('soundToggle'),muted?'mute':'sound');$('soundToggle').setAttribute('aria-label',muted?'Wlacz dzwiek':'Wycisz dzwiek');if(muted){stopGameSounds();stopLossScream()}else unlockMenuMusic();refreshAudioMix()});
 // Mobile: two simultaneous fingers. Left thumb for movement; right thumb for camera.
 let touchCrouch=false;
 // Touch sensitivity is controlled by gameSettings.touchSensitivity.

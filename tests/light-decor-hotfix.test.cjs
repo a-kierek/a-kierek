@@ -18,10 +18,18 @@ for(const name of ['TERRAIN_WGSL','geometryTerrainSource()']){const s=get(name);
 console.log(`PASS ${cases} lamp-window continuity cases, both axes and all heights, compared to full-grid reference`);
 for(const kind of ['bench','pipe']){
  const b=fs.readFileSync(path.join(root,specs[kind].mesh)),n=b.readUInt32LE(4);
- for(const dir of [[1,0],[-1,0],[0,1],[0,-1]]){const p=pose(kind,specs[kind],dir);let contact=-Infinity,minZ=Infinity,left=Infinity,right=Infinity;
- for(let j=0;j<n;j++){const x=b.readFloatLE(12+j*44),y=b.readFloatLE(16+j*44),z=b.readFloatLE(20+j*44);const xx=p.dx+x*Math.cos(p.yaw)-y*Math.sin(p.yaw),yy=p.dy+x*Math.sin(p.yaw)+y*Math.cos(p.yaw);assert.ok(Math.abs(xx)<=.50001&&Math.abs(yy)<=.50001&&z>=-.00001&&z<=1);contact=Math.max(contact,xx*dir[0]+yy*dir[1]);minZ=Math.min(minZ,z);if(x<-.25)left=Math.min(left,z);if(x>.25)right=Math.min(right,z);}
- assert.ok(Math.abs(minZ)<1e-5);if(kind==='bench'){assert.ok(left<1e-5);assert.ok(right<1e-5);}
+ for(const dir of [[1,0],[-1,0],[0,1],[0,-1]]){const p=pose(kind,specs[kind],dir);let contact=-Infinity,minZ=Infinity,left=Infinity,right=Infinity,flange=0,baseContact=-Infinity;
+ for(let j=0;j<n;j++){const x=b.readFloatLE(12+j*44),y=b.readFloatLE(16+j*44),z=b.readFloatLE(20+j*44);const xx=p.dx+x*Math.cos(p.yaw)-y*Math.sin(p.yaw),yy=p.dy+x*Math.sin(p.yaw)+y*Math.cos(p.yaw);assert.ok(Math.abs(xx)<=.50001&&Math.abs(yy)<=.50001&&z>=-.00001&&z<=1);const along=xx*dir[0]+yy*dir[1];
+  contact=Math.max(contact,along);
+  if(kind==='pipe'){
+   if(z<.02)baseContact=Math.max(baseContact,along);
+   const nx=b.readFloatLE(24+j*44),ny=b.readFloatLE(28+j*44);
+   const facing=(nx*Math.cos(p.yaw)-ny*Math.sin(p.yaw))*dir[0]+(nx*Math.sin(p.yaw)+ny*Math.cos(p.yaw))*dir[1];
+   if(z>.68&&along>.49999&&facing>.95)flange++;
+  }
+  minZ=Math.min(minZ,z);if(x<-.25)left=Math.min(left,z);if(x>.25)right=Math.min(right,z);}
+ assert.ok(Math.abs(minZ)<1e-5);if(kind==='bench'){assert.ok(left<1e-5);assert.ok(right<1e-5);}else{assert.ok(flange>=3,'upper flange must face and touch the wall');assert.ok(baseContact<.35,'floor base must stay away from the wall');}
  assert.ok(Math.abs(contact-(kind==='pipe'?.5:.485))<1e-5,`${kind} ${dir}: ${contact}`);
  }
 }
-console.log('PASS bench and pipe actual mesh vertices, four wall orientations, both bench ends grounded, floor and contact distances');
+console.log('PASS bench and pipe actual mesh vertices, four wall orientations, grounded bench and wall-facing pipe flange');

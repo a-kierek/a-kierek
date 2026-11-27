@@ -43,7 +43,7 @@ const PI=Math.PI,TAU=2*PI;
 let unlocked2=false;
 let W=720,H=400,floorTexture,ceilingTexture,wallTexture,doorTexture,doorOpenTexture,fuseImg;
 let metalTexture,metalFloor,metalCeil,terminalImg,keycardImg,doorShutImg,personAImg=new Image(),personBImg=new Image();
-let muted=false,audioCtx=null,ambientNodes=[],noiseBuffer=null,keys={},touchX=0,touchY=0,touchRun=false,isCoarse=matchMedia('(pointer:coarse)').matches,seed=48131;
+let muted=false,keys={},touchX=0,touchY=0,touchRun=false,isCoarse=matchMedia('(pointer:coarse)').matches,seed=48131;
 let rageMode=false;
 let unlocked3=false,dossierLevel=2;
 const progressRead=(k,d='')=>{try{return localStorage.getItem(k)??d}catch(e){return d}};
