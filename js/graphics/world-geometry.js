@@ -6,7 +6,7 @@ function buildWorldWallVertices(tiles,size,stride=128,fields=tiles){
  if(!Number.isInteger(size)||size<1||size>stride||tiles.length<size*stride)throw Error('Invalid wall grid');
  const data=[];
  const tile=(x,y)=>x<0||y<0||x>=size||y>=size?1:tiles[y*stride+x];
- const open=(x,y)=>{const t=tile(x,y);return t===0||t===5;};
+ const open=(x,y)=>{const t=tile(x,y);return t===0||t===5||t===POOL_TILE;};
  const height=(x,y)=>ROOM_CEILING_HEIGHTS[(fields[y*stride+x]>>>9)&7];
  const face=(ax,ay,bx,by,cx,cy,side,low,high)=>{
   for(const [x,y,z] of [[ax,ay,low],[bx,by,low],[ax,ay,high],[ax,ay,high],[bx,by,low],[bx,by,high]])data.push(x,y,z,cx,cy,side);
@@ -19,6 +19,7 @@ function buildWorldWallVertices(tiles,size,stride=128,fields=tiles){
   ]){
    const low=open(nx,ny)?height(nx,ny):0;
    if(low<high)face(ax,ay,bx,by,nx,ny,side,low,high);
+   if(tile(x,y)===POOL_TILE&&tile(nx,ny)!==POOL_TILE)face(ax,ay,bx,by,nx,ny,side,POOL_BOTTOM_Z,0);
   }
  }
  return new Float32Array(data);
@@ -30,7 +31,7 @@ function buildWorldSurfaceMesh(tiles,size,stride=128,fields=tiles){
  const open=new Uint8Array(size*size), ceilings=new Uint8Array(size*size);
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
   const tile=tiles[y*stride+x];
-  open[y*size+x]=Number(tile===0||tile===5);
+  open[y*size+x]=tile===POOL_TILE?2:Number(tile===0||tile===5);
   ceilings[y*size+x]=open[y*size+x]?1+((fields[y*stride+x]>>>9)&7):0;
  }
  const planes=[];
@@ -47,8 +48,13 @@ function buildWorldSurfaceMesh(tiles,size,stride=128,fields=tiles){
    for(let row=y;row<bottom;row++)cells.fill(0,row*size+x,row*size+right);
    const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
    const order=isFloor?[0,1,2,2,1,3]:[0,2,1,1,2,3];
-   const z=isFloor?0:ROOM_CEILING_HEIGHTS[code-1];
-   for(const i of order)planes.push(...corners[i],z,x,y,isFloor?2:3);
+   if(isFloor&&code===2){
+    for(const i of order)planes.push(...corners[i],POOL_BOTTOM_Z,x,y,5);
+    for(const i of order)planes.push(...corners[i],POOL_WATER_Z,x,y,4);
+   }else{
+    const z=isFloor?0:ROOM_CEILING_HEIGHTS[code-1];
+    for(const i of order)planes.push(...corners[i],z,x,y,isFloor?2:3);
+   }
   }
  }
  mergePlanes(open,true);

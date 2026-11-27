@@ -205,7 +205,7 @@ function lineOfSight(ax,ay,bx,by,options={}){
  const objects=prepareObjectCollisions();
  const blocked=(xx,yy)=>{
   if(options.allowTargetTile&&xx===tx&&yy===ty)return false;
-  return tileBlocked(xx,yy,objects)||objects.cells.get(yy*objects.size+xx)?.some(shape=>footprintHitsSegment(shape,ax,ay,bx,by));
+  return (objects.world[yy]?.[xx]!==POOL_TILE&&tileBlocked(xx,yy,objects))||objects.cells.get(yy*objects.size+xx)?.some(shape=>footprintHitsSegment(shape,ax,ay,bx,by));
  };
  if(blocked(x,y))return false;
  const deltaX=sx?1/Math.abs(dx):Infinity,deltaY=sy?1/Math.abs(dy):Infinity;

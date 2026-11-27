@@ -20,3 +20,5 @@
 W katalogu projektu uruchom `python tools/build_standalone.py`, aby odtworzyć paczkę skryptów i plik offline w katalogu nadrzędnym. Polecenie `python tools/check_release.py` wykonuje kompilację, testy regresji, kontrolę zasobów i test serwera. Opcje `--browser` i `--webgpu` uruchamiają odpowiednio test interfejsu z atrapą GPU i test renderera WebGPU w Chromium ze SwiftShaderem. Testy przeglądarkowe wymagają pakietu Playwright dla Pythona.
 
 Szczegóły projektu, zakres bety i lista brakujących assetów są w [notatkach Room System 2.0](docs/room-system-2-beta.md).
+
+[Checklista i palety sektorów](docs/room-checklist.md) · [Autorzy modeli pokojów](docs/room-model-credits.md).

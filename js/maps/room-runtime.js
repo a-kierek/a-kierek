@@ -116,11 +116,11 @@ function indexRoomLayout(){
  for(const room of layout.rooms){
   const xRadius=room.w>>1,yRadius=room.h>>1;
   for(let y=room.y-yRadius;y<=room.y+yRadius;y++)for(let x=room.x-xRadius;x<=room.x+xRadius;x++){
-   if(![0,3,4,5].includes(s.world[y]?.[x]))continue;
+   if(![0,3,4,5,POOL_TILE].includes(s.world[y]?.[x]))continue;
    const index=y*s.N+x;
    layout.cells[index]=room.id;
    const condition=room.condition==='damp'?1:room.condition==='damaged'?2:0;
-   layout.fields[index]=(room.height<<9)|(ROOM_LIGHTS[room.lighting]<<12)|(condition<<15);
+   layout.fields[index]=(room.height<<9)|(ROOM_LIGHTS[room.lighting]<<12)|(condition<<15)|((room.template==='pool'?1:0)<<17);
   }
  }
  // Modelled doors and stair landings need a full-height frame.
@@ -220,6 +220,7 @@ function finishRoomLayout(){
  if(!layout)return;
  indexRoomLayout();
  furnishRoomSurfaces(s);
+ placeImportedRoomFixtures(s);
  for(const object of [...s.props,...s.fuses,...s.terminals,...s.bonusItems,...s.interactables,...s.emergencyReactors]){
   const room=roomAt(object.x,object.y);
   if(room)room.objects.push(object);
@@ -287,7 +288,7 @@ function furnishRoomSurfaces(scene){
   const rules=ROOM_OBJECTS[prop.model];
   prop.objectType=rules?.type??'DECORATIVE';
   prop.pushable=!!rules?.pushable;
-  if(total>=2||!rules?.surface||prop.tilt||random()>.38)continue;
+  if(prop.model==='desk'||total>=2||!rules?.surface||prop.tilt||random()>.38)continue;
   const height=DECOR_MODELS[prop.model].height*prop.size;
   const item={id:'room-surface-'+total,type:'stamina',name:'ENERGY DRINK',
    x:prop.x,y:prop.y,z:height,phase:random()*Math.PI*2,taken:false,quantity:1,attachment:true};
@@ -322,4 +323,46 @@ function pushRoomProp(prop){
  }
  markWorldChanged();addNoise(prop.x,prop.y,6,'furniture');
  return true;
+}
+
+function placeImportedRoomFixtures(s){
+ const add=(model,x,y,z,yaw,stage,extra={})=>s.props.push({
+  type:'decor',model,x,y,z,yaw,stage,size:1,solid:false,...extra
+ });
+ for(const room of s.roomLayout.rooms){
+  if(!room.basin)continue;
+  const {left,top,width,length}=room.basin;
+  add(length===5?'poolFive':'poolThree',left+width/2,top+length/2,0,0,2,{basin:true});
+ }
+ const deskObjects=['officePC','officePhone','officePrinter'];
+ const desks=s.props.filter(p=>p.model==='desk');
+ let position=0;
+ for(const desk of desks){
+  if(position>=6)break;
+  const model=deskObjects[position%deskObjects.length];
+  const z=DECOR_MODELS.desk.height*desk.size;
+  const roof=ROOM_CEILING_HEIGHTS[roomAt(desk.x,desk.y)?.height??0];
+  if(z+DECOR_MODELS[model].height<roof-.02&&!desk.attachments?.length){
+   add(model,desk.x,desk.y,z,desk.yaw,desk.stage,{surface:true});
+   position++;
+  }
+ }
+ for(const stairs of s.interactables.filter(o=>o.roomStairs)){
+  const room=roomAt(stairs.x,stairs.y);
+  if(!room)continue;
+  const cell=[[-2,0],[2,0],[0,-2],[0,2]].find(([dx,dy])=>
+   s.world[Math.floor(stairs.y+dy)]?.[Math.floor(stairs.x+dx)]===0&&
+   !room.links.some(id=>{
+    const edge=s.roomLayout.connections[id-1],point=edge.a===room.id?edge.from:edge.to;
+    return Math.hypot(point.x-stairs.x-dx,point.y-stairs.y-dy)<1;
+   }));
+  if(!cell)continue;
+  const [dx,dy]=cell;
+  add(stairs.dest.floor===2?'oldStairs':'balustrade',stairs.x+dx,stairs.y+dy,0,Math.atan2(dy,dx),room.sector,{landing:true});
+ }
+ if(s.level===12||renderStage()!==3)return;
+ for(const gate of s.doors){
+  const alongX=s.world[gate.y]?.[gate.x-1]===0&&s.world[gate.y]?.[gate.x+1]===0;
+  add('metalLeaf',gate.x+.5,gate.y+.5,0,alongX?Math.PI/2:0,3,{gate});
+ }
 }

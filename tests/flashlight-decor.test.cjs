@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const ctx=vm.createContext({});vm.runInContext(['js/graphics/camera.js','js/graphics/decor-data.js','js/gameplay/decor.js',...['shared','terrain','sprites','mesh','world-geometry'].map(n=>'js/graphics/shaders/'+n+'.js')].map(read).join('\n'),ctx);
+const ctx=vm.createContext({});vm.runInContext(['js/graphics/camera.js','js/graphics/room-model-data.js','js/graphics/decor-data.js','js/gameplay/decor.js',...['shared','terrain','sprites','mesh','world-geometry'].map(n=>'js/graphics/shaders/'+n+'.js')].map(read).join('\n'),ctx);
 const get=n=>vm.runInContext(n,ctx),pose=get('looseDecorPose'),specs=get('DECOR_MODELS'),sample=get('sampleFlashlight');
 let seed=12345;const rng=()=>((seed=(Math.imul(seed,1664525)+1013904223)|0)>>>0)/4294967296;
 for(const kind of ['box','crt']){

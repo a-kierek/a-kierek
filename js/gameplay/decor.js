@@ -19,7 +19,7 @@ function decorFloorAllowed(world,x,y,backed=false){
  }
  return neighbors.every(p=>seen.has(p.join(',')));
 }
-function decorModelsFor(stage){return Object.keys(DECOR_MODELS).filter(k=>stage===5||DECOR_MODELS[k].stage===stage);}
+function decorModelsFor(stage){return Object.keys(DECOR_MODELS).filter(k=>['wall','floor'].includes(DECOR_MODELS[k].placement)&&k!=='metalLeaf'&&(stage===5||DECOR_MODELS[k].stage===stage));}
 // Smaller loose props stay inside the reserved floor tile, even on their side.
 // Imported box/CRT meshes have symmetric local Y extents and a floor origin.
 function looseDecorPose(kind,spec,random){
@@ -70,6 +70,7 @@ function scatterLevelDecor(){
   for(let pass=0;pass<(stage===5?1:3);pass++)plan.push(...shuffle(keys.slice()));
   if(stage===5){plan.push('mannequin','lastClock','mannequin','lastClock');if(s.level!==12)plan.push(...shuffle(keys.slice()));}
   if(stage!==5&&s.level!==12&&N>=65)plan.push(...shuffle(keys.slice()));
+  plan.sort((a,b)=>Number(b==='desk')-Number(a==='desk'));
   let cabinetCount=0;
   for(const kind of plan){
    const spec=DECOR_MODELS[kind];if(!spec)continue;
@@ -77,10 +78,17 @@ function scatterLevelDecor(){
    const isWall=spec.placement==='wall';
    const fallenCabinet=kind==='cabinet'&&cabinetCount++%2===1;
    const standingCabinet=kind==='cabinet'&&!fallenCabinet;
-   const againstWall=kind==='bench'||kind==='pipe'||standingCabinet;
+   const againstWall=kind==='bench'||kind==='pipe'||standingCabinet||['wardrobe','serverRack','emergencyShower'].includes(kind);
    let selected=null;
    const preferred=cells.filter(cell=>cell.room?.decor?.includes(kind));
+   if(kind==='lifebuoy')preferred.sort((a,b)=>Number(b.room.template==='pool')-Number(a.room.template==='pool'));
+   const roomDesks=kind==='officeChair'?placed.filter(placed=>placed.model==='desk'):[];
+   if(roomDesks.length){
+    const distance=cell=>Math.min(...roomDesks.map(d=>Math.hypot(d.x-cell.x-.5,d.y-cell.y-.5)));
+    preferred.sort((a,b)=>distance(a)-distance(b));
+   }
    for(const cell of [...preferred,...cells]){
+    if(cell.room?.template==='pool'&&!isWall)continue;
     if(cell.room&&['SAFE','TRANSITION'].some(tag=>cell.room.categories.includes(tag)))continue;
     if(!isWall&&!fallenCabinet&&spec.height+.02>ROOM_CEILING_HEIGHTS[cell.room?.height??0])continue;
     if(cell.room?.links?.some(id=>{
@@ -89,7 +97,7 @@ function scatterLevelDecor(){
      return Math.hypot(door.x-cell.x,door.y-cell.y)<1.85;
     }))continue;
     const {x,y}=cell;if(world[y][x]!==0)continue;
-    if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<2.6))continue;
+    if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<(kind==='officeChair'&&p.model==='desk'?.9:2.6)))continue;
     const walls=DECOR_DIRS.filter(([dx,dy])=>world[y+dy]?.[x+dx]===1);
     if(isWall){if(!walls.length)continue;selected={...cell,wall:walls[Math.floor(random()*walls.length)]};break;}
     if(!decorFloorAllowed(world,x,y,standingCabinet))continue;
@@ -113,6 +121,10 @@ function scatterLevelDecor(){
      const pose=looseDecorPose(kind,spec,poseRandom);
      px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;size=pose.size;tilt=pose.tilt;radius=pose.radius;
     }
+   }
+   if(roomDesks.length){
+    const desk=roomDesks.reduce((a,b)=>Math.hypot(a.x-px,a.y-py)<Math.hypot(b.x-px,b.y-py)?a:b);
+    if(Math.hypot(desk.x-px,desk.y-py)<3)yaw=Math.atan2(desk.y-py,desk.x-px)+Math.PI/2;
    }
    const prop={type:'decor',model:kind,x:px,y:py,z,yaw,size,tilt,radius,stage,cellX:x,cellY:y,solid:!isWall};
    placed.push(prop);s.props.push(prop);

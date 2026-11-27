@@ -576,7 +576,7 @@ function lineOfSight(ax,ay,bx,by,options={}){
  const objects=prepareObjectCollisions();
  const blocked=(xx,yy)=>{
   if(options.allowTargetTile&&xx===tx&&yy===ty)return false;
-  return tileBlocked(xx,yy,objects)||objects.cells.get(yy*objects.size+xx)?.some(shape=>footprintHitsSegment(shape,ax,ay,bx,by));
+  return (objects.world[yy]?.[xx]!==POOL_TILE&&tileBlocked(xx,yy,objects))||objects.cells.get(yy*objects.size+xx)?.some(shape=>footprintHitsSegment(shape,ax,ay,bx,by));
  };
  if(blocked(x,y))return false;
  const deltaX=sx?1/Math.abs(dx):Infinity,deltaY=sy?1/Math.abs(dy):Infinity;
@@ -601,25 +601,26 @@ function lineOfSight(ax,ay,bx,by,options={}){
 // All templates use the existing material and model libraries. Each list is
 // ordered from entrance-side rooms through the sector's deeper areas.
 const ROOM_TEMPLATES = Object.freeze({
- reception:['Reception',['OFFICE','STANDARD'],[5,8],[5,8],['rectangle'],['desk','yellowClock'],'fluorescent','carpet'],
- office:['Abandoned Office',['OFFICE','STANDARD'],[5,8],[5,9],['rectangle','l'],['desk','cabinet','yellowClock'],'fluorescent','carpet'],
- conference:['Conference Room',['OFFICE','LANDMARK'],[7,10],[6,10],['rectangle','t'],['desk','yellowClock'],'fluorescent','carpet'],
+ reception:['Reception',['OFFICE','STANDARD'],[5,8],[5,8],['rectangle'],['desk','officeChair','yellowClock'],'fluorescent','carpet'],
+ office:['Abandoned Office',['OFFICE','STANDARD'],[5,8],[5,9],['rectangle','l'],['desk','officeChair','cabinet','yellowClock'],'fluorescent','carpet'],
+ conference:['Conference Room',['OFFICE','LANDMARK'],[7,10],[6,10],['rectangle','t'],['desk','officeChair','yellowClock'],'fluorescent','carpet'],
  empty:['Empty Hall',['STANDARD','LANDMARK'],[8,12],[7,11],['rectangle','oval','courtyard'],[],'dim','hall'],
  archive:['Records Storage',['STORAGE','OFFICE'],[5,8],[5,8],['rectangle','l'],['cabinet','box'],'dim','carpet'],
- service:['Service Room',['TECHNICAL','STORAGE'],[5,8],[5,8],['rectangle','l'],['box','cabinet'],'flicker','hard'],
+ service:['Service Room',['TECHNICAL','STORAGE'],[5,8],[5,8],['rectangle','l'],['box','cabinet','serverRack'],'flicker','hard'],
  intake:['Flooded Intake',['INDUSTRIAL','STANDARD'],[7,11],[6,9],['rectangle','l','polygon'],['bench','lifebuoy','pipe'],'cold','tile'],
- pump:['Pump Station',['TECHNICAL','INDUSTRIAL','OBJECTIVE'],[7,11],[6,10],['rectangle','t'],['pump','pipe','lifebuoy'],'cold','tile'],
+ pump:['Pump Station',['TECHNICAL','INDUSTRIAL','OBJECTIVE'],[7,11],[6,10],['rectangle','t'],['pump','pipe','lifebuoy','waterTank'],'cold','tile'],
+ pool:['Pool Room',['LANDMARK','SANITARY'],[7,9],[7,9],['rectangle'],['lifebuoy','bench'],'cold','tile'],
  reservoir:['Reservoir Walkway',['HAZARD','INDUSTRIAL','LANDMARK'],[8,11],[7,11],['rectangle','u','oval'],['pipe','lifebuoy'],'dim','hall'],
- filtration:['Filtration Room',['TECHNICAL','SANITARY'],[5,8],[6,9],['rectangle','l'],['pipe','pump'],'flicker','tile'],
- reactor:['Reactor Hall',['INDUSTRIAL','LANDMARK','OBJECTIVE'],[7,12],[7,11],['rectangle','polygon','t'],['barrel','metalTable'],'emergency','hall'],
- workshop:['Maintenance Workshop',['TECHNICAL','INDUSTRIAL'],[6,9],[5,9],['rectangle','l'],['metalTable','barrel'],'flicker','hard'],
+ filtration:['Filtration Room',['TECHNICAL','SANITARY'],[5,8],[6,9],['rectangle','l'],['pipe','pump','waterTank','emergencyShower'],'flicker','tile'],
+ reactor:['Reactor Hall',['INDUSTRIAL','LANDMARK','OBJECTIVE'],[7,12],[7,11],['rectangle','polygon','t'],['barrel','metalTable','reactorUnit','turbine'],'emergency','hall'],
+ workshop:['Maintenance Workshop',['TECHNICAL','INDUSTRIAL'],[6,9],[5,9],['rectangle','l'],['metalTable','barrel','generatorUnit','turbine'],'flicker','hard'],
  containment:['Containment Bay',['HAZARD','INDUSTRIAL'],[6,10],[6,9],['rectangle','u'],['barrel'],'emergency','hard'],
  cargo:['Cargo Store',['STORAGE','INDUSTRIAL'],[7,11],[6,10],['rectangle','t'],['barrel','metalTable'],'dim','hall'],
  checkpoint:['Security Checkpoint',['TECHNICAL','LANDMARK'],[5,8],[5,8],['rectangle','l'],['camera','crt'],'flicker','hard'],
  serviceHall:['Service Hall',['STANDARD','LANDMARK'],[7,11],[6,9],['rectangle','u'],['camera'],'dim','hall'],
  shop:['Abandoned Store',['COMMERCIAL','STANDARD'],[6,10],[6,10],['rectangle','l','t'],['mannequin','lastClock'],'cold','hard'],
- residence:['Empty Apartment',['RESIDENTIAL','STANDARD'],[5,8],[6,8],['rectangle','l'],['desk','lastClock'],'dim','carpet'],
- clinic:['Abandoned Clinic',['MEDICAL','STANDARD'],[5,9],[6,9],['rectangle','l'],['metalTable','cabinet'],'cold','tile'],
+ residence:['Empty Apartment',['RESIDENTIAL','STANDARD'],[5,8],[6,8],['rectangle','l'],['desk','wardrobe','windowFrame','lastClock'],'dim','carpet'],
+ clinic:['Abandoned Clinic',['MEDICAL','STANDARD'],[5,9],[6,9],['rectangle','l'],['metalTable','cabinet','hospitalBed','windowFrame'],'cold','tile'],
  anomaly:['Distorted Gallery',['ANOMALOUS','LANDMARK'],[7,11],[6,10],['oval','polygon','courtyard'],['mannequin','lastClock'],'flicker','hall'],
  secret:['Hidden Stockroom',['SECRET','STORAGE'],[5,7],[5,7],['rectangle','l'],['box','cabinet'],'dim','carpet'],
  safe:['Safe Room',['SAFE'],[5,11],[5,11],['rectangle'],[],'fluorescent','carpet'],
@@ -743,9 +744,10 @@ function buildRoomRegion(layout,sector,xs,ys,{campaign=false}={}){
  const maxH=Math.min(spacing(ys)-2,2*Math.min(ys[0]-1,gameSession.N-2-ys.at(-1))+1);
  const rooms=ys.map((y,row)=>xs.map((x,col)=>{
   const zone=zones[Math.floor(row*zones.length/ys.length)];
-  const template=col===0&&row===0?zone.library[0]:
+  const pool=sector===2&&row===1&&col===1;
+  const template=pool?'pool':col===0&&row===0?zone.library[0]:
    zone.library[Math.floor(random()*zone.library.length)];
-  return createRoom(layout,{sector,zone,x,y,template,maxW,maxH,rectangular:campaign&&row%2===0&&col%2===0},random);
+  return createRoom(layout,{sector,zone,x,y,template,maxW,maxH,rectangular:pool||campaign&&row%2===0&&col%2===0},random);
  }));
  const all=rooms.flat();
  const options=[];
@@ -767,6 +769,8 @@ function buildRoomRegion(layout,sector,xs,ys,{campaign=false}={}){
   }else remaining.push([a,b]);
  }
  for(const [a,b] of remaining)if(random()<.55)connectRooms(layout,a,b,'alternate');
+ const pool=all.find(room=>room.template==='pool');
+ if(pool)installPoolBasin(pool);
  return rooms;
 }
 
@@ -779,6 +783,13 @@ function chooseRoomExit(cells,x,y){
   if(cells.every(c=>c===cell||distances[c.y][c.x]>=0))return cell;
  }
  throw Error('The room layout has no reachable exit');
+}
+
+function installPoolBasin(room){
+ const width=3,length=Math.min(5,room.h-2);
+ const left=room.x-(width>>1),top=room.y-(length>>1);
+ room.basin={left,top,width,length,bottom:POOL_BOTTOM_Z,water:POOL_WATER_Z};
+ for(let y=top;y<top+length;y++)for(let x=left;x<left+width;x++)gameSession.world[y][x]=POOL_TILE;
 }
 
 ;
@@ -901,11 +912,11 @@ function indexRoomLayout(){
  for(const room of layout.rooms){
   const xRadius=room.w>>1,yRadius=room.h>>1;
   for(let y=room.y-yRadius;y<=room.y+yRadius;y++)for(let x=room.x-xRadius;x<=room.x+xRadius;x++){
-   if(![0,3,4,5].includes(s.world[y]?.[x]))continue;
+   if(![0,3,4,5,POOL_TILE].includes(s.world[y]?.[x]))continue;
    const index=y*s.N+x;
    layout.cells[index]=room.id;
    const condition=room.condition==='damp'?1:room.condition==='damaged'?2:0;
-   layout.fields[index]=(room.height<<9)|(ROOM_LIGHTS[room.lighting]<<12)|(condition<<15);
+   layout.fields[index]=(room.height<<9)|(ROOM_LIGHTS[room.lighting]<<12)|(condition<<15)|((room.template==='pool'?1:0)<<17);
   }
  }
  // Modelled doors and stair landings need a full-height frame.
@@ -1005,6 +1016,7 @@ function finishRoomLayout(){
  if(!layout)return;
  indexRoomLayout();
  furnishRoomSurfaces(s);
+ placeImportedRoomFixtures(s);
  for(const object of [...s.props,...s.fuses,...s.terminals,...s.bonusItems,...s.interactables,...s.emergencyReactors]){
   const room=roomAt(object.x,object.y);
   if(room)room.objects.push(object);
@@ -1072,7 +1084,7 @@ function furnishRoomSurfaces(scene){
   const rules=ROOM_OBJECTS[prop.model];
   prop.objectType=rules?.type??'DECORATIVE';
   prop.pushable=!!rules?.pushable;
-  if(total>=2||!rules?.surface||prop.tilt||random()>.38)continue;
+  if(prop.model==='desk'||total>=2||!rules?.surface||prop.tilt||random()>.38)continue;
   const height=DECOR_MODELS[prop.model].height*prop.size;
   const item={id:'room-surface-'+total,type:'stamina',name:'ENERGY DRINK',
    x:prop.x,y:prop.y,z:height,phase:random()*Math.PI*2,taken:false,quantity:1,attachment:true};
@@ -1107,6 +1119,48 @@ function pushRoomProp(prop){
  }
  markWorldChanged();addNoise(prop.x,prop.y,6,'furniture');
  return true;
+}
+
+function placeImportedRoomFixtures(s){
+ const add=(model,x,y,z,yaw,stage,extra={})=>s.props.push({
+  type:'decor',model,x,y,z,yaw,stage,size:1,solid:false,...extra
+ });
+ for(const room of s.roomLayout.rooms){
+  if(!room.basin)continue;
+  const {left,top,width,length}=room.basin;
+  add(length===5?'poolFive':'poolThree',left+width/2,top+length/2,0,0,2,{basin:true});
+ }
+ const deskObjects=['officePC','officePhone','officePrinter'];
+ const desks=s.props.filter(p=>p.model==='desk');
+ let position=0;
+ for(const desk of desks){
+  if(position>=6)break;
+  const model=deskObjects[position%deskObjects.length];
+  const z=DECOR_MODELS.desk.height*desk.size;
+  const roof=ROOM_CEILING_HEIGHTS[roomAt(desk.x,desk.y)?.height??0];
+  if(z+DECOR_MODELS[model].height<roof-.02&&!desk.attachments?.length){
+   add(model,desk.x,desk.y,z,desk.yaw,desk.stage,{surface:true});
+   position++;
+  }
+ }
+ for(const stairs of s.interactables.filter(o=>o.roomStairs)){
+  const room=roomAt(stairs.x,stairs.y);
+  if(!room)continue;
+  const cell=[[-2,0],[2,0],[0,-2],[0,2]].find(([dx,dy])=>
+   s.world[Math.floor(stairs.y+dy)]?.[Math.floor(stairs.x+dx)]===0&&
+   !room.links.some(id=>{
+    const edge=s.roomLayout.connections[id-1],point=edge.a===room.id?edge.from:edge.to;
+    return Math.hypot(point.x-stairs.x-dx,point.y-stairs.y-dy)<1;
+   }));
+  if(!cell)continue;
+  const [dx,dy]=cell;
+  add(stairs.dest.floor===2?'oldStairs':'balustrade',stairs.x+dx,stairs.y+dy,0,Math.atan2(dy,dx),room.sector,{landing:true});
+ }
+ if(s.level===12||renderStage()!==3)return;
+ for(const gate of s.doors){
+  const alongX=s.world[gate.y]?.[gate.x-1]===0&&s.world[gate.y]?.[gate.x+1]===0;
+  add('metalLeaf',gate.x+.5,gate.y+.5,0,alongX?Math.PI/2:0,3,{gate});
+ }
 }
 
 ;
@@ -2036,9 +2090,17 @@ const MODEL_DRINK_ALBEDO='assets/models/pickups/drink-albedo.webp';
 const MODEL_TERMINAL_ALBEDO='assets/models/pickups/terminal-albedo.webp';
 
 ;
+// SOURCE: js/graphics/room-model-data.js
+// Generated by tools/import_room_models.py.
+const ROOM_MODELS={"officeChair":{"stage":1,"placement":"floor","roomAtlas":true,"radius":0.14039,"height":0.43,"depth":0.10353,"triangles":356,"mesh":"assets/models/rooms/officeChair.mesh"},"officePC":{"stage":1,"placement":"surface","roomAtlas":true,"radius":0.13163,"height":0.19,"depth":0.09346,"triangles":8099,"mesh":"assets/models/rooms/officePC.mesh"},"officePhone":{"stage":1,"placement":"surface","roomAtlas":true,"radius":0.10372,"height":0.081,"depth":0.07795,"triangles":7430,"mesh":"assets/models/rooms/officePhone.mesh"},"officePrinter":{"stage":1,"placement":"surface","roomAtlas":true,"radius":0.135,"height":0.04847,"depth":0.07232,"triangles":592,"mesh":"assets/models/rooms/officePrinter.mesh"},"serverRack":{"stage":1,"placement":"floor","roomAtlas":true,"radius":0.36,"height":0.57489,"depth":0.32967,"triangles":1144,"mesh":"assets/models/rooms/serverRack.mesh"},"wardrobe":{"stage":5,"placement":"floor","roomAtlas":true,"radius":0.34615,"height":0.79,"depth":0.2362,"triangles":1414,"mesh":"assets/models/rooms/wardrobe.mesh"},"hospitalBed":{"stage":5,"placement":"floor","roomAtlas":true,"radius":0.45,"height":0.2915,"depth":0.27199,"triangles":2648,"mesh":"assets/models/rooms/hospitalBed.mesh"},"emergencyShower":{"stage":2,"placement":"floor","roomAtlas":true,"radius":0.26387,"height":0.78,"depth":0.19333,"triangles":15226,"mesh":"assets/models/rooms/emergencyShower.mesh"},"waterTank":{"stage":2,"placement":"floor","roomAtlas":true,"radius":0.43,"height":0.42944,"depth":0.34154,"triangles":5964,"mesh":"assets/models/rooms/waterTank.mesh"},"reactorUnit":{"stage":3,"placement":"floor","roomAtlas":true,"radius":0.33946,"height":0.76,"depth":0.33946,"triangles":1752,"mesh":"assets/models/rooms/reactorUnit.mesh"},"turbine":{"stage":3,"placement":"floor","roomAtlas":true,"radius":0.43,"height":0.48399,"depth":0.22533,"triangles":7124,"mesh":"assets/models/rooms/turbine.mesh"},"generatorUnit":{"stage":3,"placement":"floor","roomAtlas":true,"radius":0.4,"height":0.65858,"depth":0.35574,"triangles":15625,"mesh":"assets/models/rooms/generatorUnit.mesh"},"metalLeaf":{"stage":3,"placement":"wall","roomAtlas":true,"radius":0.52112,"height":1.0,"depth":0.0375,"triangles":18452,"mesh":"assets/models/rooms/metalLeaf.mesh"},"windowFrame":{"stage":5,"placement":"wall","roomAtlas":true,"radius":0.19513,"height":0.55,"depth":0.02824,"triangles":882,"mesh":"assets/models/rooms/windowFrame.mesh"},"oldStairs":{"stage":2,"placement":"landing","roomAtlas":true,"radius":0.46,"height":0.58241,"depth":0.43692,"triangles":2156,"mesh":"assets/models/rooms/oldStairs.mesh"},"balustrade":{"stage":2,"placement":"landing","roomAtlas":true,"radius":0.31062,"height":0.44,"depth":0.02146,"triangles":12084,"mesh":"assets/models/rooms/balustrade.mesh"},"poolThree":{"stage":2,"placement":"basin","roomAtlas":true,"radius":2.32715,"height":0.009,"depth":1.58257,"triangles":932,"mesh":"assets/models/rooms/poolThree.mesh"},"poolFive":{"stage":2,"placement":"basin","roomAtlas":true,"radius":3.14136,"height":0.009,"depth":2.63762,"triangles":932,"mesh":"assets/models/rooms/poolFive.mesh"}};
+const ROOM_MODEL_FOOTPRINTS={"officeChair":{"floor":[-0.0948098,-0.1035344,0.0948098,-0.1035344,0.0948098,-0.085349,0.0948097,-0.0781052,0.0939585,0.1035344,-0.0939585,0.1035344,-0.0948097,-0.0781052,-0.0948098,-0.085349]},"serverRack":{"floor":[-0.1750589,-0.2866722,-0.1745489,-0.3012421,-0.1446187,-0.3296747,0.1219972,-0.3296747,0.1254898,-0.3261821,0.1583888,-0.2792534,0.158797,-0.2763975,0.1750589,0.2498695,0.169781,0.2887858,0.1686112,0.2914886,0.1219972,0.3296747,-0.1446187,0.3296747,-0.1481114,0.3261821,-0.17337,-0.0162276,-0.1735222,-0.0274065,-0.1750589,-0.1860145]},"wardrobe":{"floor":[-0.2531185,-0.0533379,-0.1693138,-0.2335798,-0.1521492,-0.2361985,-0.1363995,-0.2313275,0.2531185,-0.0533379,0.2531185,0.2361186,0.2421033,0.2361985,-0.2421033,0.2361985,-0.2531185,0.2361186]},"hospitalBed":{"floor":[-0.4494389,-0.0224622,-0.4482298,-0.024742,-0.4460429,-0.0261123,-0.3739003,-0.0521541,-0.131153,-0.1367584,0.1547897,-0.2272251,0.1963677,-0.2399885,0.3545512,-0.2719002,0.3571303,-0.271993,0.3594103,-0.2707844,0.3607803,-0.2685974,0.4493459,0.0198832,0.4494389,0.0224618,0.4482299,0.024742,0.4460429,0.0261119,0.3765971,0.056029,-0.0324971,0.1827238,-0.1149943,0.2080293,-0.2386067,0.2424647,-0.3545512,0.2718998,-0.3571301,0.271993,-0.3594103,0.270784,-0.3607802,0.2685974,-0.4493457,-0.0198832]},"emergencyShower":{"floor":[-0.1799789,-0.0635037,-0.1797904,-0.0639588,-0.0533623,-0.1712251,-0.0288795,-0.187584,0.0,-0.1933285,0.0288795,-0.187584,0.0533624,-0.1712251,0.1797904,-0.0639588,0.1799789,-0.0635037,0.1799789,0.1926848,0.1797904,0.1931399,0.1793352,0.1933285,-0.1793352,0.1933285,-0.1797904,0.1931399,-0.1799789,0.1926848]},"waterTank":{"floor":[-0.3538165,-0.1948763,-0.3508826,-0.2091597,-0.2863752,-0.2462396,-0.2018442,-0.2755111,-0.0327821,-0.3340541,0.0241378,-0.3409924,0.0419714,-0.3415447,0.0529798,-0.3325105,0.3358204,0.1142876,0.3538165,0.1637314,0.3538164,0.2163485,0.3358203,0.2657923,0.3019987,0.3060993,0.2564311,0.3324078,0.2046135,0.3415447,-0.1233968,0.3409682,-0.1742209,0.3273498,-0.2173223,0.29717,-0.2475021,0.2540686,-0.2611205,0.2032445]},"reactorUnit":{"floor":[-0.3394645,0.0,-0.2939847,-0.1697322,-0.1697324,-0.2939848,1e-07,-0.3394643,0.1697322,-0.2939848,0.2939847,-0.1697322,0.3394645,0.0,0.2939847,0.1697322,0.1697322,0.2939848,1e-07,0.3394643,-0.1697324,0.2939848,-0.2939847,0.1697322]},"turbine":{"floor":[-0.3744005,-0.0579302,-0.3743548,-0.0662446,-0.3741612,-0.0713881,-0.3663472,-0.2251435,-0.310268,-0.22527,-0.2414853,-0.2253322,0.2410514,-0.2253322,0.309834,-0.22527,0.3659129,-0.2251435,0.3741612,-0.0713881,0.3743548,-0.0662446,0.3744005,-0.0579302,0.3744005,0.0579302,0.3743548,0.0662446,0.3741612,0.0713881,0.3659129,0.2251439,0.309834,0.22527,0.2410514,0.2253322,-0.2414857,0.2253322,-0.310268,0.22527,-0.3663472,0.2251439,-0.3741612,0.0713881,-0.3743548,0.0662446,-0.3744005,0.0579302]},"generatorUnit":{"floor":[-0.2398685,-0.1889999,-0.2345541,-0.2088234,-0.1673352,-0.333528,-0.1572014,-0.3490743,-0.1506861,-0.3526179,-0.0822033,-0.3557359,0.1203149,-0.3557359,0.1887977,-0.3526179,0.1953129,-0.3490743,0.2054468,-0.333528,0.234911,-0.2643884,0.2398685,-0.2394655,0.2398685,0.1590287,0.234911,0.1839516,0.1964603,0.3106994,0.1909625,0.3267661,0.1825588,0.3367575,0.1667819,0.3428329,0.0953176,0.3543884,0.0831958,0.3557223,0.0619076,0.3557359,0.008316,0.3557359,-0.0129722,0.3557223,-0.025094,0.3543884,-0.0965586,0.3428327,-0.1123353,0.3367575,-0.2229117,0.2436445,-0.2278561,0.2386941,-0.2373011,0.2222434,-0.2393906,0.0296645]}};
+const ROOM_MODEL_ALBEDO='assets/models/rooms/albedo.webp';
+
+;
 // SOURCE: js/graphics/decor-data.js
 // Generated by tools/import_decor.py. World units in tiles.
 const DECOR_MODELS=Object.freeze({
+ ...ROOM_MODELS,
  box:Object.freeze({stage:1,placement:'floor',radius:0.37144,height:0.52000,depth:0.33311,triangles:2260,mesh:'assets/models/decor/box.mesh'}),
  cabinet:Object.freeze({stage:1,placement:'floor',radius:0.28232,height:0.90000,depth:0.25084,triangles:676,mesh:'assets/models/decor/cabinet.mesh'}),
  desk:Object.freeze({stage:1,placement:'floor',radius:0.42526,height:0.64000,depth:0.39657,triangles:4912,mesh:'assets/models/decor/desk.mesh'}),
@@ -2056,6 +2118,7 @@ const DECOR_MODELS=Object.freeze({
 });
 const DECOR_ALBEDO='assets/models/decor/albedo.webp';
 const DECOR_FOOTPRINTS=Object.freeze({
+ ...ROOM_MODEL_FOOTPRINTS,
  box:{floor:[-0.3262397,0.1722548,-0.311331,0.125449,-0.1660929,-0.3188379,-0.1659783,-0.3189058,-0.1657321,-0.3190387,0.1361508,-0.3331081,0.1398236,-0.3320677,0.1566557,-0.316339,0.2408164,-0.2376951,0.3081449,-0.1747799,0.3262357,-0.1569398,0.3262397,-0.156925,0.1801074,0.2866636,0.1643261,0.3331081,0.1395296,0.3255371,-0.0811373,0.2532285,-0.3015874,0.1808162],side:[-0.3262397,0.0018689,0.0791027,0.0,0.3256414,0.0021676,0.3262397,0.0508909,0.3262397,0.0973596,0.3262357,0.4690945,0.3256413,0.5178325,0.2998801,0.52,-0.1416538,0.5199998,-0.1560712,0.5199983,-0.3261474,0.518239]},
  cabinet:{floor:[-0.1295455,-0.1309781,-0.1169259,-0.2332508,-0.0428004,-0.2508402,0.0428004,-0.2508402,0.1169259,-0.2332508,0.1295455,-0.1309781,0.1295455,0.2508402,-0.1295455,0.2508402],side:[-0.1295455,0.0,0.1295455,0.0,0.1295455,0.9,-0.1295455,0.9]},
  desk:{floor:[-0.391033,0.0252299,-0.3875814,0.0147234,-0.1520969,-0.2358923,-0.1418409,-0.2416092,0.1386985,-0.3944113,0.1457987,-0.3965697,0.1526252,-0.3936592,0.2713493,-0.2849976,0.3876744,-0.1737715,0.391033,-0.167154,0.3893521,-0.1599258,0.2555672,0.1301646,0.2505457,0.1407785,0.0161646,0.3924263,0.0059112,0.3965697,-0.00425,0.3960994,-0.0141814,0.3927964,-0.0270311,0.3841734,-0.3764708,0.0572738,-0.3859303,0.0450267,-0.3898872,0.0353373]},
@@ -2305,6 +2368,9 @@ function sampleFlashlight(previous,player,camera,elapsed,walkPhase){
 // Keep forward distance (world units) separate from projected GPU depth [0,1].
 const RENDER_FRAME=Object.freeze({floats:36,bytes:144,player:0,viewport:4,progress:8,visuals:12,weather:16,camera:20,lighting:24,flashlight:28,shadows:32});
 const RENDER_DEPTH=Object.freeze({near:.04,far:140,wallScale:256,spriteNear:.16,spriteFar:125});
+const POOL_TILE=10;
+const POOL_BOTTOM_Z=-.62;
+const POOL_WATER_Z=-.26;
 const FRAME_WGSL=/* wgsl */ `
 struct SceneFrame {
  player:vec4f,
@@ -2319,6 +2385,7 @@ struct SceneFrame {
 };
 `;
 const DEPTH_WGSL=/* wgsl */ `
+const POOL_WATER_Z:f32=${POOL_WATER_Z};
 const VIEW_NEAR:f32=${RENDER_DEPTH.near};
 const VIEW_FAR:f32=${RENDER_DEPTH.far}.0;
 const WALL_DEPTH_SCALE:f32=${RENDER_DEPTH.wallScale}.0;
@@ -2350,12 +2417,13 @@ fn planeDepth(ray:vec3f)->f32 {return min(VIEW_FAR,.5/max(abs(ray.z),.000001));}
 // First lighting experiment: a bounded local fixture grid and optional campfire.
 // CP06: bounded grid visibility for full-height walls. Roughness remains scalar.
 const LIGHTING_WGSL=/* wgsl */ `
+const POOL_BASIN:u32=${POOL_TILE}u;
 fn shadowSolid(cell:vec2i,size:i32)->bool {
  if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return true;}
  let tile=worldTiles[u32(cell.y)*128u+u32(cell.x)];
  // The low byte is the terrain type and bit eight is a closed mesh door.
  let solid=tile&511u;
- return solid!=0u&&solid!=5u;
+ return solid!=0u&&solid!=5u&&solid!=POOL_BASIN;
 }
 fn roomFields(cell:vec2i,size:i32)->u32 {
  if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return 0u;}
@@ -2694,6 +2762,21 @@ fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
  return pow(max(light,vec3f(0.)),vec3f(1./2.2));
 }
 
+fn poolTileColor(uv:vec2f)->vec3f {
+ let edge=min(min(uv.x,uv.y),min(1.-uv.x,1.-uv.y));
+ return mix(vec3f(.43,.47,.43),vec3f(.82,.86,.79),smoothstep(.015,.055,edge));
+}
+fn poolSurface(worldPt:vec2f,rd:f32)->vec4f {
+ let phase=frame.player.w*.81;
+ let ripple=sin(worldPt.x*7.2+worldPt.y*3.2+phase)+sin(worldPt.y*8.4-worldPt.x*4.3-phase*1.3);
+ let ceramic=poolTileColor(fract(worldPt*2.+ripple*.014));
+ let wave=smoothstep(1.1,1.97,ripple);
+ let point=vec3f(worldPt,POOL_WATER_Z);
+ let light=surfaceLighting(point,vec3f(0.,0.,1.),.28,vec3f(.58),frame);
+ let color=vec3f(.055,.29,.30)*(.62+.42*ceramic)+wave*vec3f(.07,.14,.12);
+ return vec4f(mix(color*light,vec3f(.10,.105,.09),clamp((rd-2.)/28.,0.,.88)),1.);
+}
+
 fn sceneryAt(pixel:vec2f,ray:vec3f)->vec4f {
  let isFloor=ray.z<0.;
  let rd=planeDepth(ray);
@@ -2701,6 +2784,8 @@ fn sceneryAt(pixel:vec2f,ray:vec3f)->vec4f {
 }
 fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  let worldPt=frame.player.xy+ray.xy*rd;
+ let cell=vec2i(floor(worldPt));
+ if(isFloor&&tileAt(cell.x,cell.y)==POOL_BASIN){return poolSurface(worldPt,rd);}
  let sector=sectorLevel(worldPt.x);
  let layer=floorLayers(sector)+select(1,0,isFloor);
  let uv=fract(worldPt);
@@ -2728,7 +2813,9 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
      c=cp11Shade(c,point,n,material);
    }else{c*=surfaceLighting(point,n,rough,vec3f(1.),frame);}
  }
- let condition=(roomFields(vec2i(floor(worldPt)),i32(frame.viewport.z))>>15u)&3u;
+ let fields=roomFields(cell,i32(frame.viewport.z));
+ if(isFloor&&(fields&(1u<<17u))!=0u){c=mix(c,c*poolTileColor(fract(worldPt*2.))*1.4,.72);}
+ let condition=(fields>>15u)&3u;
  if(condition==1u&&isFloor){c*=vec3f(.83,.95,1.09);}
  if(condition==2u){
    let wear=.92+.08*sin(worldPt.x*3.4)*sin(worldPt.y*2.8);
@@ -2807,12 +2894,15 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if(edge>distance){break;}
    if(tMax.x<tMax.y){tMax.x+=delta.x;cell.x+=gridStep.x;side=0;}
    else{tMax.y+=delta.y;cell.y+=gridStep.y;side=1;}
-   hit=tileAt(cell.x,cell.y);
+   let tile=tileAt(cell.x,cell.y);
+   let basin=tile==POOL_BASIN;
+   let ground=select(0.,POOL_WATER_Z,basin);
    roof=roomCeiling(cell,size);
-   if(hit!=0u||(upward&&.5+ray3.z*edge>=roof)){
-    if(hit==0u){hit=1u;}
+   if((tile!=0u&&!basin)||(upward&&.5+ray3.z*edge>=roof)||(!upward&&.5+ray3.z*edge<ground)){
+    hit=max(1u,tile);
     distance=max(VIEW_NEAR,edge);break;
    }
+   if(!upward){distance=min(VIEW_FAR,(.5-ground)/max(-ray3.z,.000001));}
  }
  let hasWall=hit!=0u;
  let wallPoint=vec3f(frame.player.xy,.5)+ray3*distance;
@@ -2827,7 +2917,10 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if((side==0 && ray.x>0.) || (side==1 && ray.y<0.)){texX=1.-texX;}
    var layer=levelWall(sectorLevel(f32(cell.x)));
    var detailLod=0.;
-   if(hit==8u){
+   let ceramic=(roomFields(wallRoom,i32(frame.viewport.z))&(1u<<17u))!=0u||wallPoint.z<0.;
+   if(ceramic&&hit!=3u&&hit!=4u){
+     result=vec4f(poolTileColor(fract(vec2f(texX,wallPoint.z)*2.))*.86,1.);
+   }else if(hit==8u){
      // Safe-room walls: damp dark brick, rust streaks, tiled grout.
      let uvWall=vec2f(texX,wallV);
      let row=floor(uvWall.y*6.);
@@ -2858,7 +2951,7 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if(frame.lighting.x>.5||frame.flashlight.w>.5){
      let normal=select(vec3f(0.,-sign(ray.y),0.),vec3f(-sign(ray.x),0.,0.),side==0);
      let rough=select(.84,.40,layer==1||layer==2||hit==3u||hit==4u);
-     if(detailAvailable()&&hit!=8u&&layer<4){
+     if(detailAvailable()&&!ceramic&&hit!=8u&&layer<4){
        let tangent=vec3f(-normal.y,normal.x,0.);
        let material=readSurfaceDetail(vec2f(texX,wallV),layer,detailLod,normal,tangent,vec3f(0.,0.,-1.));
        result=vec4f(cp11Shade(result.rgb,wallPoint,normal,material),1.);
@@ -3210,11 +3303,14 @@ function geometryTerrainSource(){
  const oldResolve='result=scenerySurface(ray3,ray3.z<0.,distance);';
  if(!source.includes(oldResolve))throw Error('Terrain surface resolve contract changed');
  return source.replace(oldResolve,`if(hasPlane){
-     let isFloor=rasterHit.w<2.5;
-     // Raster tag selects the actual visible quad; use exact depth for
-     // stable material coordinates, lighting and sprite occlusion.
+     let isFloor=rasterHit.w<2.5||rasterHit.w>3.5;
+     // Compute the exact depth again after identifying the rasterized surface.
      distance=select(min(VIEW_FAR,(roomCeiling(cell,i32(frame.viewport.z))-.5)/max(ray3.z,.000001)),planeDepth(ray3),isFloor);
-     result=scenerySurface(ray3,isFloor,distance);
+     if(rasterHit.w>3.5){
+       let z=select(POOL_WATER_Z,${POOL_BOTTOM_Z},rasterHit.w>4.5);
+       distance=min(VIEW_FAR,(.5-z)/max(-ray3.z,.000001));
+       result=poolSurface(frame.player.xy+ray.xy*distance,distance);
+     }else{result=scenerySurface(ray3,isFloor,distance);}
    }else{
      // Preserve the classic distant fog/near clip fallback when no triangle
      // covers the pixel (including views beyond VIEW_FAR).
@@ -3233,7 +3329,7 @@ function buildWorldWallVertices(tiles,size,stride=128,fields=tiles){
  if(!Number.isInteger(size)||size<1||size>stride||tiles.length<size*stride)throw Error('Invalid wall grid');
  const data=[];
  const tile=(x,y)=>x<0||y<0||x>=size||y>=size?1:tiles[y*stride+x];
- const open=(x,y)=>{const t=tile(x,y);return t===0||t===5;};
+ const open=(x,y)=>{const t=tile(x,y);return t===0||t===5||t===POOL_TILE;};
  const height=(x,y)=>ROOM_CEILING_HEIGHTS[(fields[y*stride+x]>>>9)&7];
  const face=(ax,ay,bx,by,cx,cy,side,low,high)=>{
   for(const [x,y,z] of [[ax,ay,low],[bx,by,low],[ax,ay,high],[ax,ay,high],[bx,by,low],[bx,by,high]])data.push(x,y,z,cx,cy,side);
@@ -3246,6 +3342,7 @@ function buildWorldWallVertices(tiles,size,stride=128,fields=tiles){
   ]){
    const low=open(nx,ny)?height(nx,ny):0;
    if(low<high)face(ax,ay,bx,by,nx,ny,side,low,high);
+   if(tile(x,y)===POOL_TILE&&tile(nx,ny)!==POOL_TILE)face(ax,ay,bx,by,nx,ny,side,POOL_BOTTOM_Z,0);
   }
  }
  return new Float32Array(data);
@@ -3257,7 +3354,7 @@ function buildWorldSurfaceMesh(tiles,size,stride=128,fields=tiles){
  const open=new Uint8Array(size*size), ceilings=new Uint8Array(size*size);
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
   const tile=tiles[y*stride+x];
-  open[y*size+x]=Number(tile===0||tile===5);
+  open[y*size+x]=tile===POOL_TILE?2:Number(tile===0||tile===5);
   ceilings[y*size+x]=open[y*size+x]?1+((fields[y*stride+x]>>>9)&7):0;
  }
  const planes=[];
@@ -3274,8 +3371,13 @@ function buildWorldSurfaceMesh(tiles,size,stride=128,fields=tiles){
    for(let row=y;row<bottom;row++)cells.fill(0,row*size+x,row*size+right);
    const corners=[[x,y],[right,y],[x,bottom],[right,bottom]];
    const order=isFloor?[0,1,2,2,1,3]:[0,2,1,1,2,3];
-   const z=isFloor?0:ROOM_CEILING_HEIGHTS[code-1];
-   for(const i of order)planes.push(...corners[i],z,x,y,isFloor?2:3);
+   if(isFloor&&code===2){
+    for(const i of order)planes.push(...corners[i],POOL_BOTTOM_Z,x,y,5);
+    for(const i of order)planes.push(...corners[i],POOL_WATER_Z,x,y,4);
+   }else{
+    const z=isFloor?0:ROOM_CEILING_HEIGHTS[code-1];
+    for(const i of order)planes.push(...corners[i],z,x,y,isFloor?2:3);
+   }
   }
  }
  mergePlanes(open,true);
@@ -3452,7 +3554,7 @@ const GPU_WALL_H=256;
 const GPU_TILE_SIZE=64;
 const GPU_MAX_DECALS=256;
 const GPU_MAX_SPRITES=256;
-const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32,shield:16,drink:24,terminal:24};
+const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,roomDecor:64,pickup:32,shield:16,drink:24,terminal:24};
 const WORLD_ITEM_KINDS={battery:6,card:7,shield:8,drink:9,terminal:10};
 const WORLD_ITEM_TILTS={
  battery:[0,0,Math.PI/2,-Math.PI/2],card:[0],shield:[0,0,Math.PI],drink:[0,0,Math.PI/2,-Math.PI/2],terminal:[0]
@@ -3577,11 +3679,11 @@ class CatroomsWebGPURenderer {
           return {c,s,z:-bottom*WORLD_ITEM_SCALE[kind]};
         });
       }
-      if(kind!=='campfire'&&!WORLD_ITEM_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
+      if(kind!=='campfire'&&!WORLD_ITEM_KINDS[kind]&&DECOR_MODELS[kind]?.placement!=='basin')this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
     }
     this.modelShadows.initialize(shadowData);
     this.meshAlbedoTextures={};
-    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO,shield:MODEL_SHIELD_ALBEDO,drink:MODEL_DRINK_ALBEDO,terminal:MODEL_TERMINAL_ALBEDO}).map(async ([kind,src])=>{
+    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,roomDecor:ROOM_MODEL_ALBEDO,pickup:MODEL_BATTERY_ALBEDO,shield:MODEL_SHIELD_ALBEDO,drink:MODEL_DRINK_ALBEDO,terminal:MODEL_TERMINAL_ALBEDO}).map(async ([kind,src])=>{
       const image=new Image();
       image.src=src;
       await image.decode();
@@ -3706,6 +3808,8 @@ class CatroomsWebGPURenderer {
       }
       this.doorLayout=scene===gameSession?this.makeDoorLayout(scene):[];
       for(const d of this.doorLayout)this.tilesData[d.y*128+d.x]=0;
+      const metalGates=scene.props.filter(prop=>prop.gate&&!prop.gate.open);
+      for(const {gate} of metalGates)this.tilesData[gate.y*128+gate.x]=0;
       // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
       // geometry map unchanged; only the GPU visibility map carries the flag.
       this.gpuTilesData.set(this.tilesData);
@@ -3715,6 +3819,7 @@ class CatroomsWebGPURenderer {
         const tile=scene.world[d.y][d.x];
         if(tile===3||tile===4)this.gpuTilesData[d.y*128+d.x]|=256;
       }
+      for(const {gate} of metalGates)this.gpuTilesData[gate.y*128+gate.x]|=256;
       upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;this.roomRevision=scene.roomLayout?.revision;
     }
     const furniture=scene.safeRoomFurniture;
@@ -3817,7 +3922,7 @@ class CatroomsWebGPURenderer {
   visibleDecor(camera=captureRenderCamera()){
     // One shared texture/bind layout; distance/frustum culling and a bounded pool.
     // All nearby objects are retained before distant ones, regardless of type.
-    return gameSession.props.filter(p=>p.type==='decor'&&Math.hypot(p.x-camera.x,p.y-camera.y)<28&&this.modelInView(p.x,p.y,(p.radius??DECOR_MODELS[p.model].radius)+.1,camera))
+    return gameSession.props.filter(p=>p.type==='decor'&&!p.gate?.open&&Math.hypot(p.x-camera.x,p.y-camera.y)<28&&this.modelInView(p.x,p.y,(p.radius??DECOR_MODELS[p.model].radius)+.1,camera))
       .sort((a,b)=>Math.hypot(a.x-camera.x,a.y-camera.y)-Math.hypot(b.x-camera.x,b.y-camera.y)).slice(0,64);
   }
   visiblePickups(camera){
@@ -3874,7 +3979,7 @@ class CatroomsWebGPURenderer {
     for(const room of rooms)for(const kind of ['slot','tree'])add(kind,this.roomPose(room,kind));
     for(const pose of this.doorPoses(camera,true))add('door',pose);
     for(const prop of gameSession.props){
-      if(prop.type==='decor')add(prop.model,this.decorPose(prop));
+      if(prop.type==='decor'&&!prop.basin&&!prop.gate?.open)add(prop.model,this.decorPose(prop));
       else if(prop.type==='rock')add('rock',this.rockPose(prop));
     }
     if(casters.length>SHADOW_INSTANCE_LIMIT){
@@ -3986,7 +4091,7 @@ class CatroomsWebGPURenderer {
       }
       for(let i=0;i<rocks.length;i++)this.writePose('rock',i,this.rockPose(rocks[i]));
       for(let i=0;i<doors.length;i++)this.writePose('door',i,doors[i]);
-      for(let i=0;i<decor.length;i++)this.writePose('decor',i,this.decorPose(decor[i]));
+      for(let i=0;i<decor.length;i++)this.writePose(DECOR_MODELS[decor[i].model].roomAtlas?'roomDecor':'decor',i,this.decorPose(decor[i]));
       for(const entry of pickups)this.writePose(entry.pool,entry.index,this.worldItemPose(entry));
       const meshPass=encoder.beginRenderPass({label:'Imported world meshes',
         colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
@@ -4012,7 +4117,7 @@ class CatroomsWebGPURenderer {
       for(const {p,i} of decor.map((p,i)=>({p,i})).sort((a,b)=>a.p.model.localeCompare(b.p.model))){
         const m=this.modelMeshes[p.model];
         if(meshKind!==p.model){meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');meshKind=p.model;}
-        meshPass.setBindGroup(0,this.rushMeshBinds.decor[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
+        meshPass.setBindGroup(0,this.rushMeshBinds[DECOR_MODELS[p.model].roomAtlas?'roomDecor':'decor'][i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
       }
       for(const {index,model,pool} of pickups){
         const mesh=this.modelMeshes[model];
@@ -4173,7 +4278,7 @@ function drawMap(){
  for(let y=0;y<gameSession.N;y++)for(let x=0;x<gameSession.N;x++){
   if(!gameSession.seen[y]?.[x])continue;
   const cell=gameSession.world[y][x];
-  g.fillStyle=cell===5?'#77705f':(cell===1||cell===8||cell===THIN_SAFE_ROOM_TILE)?'#52564c':cell===3?'#a0dbab':cell===4?'#b75c42':isHardMode()?'#27302c':'#29362f';
+  g.fillStyle=cell===POOL_TILE?'#396e73':cell===5?'#77705f':(cell===1||cell===8||cell===THIN_SAFE_ROOM_TILE)?'#52564c':cell===3?'#a0dbab':cell===4?'#b75c42':isHardMode()?'#27302c':'#29362f';
   g.fillRect(x*ts,y*ts,Math.ceil(ts),Math.ceil(ts));
  }
  function pin(x,y,color,radius=.32,reveal=false){
@@ -5506,7 +5611,7 @@ function decorFloorAllowed(world,x,y,backed=false){
  }
  return neighbors.every(p=>seen.has(p.join(',')));
 }
-function decorModelsFor(stage){return Object.keys(DECOR_MODELS).filter(k=>stage===5||DECOR_MODELS[k].stage===stage);}
+function decorModelsFor(stage){return Object.keys(DECOR_MODELS).filter(k=>['wall','floor'].includes(DECOR_MODELS[k].placement)&&k!=='metalLeaf'&&(stage===5||DECOR_MODELS[k].stage===stage));}
 // Smaller loose props stay inside the reserved floor tile, even on their side.
 // Imported box/CRT meshes have symmetric local Y extents and a floor origin.
 function looseDecorPose(kind,spec,random){
@@ -5557,6 +5662,7 @@ function scatterLevelDecor(){
   for(let pass=0;pass<(stage===5?1:3);pass++)plan.push(...shuffle(keys.slice()));
   if(stage===5){plan.push('mannequin','lastClock','mannequin','lastClock');if(s.level!==12)plan.push(...shuffle(keys.slice()));}
   if(stage!==5&&s.level!==12&&N>=65)plan.push(...shuffle(keys.slice()));
+  plan.sort((a,b)=>Number(b==='desk')-Number(a==='desk'));
   let cabinetCount=0;
   for(const kind of plan){
    const spec=DECOR_MODELS[kind];if(!spec)continue;
@@ -5564,10 +5670,17 @@ function scatterLevelDecor(){
    const isWall=spec.placement==='wall';
    const fallenCabinet=kind==='cabinet'&&cabinetCount++%2===1;
    const standingCabinet=kind==='cabinet'&&!fallenCabinet;
-   const againstWall=kind==='bench'||kind==='pipe'||standingCabinet;
+   const againstWall=kind==='bench'||kind==='pipe'||standingCabinet||['wardrobe','serverRack','emergencyShower'].includes(kind);
    let selected=null;
    const preferred=cells.filter(cell=>cell.room?.decor?.includes(kind));
+   if(kind==='lifebuoy')preferred.sort((a,b)=>Number(b.room.template==='pool')-Number(a.room.template==='pool'));
+   const roomDesks=kind==='officeChair'?placed.filter(placed=>placed.model==='desk'):[];
+   if(roomDesks.length){
+    const distance=cell=>Math.min(...roomDesks.map(d=>Math.hypot(d.x-cell.x-.5,d.y-cell.y-.5)));
+    preferred.sort((a,b)=>distance(a)-distance(b));
+   }
    for(const cell of [...preferred,...cells]){
+    if(cell.room?.template==='pool'&&!isWall)continue;
     if(cell.room&&['SAFE','TRANSITION'].some(tag=>cell.room.categories.includes(tag)))continue;
     if(!isWall&&!fallenCabinet&&spec.height+.02>ROOM_CEILING_HEIGHTS[cell.room?.height??0])continue;
     if(cell.room?.links?.some(id=>{
@@ -5576,7 +5689,7 @@ function scatterLevelDecor(){
      return Math.hypot(door.x-cell.x,door.y-cell.y)<1.85;
     }))continue;
     const {x,y}=cell;if(world[y][x]!==0)continue;
-    if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<2.6))continue;
+    if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<(kind==='officeChair'&&p.model==='desk'?.9:2.6)))continue;
     const walls=DECOR_DIRS.filter(([dx,dy])=>world[y+dy]?.[x+dx]===1);
     if(isWall){if(!walls.length)continue;selected={...cell,wall:walls[Math.floor(random()*walls.length)]};break;}
     if(!decorFloorAllowed(world,x,y,standingCabinet))continue;
@@ -5600,6 +5713,10 @@ function scatterLevelDecor(){
      const pose=looseDecorPose(kind,spec,poseRandom);
      px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;size=pose.size;tilt=pose.tilt;radius=pose.radius;
     }
+   }
+   if(roomDesks.length){
+    const desk=roomDesks.reduce((a,b)=>Math.hypot(a.x-px,a.y-py)<Math.hypot(b.x-px,b.y-py)?a:b);
+    if(Math.hypot(desk.x-px,desk.y-py)<3)yaw=Math.atan2(desk.y-py,desk.x-px)+Math.PI/2;
    }
    const prop={type:'decor',model:kind,x:px,y:py,z,yaw,size,tilt,radius,stage,cellX:x,cellY:y,solid:!isWall};
    placed.push(prop);s.props.push(prop);

@@ -104,9 +104,10 @@ function buildRoomRegion(layout,sector,xs,ys,{campaign=false}={}){
  const maxH=Math.min(spacing(ys)-2,2*Math.min(ys[0]-1,gameSession.N-2-ys.at(-1))+1);
  const rooms=ys.map((y,row)=>xs.map((x,col)=>{
   const zone=zones[Math.floor(row*zones.length/ys.length)];
-  const template=col===0&&row===0?zone.library[0]:
+  const pool=sector===2&&row===1&&col===1;
+  const template=pool?'pool':col===0&&row===0?zone.library[0]:
    zone.library[Math.floor(random()*zone.library.length)];
-  return createRoom(layout,{sector,zone,x,y,template,maxW,maxH,rectangular:campaign&&row%2===0&&col%2===0},random);
+  return createRoom(layout,{sector,zone,x,y,template,maxW,maxH,rectangular:pool||campaign&&row%2===0&&col%2===0},random);
  }));
  const all=rooms.flat();
  const options=[];
@@ -128,6 +129,8 @@ function buildRoomRegion(layout,sector,xs,ys,{campaign=false}={}){
   }else remaining.push([a,b]);
  }
  for(const [a,b] of remaining)if(random()<.55)connectRooms(layout,a,b,'alternate');
+ const pool=all.find(room=>room.template==='pool');
+ if(pool)installPoolBasin(pool);
  return rooms;
 }
 
@@ -140,4 +143,11 @@ function chooseRoomExit(cells,x,y){
   if(cells.every(c=>c===cell||distances[c.y][c.x]>=0))return cell;
  }
  throw Error('The room layout has no reachable exit');
+}
+
+function installPoolBasin(room){
+ const width=3,length=Math.min(5,room.h-2);
+ const left=room.x-(width>>1),top=room.y-(length>>1);
+ room.basin={left,top,width,length,bottom:POOL_BOTTOM_Z,water:POOL_WATER_Z};
+ for(let y=top;y<top+length;y++)for(let x=left;x<left+width;x++)gameSession.world[y][x]=POOL_TILE;
 }

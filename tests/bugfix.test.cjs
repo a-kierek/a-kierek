@@ -11,7 +11,7 @@ run(`let godMode=false,lastShieldToast=-100,touchCrouch=false;
 const noop=()=>{};
 const setUIIcon=noop,setUIIconText=noop,makeUIIcon=noop,uiIcon=()=>'',stopGameSounds=noop,stopLossScream=noop,playWin=noop,playLossScream=noop,playSting=noop,playHurt=noop,playPickup=noop,playUnlock=noop,playDoorMovement=noop,playReactorRepair=noop,playCoinPickup=noop,playCoinSlot=noop,createGameSample=noop,resetMobileInputs=noop,drawMap=noop;
 `);
-const scripts=['engine/session','core/state','characters/actors','core/navigation','maps/room-templates','maps/room-system','maps/room-runtime','maps/level1','maps/shared','maps/level2','maps/level3','maps/navigable','maps/level5','characters/ai','gameplay/campaign','progression/streak','gameplay/procedural','gameplay/hard','gameplay/inventory','network/coop','gameplay/safe-room','gameplay/boss-rush','gameplay/custom-mode','graphics/decor-data','graphics/world-geometry','gameplay/decor','engine/modes','engine/loop','ui/interface'];
+const scripts=['engine/session','core/state','characters/actors','core/navigation','maps/room-templates','maps/room-system','maps/room-runtime','maps/level1','maps/shared','maps/level2','maps/level3','maps/navigable','maps/level5','characters/ai','gameplay/campaign','progression/streak','gameplay/procedural','gameplay/hard','gameplay/inventory','network/coop','gameplay/safe-room','gameplay/boss-rush','gameplay/custom-mode','graphics/room-model-data','graphics/decor-data','graphics/shaders/shared','graphics/world-geometry','gameplay/decor','engine/modes','engine/loop','ui/interface'];
 for(const f of scripts)vm.runInContext(fs.readFileSync(path.join(root,'js',f+'.js'),'utf8'),ctx,{filename:f+'.js'});
 // Legacy names are test-only views of the actual session object, for Alpha 2/3 fixtures.
 for(const field of ["state", "level", "clock", "elapsed", "worldRevision", "runCheated", "runTestEntry", "world", "player", "guards", "fuses", "doors", "terminals", "props", "bonusItems", "interactables", "seen", "exitCell", "safeRoom", "safeRoomFurniture", "rushSafeRooms", "bossRush", "N", "GOAL", "deathBy", "crouching", "noiseEvents", "eventState", "hardEmergency", "hardRocks", "cat", "walkPhase", "awake", "wakeAt", "nearCat", "alertUntil", "toastTimeout", "flashUntil", "mapOn", "keysOwned", "eventTimer", "cameraFloor", "stats", "guardCallCooldown", "interactReady", "alarmTimer", "guardSight", "guardNoise", "hardSlowUntil", "hardPulseUntil", "hardPulseNext", "hardNextEmergency", "catPath", "pathTimer"])run(`Object.defineProperty(globalThis,'${field}',{get:()=>gameSession.${field},set:v=>{gameSession.${field}=v},configurable:true})`);
@@ -161,6 +161,20 @@ check('room graph validates prerequisites, themes, and two-way maintenance stair
   const sealed=world[secretLink.gate.y][secretLink.gate.x]===1;
   interact();sealed&&secretLink.gate.open&&world[secretLink.gate.y][secretLink.gate.x]===0`),true);
 });
+check('Flooded Complex has a fitted basin and a continuous walkway',()=>{
+ for(const level of [2,7,12,13]){
+  run(`gameSession.level=${level};customGameConfig.stage=2;requestedSeed=12345;reset();`);
+  assert.equal(run(`(()=>{
+   const room=gameSession.roomLayout.rooms.find(r=>r.template==='pool');
+   const {left,top,width,length,bottom,water}=room.basin;
+   return bottom<water&&water<0&&world[top][left]===POOL_TILE&&
+    !freeAt(left+.5,top+.5,.22)&&freeAt(left-.5,top+.5,.22)&&
+    lineOfSight(left-.5,top+.5,left+width+.5,top+.5)&&
+    props.some(p=>p.basin&&p.model===(length===5?'poolFive':'poolThree'))&&validateRoomLayout().length===0;
+  })()`),true);
+ }
+ run("customGameConfig.stage=1");
+});
 check('same seed reproduces map, rooms, furniture, loot and initial enemies',()=>{
  const snapshot=`JSON.stringify({world,fuses,bonusItems,interactables,safeRoomFurniture,guards,rooms:bossRushRooms(),props,reactors:gameSession.emergencyReactors})`;
  for(const l of [1,2,5,6,12]){run(`level=${l};requestedSeed=54321;reset();`);const a=run(snapshot);run(`player.x=20;player.y=20;requestedSeed=54321;reset();`);assert.equal(run(snapshot),a,`seed ${l}`);}
@@ -184,7 +198,7 @@ check('decor preserves components, avoids objectives and covers themed models',(
   for(const stage of [1,2,3,4,5])for(const size of [49,81,121])for(const rooms of [true,false])scenarios.push([13,42+stage,stage,size,rooms]);
   for(const [l,k,stage,size,rooms] of scenarios){
    gameSession.level=l;customGameConfig.stage=stage;customGameConfig.size=size;customGameConfig.safeRooms=rooms;requestedSeed=k;reset();
-   const s=gameSession,p=s.props.filter(x=>x.type==='decor');const baseline=s.world.map(r=>r.slice());
+   const s=gameSession,p=s.props.filter(x=>x.type==='decor'&&!x.basin&&!x.surface&&!x.landing&&!x.gate);const baseline=s.world.map(r=>r.slice());
    const occupied=new Set();
    for(const o of p){const key=o.cellX+','+o.cellY,spec=DECOR_MODELS[o.model];
     if(occupied.has(key))throw Error('overlap '+key);occupied.add(key);

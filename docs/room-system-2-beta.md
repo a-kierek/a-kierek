@@ -8,8 +8,4 @@ Flooded Complex i Bloody Zone mają piętra techniczne w kampanii i HARD. Przej�
 
 ## Assety do kolejnego etapu
 
-- **Wyposażenie `.glb`**. Zestawy biurowe i serwerowe, sanitarne, mieszkalne, sklepowe, szpitalne i stacji metra. W technicznych pomieszczeniach przydadzą się zawory, manometry, złączki i przewody.
-- **Moduły `.glb`**. Okna, przeszklenia, drzwi przemysłowe i przesuwne, rampy, schody, platformy, balustrady, szyby wind i wentylacja.
-- **Modele z ruchomymi częściami `.glb`**. Szuflady, szafki, wentylatory, pompy, przenośniki, windy i maszyny. Najłatwiej podłączyć osobne węzły dla ruchomych części albo gotowe klipy animacji.
-- **Materiały i kalkomanie `.png` lub `.webp`**. Warianty powierzchni, ślady butów i racic, pęknięcia, szkło, rysy, zacieki, oznaczenia, numery pokoi i drobne rekwizyty. Do materiałów PBR przydadzą się Base Color, Normal i Roughness.
-- **Nagrania `.wav`, `.ogg` lub `.mp3`**. Pętle wentylacji, transformatorów, serwerów, maszyn i odgłosy awarii oraz zdarzeń w pokojach.
+Aktualny stan wyposażenia i pozostałe modele, materiały oraz nagrania są w [checkliście sektorów](room-checklist.md). [Kredyty modeli](room-model-credits.md).

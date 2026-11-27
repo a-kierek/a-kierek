@@ -49,11 +49,14 @@ function geometryTerrainSource(){
  const oldResolve='result=scenerySurface(ray3,ray3.z<0.,distance);';
  if(!source.includes(oldResolve))throw Error('Terrain surface resolve contract changed');
  return source.replace(oldResolve,`if(hasPlane){
-     let isFloor=rasterHit.w<2.5;
-     // Raster tag selects the actual visible quad; use exact depth for
-     // stable material coordinates, lighting and sprite occlusion.
+     let isFloor=rasterHit.w<2.5||rasterHit.w>3.5;
+     // Compute the exact depth again after identifying the rasterized surface.
      distance=select(min(VIEW_FAR,(roomCeiling(cell,i32(frame.viewport.z))-.5)/max(ray3.z,.000001)),planeDepth(ray3),isFloor);
-     result=scenerySurface(ray3,isFloor,distance);
+     if(rasterHit.w>3.5){
+       let z=select(POOL_WATER_Z,${POOL_BOTTOM_Z},rasterHit.w>4.5);
+       distance=min(VIEW_FAR,(.5-z)/max(-ray3.z,.000001));
+       result=poolSurface(frame.player.xy+ray.xy*distance,distance);
+     }else{result=scenerySurface(ray3,isFloor,distance);}
    }else{
      // Preserve the classic distant fog/near clip fallback when no triangle
      // covers the pixel (including views beyond VIEW_FAR).

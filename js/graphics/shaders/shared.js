@@ -2,6 +2,9 @@
 // Keep forward distance (world units) separate from projected GPU depth [0,1].
 const RENDER_FRAME=Object.freeze({floats:36,bytes:144,player:0,viewport:4,progress:8,visuals:12,weather:16,camera:20,lighting:24,flashlight:28,shadows:32});
 const RENDER_DEPTH=Object.freeze({near:.04,far:140,wallScale:256,spriteNear:.16,spriteFar:125});
+const POOL_TILE=10;
+const POOL_BOTTOM_Z=-.62;
+const POOL_WATER_Z=-.26;
 const FRAME_WGSL=/* wgsl */ `
 struct SceneFrame {
  player:vec4f,
@@ -16,6 +19,7 @@ struct SceneFrame {
 };
 `;
 const DEPTH_WGSL=/* wgsl */ `
+const POOL_WATER_Z:f32=${POOL_WATER_Z};
 const VIEW_NEAR:f32=${RENDER_DEPTH.near};
 const VIEW_FAR:f32=${RENDER_DEPTH.far}.0;
 const WALL_DEPTH_SCALE:f32=${RENDER_DEPTH.wallScale}.0;
@@ -47,12 +51,13 @@ fn planeDepth(ray:vec3f)->f32 {return min(VIEW_FAR,.5/max(abs(ray.z),.000001));}
 // First lighting experiment: a bounded local fixture grid and optional campfire.
 // CP06: bounded grid visibility for full-height walls. Roughness remains scalar.
 const LIGHTING_WGSL=/* wgsl */ `
+const POOL_BASIN:u32=${POOL_TILE}u;
 fn shadowSolid(cell:vec2i,size:i32)->bool {
  if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return true;}
  let tile=worldTiles[u32(cell.y)*128u+u32(cell.x)];
  // The low byte is the terrain type and bit eight is a closed mesh door.
  let solid=tile&511u;
- return solid!=0u&&solid!=5u;
+ return solid!=0u&&solid!=5u&&solid!=POOL_BASIN;
 }
 fn roomFields(cell:vec2i,size:i32)->u32 {
  if(any(cell<vec2i(0))||any(cell>=vec2i(size))){return 0u;}

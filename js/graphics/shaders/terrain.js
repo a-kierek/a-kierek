@@ -123,6 +123,21 @@ fn cp11Shade(color:vec3f,p:vec3f,geom:vec3f,material:SurfaceDetail)->vec3f {
  return pow(max(light,vec3f(0.)),vec3f(1./2.2));
 }
 
+fn poolTileColor(uv:vec2f)->vec3f {
+ let edge=min(min(uv.x,uv.y),min(1.-uv.x,1.-uv.y));
+ return mix(vec3f(.43,.47,.43),vec3f(.82,.86,.79),smoothstep(.015,.055,edge));
+}
+fn poolSurface(worldPt:vec2f,rd:f32)->vec4f {
+ let phase=frame.player.w*.81;
+ let ripple=sin(worldPt.x*7.2+worldPt.y*3.2+phase)+sin(worldPt.y*8.4-worldPt.x*4.3-phase*1.3);
+ let ceramic=poolTileColor(fract(worldPt*2.+ripple*.014));
+ let wave=smoothstep(1.1,1.97,ripple);
+ let point=vec3f(worldPt,POOL_WATER_Z);
+ let light=surfaceLighting(point,vec3f(0.,0.,1.),.28,vec3f(.58),frame);
+ let color=vec3f(.055,.29,.30)*(.62+.42*ceramic)+wave*vec3f(.07,.14,.12);
+ return vec4f(mix(color*light,vec3f(.10,.105,.09),clamp((rd-2.)/28.,0.,.88)),1.);
+}
+
 fn sceneryAt(pixel:vec2f,ray:vec3f)->vec4f {
  let isFloor=ray.z<0.;
  let rd=planeDepth(ray);
@@ -130,6 +145,8 @@ fn sceneryAt(pixel:vec2f,ray:vec3f)->vec4f {
 }
 fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  let worldPt=frame.player.xy+ray.xy*rd;
+ let cell=vec2i(floor(worldPt));
+ if(isFloor&&tileAt(cell.x,cell.y)==POOL_BASIN){return poolSurface(worldPt,rd);}
  let sector=sectorLevel(worldPt.x);
  let layer=floorLayers(sector)+select(1,0,isFloor);
  let uv=fract(worldPt);
@@ -157,7 +174,9 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
      c=cp11Shade(c,point,n,material);
    }else{c*=surfaceLighting(point,n,rough,vec3f(1.),frame);}
  }
- let condition=(roomFields(vec2i(floor(worldPt)),i32(frame.viewport.z))>>15u)&3u;
+ let fields=roomFields(cell,i32(frame.viewport.z));
+ if(isFloor&&(fields&(1u<<17u))!=0u){c=mix(c,c*poolTileColor(fract(worldPt*2.))*1.4,.72);}
+ let condition=(fields>>15u)&3u;
  if(condition==1u&&isFloor){c*=vec3f(.83,.95,1.09);}
  if(condition==2u){
    let wear=.92+.08*sin(worldPt.x*3.4)*sin(worldPt.y*2.8);
@@ -236,12 +255,15 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if(edge>distance){break;}
    if(tMax.x<tMax.y){tMax.x+=delta.x;cell.x+=gridStep.x;side=0;}
    else{tMax.y+=delta.y;cell.y+=gridStep.y;side=1;}
-   hit=tileAt(cell.x,cell.y);
+   let tile=tileAt(cell.x,cell.y);
+   let basin=tile==POOL_BASIN;
+   let ground=select(0.,POOL_WATER_Z,basin);
    roof=roomCeiling(cell,size);
-   if(hit!=0u||(upward&&.5+ray3.z*edge>=roof)){
-    if(hit==0u){hit=1u;}
+   if((tile!=0u&&!basin)||(upward&&.5+ray3.z*edge>=roof)||(!upward&&.5+ray3.z*edge<ground)){
+    hit=max(1u,tile);
     distance=max(VIEW_NEAR,edge);break;
    }
+   if(!upward){distance=min(VIEW_FAR,(.5-ground)/max(-ray3.z,.000001));}
  }
  let hasWall=hit!=0u;
  let wallPoint=vec3f(frame.player.xy,.5)+ray3*distance;
@@ -256,7 +278,10 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if((side==0 && ray.x>0.) || (side==1 && ray.y<0.)){texX=1.-texX;}
    var layer=levelWall(sectorLevel(f32(cell.x)));
    var detailLod=0.;
-   if(hit==8u){
+   let ceramic=(roomFields(wallRoom,i32(frame.viewport.z))&(1u<<17u))!=0u||wallPoint.z<0.;
+   if(ceramic&&hit!=3u&&hit!=4u){
+     result=vec4f(poolTileColor(fract(vec2f(texX,wallPoint.z)*2.))*.86,1.);
+   }else if(hit==8u){
      // Safe-room walls: damp dark brick, rust streaks, tiled grout.
      let uvWall=vec2f(texX,wallV);
      let row=floor(uvWall.y*6.);
@@ -287,7 +312,7 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
    if(frame.lighting.x>.5||frame.flashlight.w>.5){
      let normal=select(vec3f(0.,-sign(ray.y),0.),vec3f(-sign(ray.x),0.,0.),side==0);
      let rough=select(.84,.40,layer==1||layer==2||hit==3u||hit==4u);
-     if(detailAvailable()&&hit!=8u&&layer<4){
+     if(detailAvailable()&&!ceramic&&hit!=8u&&layer<4){
        let tangent=vec3f(-normal.y,normal.x,0.);
        let material=readSurfaceDetail(vec2f(texX,wallV),layer,detailLod,normal,tangent,vec3f(0.,0.,-1.));
        result=vec4f(cp11Shade(result.rgb,wallPoint,normal,material),1.);

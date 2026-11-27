@@ -10,7 +10,7 @@ function drawMap(){
  for(let y=0;y<gameSession.N;y++)for(let x=0;x<gameSession.N;x++){
   if(!gameSession.seen[y]?.[x])continue;
   const cell=gameSession.world[y][x];
-  g.fillStyle=cell===5?'#77705f':(cell===1||cell===8||cell===THIN_SAFE_ROOM_TILE)?'#52564c':cell===3?'#a0dbab':cell===4?'#b75c42':isHardMode()?'#27302c':'#29362f';
+  g.fillStyle=cell===POOL_TILE?'#396e73':cell===5?'#77705f':(cell===1||cell===8||cell===THIN_SAFE_ROOM_TILE)?'#52564c':cell===3?'#a0dbab':cell===4?'#b75c42':isHardMode()?'#27302c':'#29362f';
   g.fillRect(x*ts,y*ts,Math.ceil(ts),Math.ceil(ts));
  }
  function pin(x,y,color,radius=.32,reveal=false){

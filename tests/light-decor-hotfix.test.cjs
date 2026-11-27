@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const ctx=vm.createContext({});vm.runInContext(['js/graphics/decor-data.js','js/gameplay/decor.js',...['shared','terrain','world-geometry'].map(n=>'js/graphics/shaders/'+n+'.js')].map(read).join('\n'),ctx);
+const ctx=vm.createContext({});vm.runInContext(['js/graphics/room-model-data.js','js/graphics/decor-data.js','js/gameplay/decor.js',...['shared','terrain','world-geometry'].map(n=>'js/graphics/shaders/'+n+'.js')].map(read).join('\n'),ctx);
 const get=n=>vm.runInContext(n,ctx),pose=get('wallFloorDecorPose'),specs=get('DECOR_MODELS');
 function weight(d2){const t=Math.max(0,Math.min(1,(d2-36)/28));return 1-t*t*(3-2*t);}
 function sum(x,y,z,window){const gx=Math.floor((x-2.5)/5),gy=Math.floor((y-1.45)/4);let total=0;

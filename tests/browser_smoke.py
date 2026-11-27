@@ -34,7 +34,7 @@ with sync_playwright() as p:
  page.wait_for_function("window.CatroomsGraphicsStatus?.backend==='webgpu' && typeof gameSession!=='undefined' && gameSession.world.length>0",timeout=15000)
  assert page.evaluate("window.CatroomsScriptsReady===true && !window.CatroomsStartupError && typeof bossRushVisible==='function' && typeof resetBossRush==='function'")
  assert page.evaluate("!document.getElementById('loadingScreen')?.classList.contains('load-failed')")
- assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===24 && ['door','rock','battery','card','terminal','shield','drink'].every(kind=>gpuRenderer.modelMeshes[kind]?.indexCount>0)")
+ assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===24+Object.keys(ROOM_MODELS).length && ['door','rock','battery','card','terminal','shield','drink'].every(kind=>gpuRenderer.modelMeshes[kind]?.indexCount>0)")
  assert page.evaluate("gpuRenderer.loadedSpriteLayers[1].width>0 && gpuRenderer.loadedSpriteLayers[1].height>0")
  assert page.evaluate("$('bossRushBtn').hidden===!bossRushVisible()")
  # New v1.8.0-beta release UI and title music checks.

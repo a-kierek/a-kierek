@@ -17,7 +17,7 @@ const GPU_WALL_H=256;
 const GPU_TILE_SIZE=64;
 const GPU_MAX_DECALS=256;
 const GPU_MAX_SPRITES=256;
-const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32,shield:16,drink:24,terminal:24};
+const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,roomDecor:64,pickup:32,shield:16,drink:24,terminal:24};
 const WORLD_ITEM_KINDS={battery:6,card:7,shield:8,drink:9,terminal:10};
 const WORLD_ITEM_TILTS={
  battery:[0,0,Math.PI/2,-Math.PI/2],card:[0],shield:[0,0,Math.PI],drink:[0,0,Math.PI/2,-Math.PI/2],terminal:[0]
@@ -142,11 +142,11 @@ class CatroomsWebGPURenderer {
           return {c,s,z:-bottom*WORLD_ITEM_SCALE[kind]};
         });
       }
-      if(kind!=='campfire'&&!WORLD_ITEM_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
+      if(kind!=='campfire'&&!WORLD_ITEM_KINDS[kind]&&DECOR_MODELS[kind]?.placement!=='basin')this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
     }
     this.modelShadows.initialize(shadowData);
     this.meshAlbedoTextures={};
-    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO,shield:MODEL_SHIELD_ALBEDO,drink:MODEL_DRINK_ALBEDO,terminal:MODEL_TERMINAL_ALBEDO}).map(async ([kind,src])=>{
+    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,roomDecor:ROOM_MODEL_ALBEDO,pickup:MODEL_BATTERY_ALBEDO,shield:MODEL_SHIELD_ALBEDO,drink:MODEL_DRINK_ALBEDO,terminal:MODEL_TERMINAL_ALBEDO}).map(async ([kind,src])=>{
       const image=new Image();
       image.src=src;
       await image.decode();
@@ -271,6 +271,8 @@ class CatroomsWebGPURenderer {
       }
       this.doorLayout=scene===gameSession?this.makeDoorLayout(scene):[];
       for(const d of this.doorLayout)this.tilesData[d.y*128+d.x]=0;
+      const metalGates=scene.props.filter(prop=>prop.gate&&!prop.gate.open);
+      for(const {gate} of metalGates)this.tilesData[gate.y*128+gate.x]=0;
       // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
       // geometry map unchanged; only the GPU visibility map carries the flag.
       this.gpuTilesData.set(this.tilesData);
@@ -280,6 +282,7 @@ class CatroomsWebGPURenderer {
         const tile=scene.world[d.y][d.x];
         if(tile===3||tile===4)this.gpuTilesData[d.y*128+d.x]|=256;
       }
+      for(const {gate} of metalGates)this.gpuTilesData[gate.y*128+gate.x]|=256;
       upload(this.mapBuffer,this.gpuTilesData);this.stats.mapUploads++;this.mapSource=scene.world;this.mapRevision=scene.worldRevision;this.mapSize=scene.N;this.roomRevision=scene.roomLayout?.revision;
     }
     const furniture=scene.safeRoomFurniture;
@@ -382,7 +385,7 @@ class CatroomsWebGPURenderer {
   visibleDecor(camera=captureRenderCamera()){
     // One shared texture/bind layout; distance/frustum culling and a bounded pool.
     // All nearby objects are retained before distant ones, regardless of type.
-    return gameSession.props.filter(p=>p.type==='decor'&&Math.hypot(p.x-camera.x,p.y-camera.y)<28&&this.modelInView(p.x,p.y,(p.radius??DECOR_MODELS[p.model].radius)+.1,camera))
+    return gameSession.props.filter(p=>p.type==='decor'&&!p.gate?.open&&Math.hypot(p.x-camera.x,p.y-camera.y)<28&&this.modelInView(p.x,p.y,(p.radius??DECOR_MODELS[p.model].radius)+.1,camera))
       .sort((a,b)=>Math.hypot(a.x-camera.x,a.y-camera.y)-Math.hypot(b.x-camera.x,b.y-camera.y)).slice(0,64);
   }
   visiblePickups(camera){
@@ -439,7 +442,7 @@ class CatroomsWebGPURenderer {
     for(const room of rooms)for(const kind of ['slot','tree'])add(kind,this.roomPose(room,kind));
     for(const pose of this.doorPoses(camera,true))add('door',pose);
     for(const prop of gameSession.props){
-      if(prop.type==='decor')add(prop.model,this.decorPose(prop));
+      if(prop.type==='decor'&&!prop.basin&&!prop.gate?.open)add(prop.model,this.decorPose(prop));
       else if(prop.type==='rock')add('rock',this.rockPose(prop));
     }
     if(casters.length>SHADOW_INSTANCE_LIMIT){
@@ -551,7 +554,7 @@ class CatroomsWebGPURenderer {
       }
       for(let i=0;i<rocks.length;i++)this.writePose('rock',i,this.rockPose(rocks[i]));
       for(let i=0;i<doors.length;i++)this.writePose('door',i,doors[i]);
-      for(let i=0;i<decor.length;i++)this.writePose('decor',i,this.decorPose(decor[i]));
+      for(let i=0;i<decor.length;i++)this.writePose(DECOR_MODELS[decor[i].model].roomAtlas?'roomDecor':'decor',i,this.decorPose(decor[i]));
       for(const entry of pickups)this.writePose(entry.pool,entry.index,this.worldItemPose(entry));
       const meshPass=encoder.beginRenderPass({label:'Imported world meshes',
         colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
@@ -577,7 +580,7 @@ class CatroomsWebGPURenderer {
       for(const {p,i} of decor.map((p,i)=>({p,i})).sort((a,b)=>a.p.model.localeCompare(b.p.model))){
         const m=this.modelMeshes[p.model];
         if(meshKind!==p.model){meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');meshKind=p.model;}
-        meshPass.setBindGroup(0,this.rushMeshBinds.decor[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
+        meshPass.setBindGroup(0,this.rushMeshBinds[DECOR_MODELS[p.model].roomAtlas?'roomDecor':'decor'][i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
       }
       for(const {index,model,pool} of pickups){
         const mesh=this.modelMeshes[model];

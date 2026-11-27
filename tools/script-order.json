@@ -19,6 +19,7 @@
   "js/graphics/art-assets.js",
   "js/graphics/collectibles.js",
   "js/graphics/model-data.js",
+  "js/graphics/room-model-data.js",
   "js/graphics/decor-data.js",
   "js/engine/assets.js",
   "js/graphics/materials.js",
