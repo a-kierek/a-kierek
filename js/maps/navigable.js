@@ -42,7 +42,7 @@ function createPigWorld(){
   addControl('barn',mid+.5,lo+.5,'GATE LEVER');
   addControl('vent',mid+.5,hi+.5,'BARN VENTILATION');
   addControl('mixer',lo+.5,lo+.5,'FEED MIXER');
-  for(const [x,y] of [[hi,mid],[lo,lo],[mid,mid+4]])
+  for(const [x,y] of [[hi,mid+1],[lo+1,lo],[mid,mid+4]])
     addPickup('bacon-'+x+'-'+y,x+.5,y+.5,'stamina','ENERGY DRINK',1);
   for(const [x,y] of [[lo+2,lo+2],[hi-2,lo+2],[lo+2,hi-2]])addLocker(x+.5,y+.5);
   addGate('pen',mid,lo+6,'BARN GATE',{panel:'barn'},'Pull the gate lever');

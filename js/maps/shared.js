@@ -36,6 +36,21 @@ function addCard(id,x,y){gameSession.world[Math.floor(y)][Math.floor(x)]=0;gameS
 
 function addControl(id,x,y,title,order=0){gameSession.world[Math.floor(y)][Math.floor(x)]=0;let item={id,x,y,type:'panel',title,used:false,order};gameSession.interactables.push(item);gameSession.terminals.push(item)}
 
+function placeTerminalPoses(){
+ const s=gameSession,routes=bfsDistances(Math.floor(s.player.x),Math.floor(s.player.y));
+ const nearbyItems=[...s.fuses,...s.bonusItems,s.player,...s.guards,s.cat];
+ for(const terminal of [...s.terminals,...s.emergencyReactors]){
+  const x=Math.floor(terminal.x),y=Math.floor(terminal.y);
+  const approaches=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>s.world[y+dy]?.[x+dx]===0);
+  const distance=([dx,dy])=>routes[y+dy]?.[x+dx]>=0?routes[y+dy][x+dx]:Infinity;
+  approaches.sort((a,b)=>distance(a)-distance(b));
+  const [dx,dy]=approaches[0]||[-1,0];
+  terminal.yaw=Math.atan2(dy,dx);
+  if(decorFloorAllowed(s.world,x,y,true)&&nearbyItems.every(item=>!Number.isFinite(item?.x)||Math.hypot(item.x-terminal.x,item.y-terminal.y)>.9)){
+   s.safeRoomFurniture.push({x:terminal.x,y:terminal.y,z:.27,w:.69,d:.69,h:.54,material:1,collisionOnly:true});
+  }
+ }
+}
 function addLocker(x,y){gameSession.world[Math.floor(y)][Math.floor(x)]=0;gameSession.interactables.push({id:'hide-'+x+'-'+y,x,y,type:'hide',title:'LOCKER / HIDING PLACE'})}
 
 
@@ -55,7 +70,7 @@ function scatterEnvironmentalProps(bloodCount,hazardCount,avoid=[]){
     return true;
   }
   for(const c of cells){if(chosen.length>=bloodCount+hazardCount)break;if(!okay(c))continue;chosen.push(c)}
-  chosen.forEach((c,i)=>gameSession.props.push({type:i<hazardCount?'hazard':'blood',x:c.x+.5+(rnd()-.5)*.18,y:c.y+.5+(rnd()-.5)*.18,phase:rnd()*TAU,size:((i<hazardCount)?.68:.74)+rnd()*.12}));
+  chosen.forEach((c,i)=>gameSession.props.push({type:i<hazardCount?'hazard':'blood',x:c.x+.5+(rnd()-.5)*.18,y:c.y+.5+(rnd()-.5)*.18,phase:rnd()*TAU,size:((i<hazardCount)?.76:.74)+rnd()*.17}));
 }
 
 function refreshHpHud(){
@@ -108,7 +123,7 @@ function damageBlocked(cause){
 }
 function applyHazardsAndRegen(dt){
   const hazards=gameSession.props.filter(p=>p.type==='hazard'&&(!p.expires||p.expires>gameSession.elapsed));
-  const touching=hazards.find(h=>Math.hypot(gameSession.player.x-h.x,gameSession.player.y-h.y)<.7);
+  const touching=hazards.find(h=>Math.hypot(gameSession.player.x-h.x,gameSession.player.y-h.y)<(h.size||.75)*.67+.16);
   if(touching && gameSession.elapsed-(gameSession.player.lastHazardHit??-999)>=5){
     if(!damageBlocked('hazard')){
     gameSession.player.lastHazardHit=gameSession.elapsed;gameSession.player.lastDamageAt=gameSession.elapsed;gameSession.player.regenBucket=0;

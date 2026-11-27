@@ -18,7 +18,7 @@ try:
     assert status==200 and json.loads(health)['version']=='1.7.0-alpha.1'
     status,html=get(''); assert status==200
     html=html.decode(); scripts=re.findall(r'<script src="([^"]+)"></script>',html)
-    assert scripts==['js/game.bundle.js?v=1.7.0-alpha.1.3','js/core/boot.js?v=1.7.0-alpha.1.3']
+    assert scripts==['js/game.bundle.js?v=1.7.0-alpha.1.4','js/core/boot.js?v=1.7.0-alpha.1.4']
     for path in scripts+re.findall(r'<link href="([^"]+)" rel="stylesheet"',html)+json.loads((root/'tools/script-order.json').read_text()):
         status,body=get(path); assert status==200 and body==(root/path.split('?')[0]).read_bytes(),path
     for path in ['slot-optimized.mesh','tree-optimized.mesh','campfire-optimized.mesh','slot-albedo.webp']:

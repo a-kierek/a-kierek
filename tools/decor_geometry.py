@@ -72,7 +72,7 @@ def collision_data(models, rock_mesh):
     lines = []
     for name, vertices in models:
         xy = json.dumps(footprint(vertices[:, :2]), separators=(',', ':'))
-        if name in ('box', 'crt'):
+        if name in ('box', 'cabinet', 'crt'):
             xz = json.dumps(footprint(vertices[:, [0, 2]]), separators=(',', ':'))
             lines.append(f' {name}:{{floor:{xy},side:{xz}}},')
         else:

@@ -59,8 +59,9 @@ struct MeshVertexOut {
  let bias=select(.025,max(.001,wall/2048.),input.kind>=5u);
  if(input.depth>wall-bias){discard;}
  var base=input.tint;
- if(input.kind==1u||input.kind==3u||input.kind==5u||input.kind==6u){
+ if(input.kind==1u||input.kind==3u||input.kind==5u||input.kind==6u||input.kind>=8u){
    base*=textureSampleLevel(slotAlbedo,albedoSampler,input.uv,0.).rgb;
+   if(input.kind==10u){base*=.73;}
  }
  if(input.kind==4u){base=mix(base,vec3f(.82,.74,.50),.45);} if(input.kind==4u&&input.unlocked>.5){base=mix(base,vec3f(.28,.72,.38),.72);}
  var light=clamp(.46+.47*dot(normalize(input.normal),normalize(vec3f(.40,-.15,.88))),.30,1.);
@@ -89,7 +90,15 @@ struct MeshVertexOut {
  }
  var rgb=base*light;
  if((frame.lighting.x>.5||frame.flashlight.w>.5)&&!(input.kind==0u&&input.tint.r>.85)){
-   rgb=base*surfaceLighting(input.worldPoint,normalize(input.normal),.65,vec3f(light),frame);
+   rgb=base*surfaceLighting(input.worldPoint,normalize(input.normal),select(.65,.91,input.kind==10u),vec3f(light),frame);
+ }
+ if(input.kind>=6u&&input.kind<=9u){
+   let eye=normalize(vec3f(frame.player.xy,.5)-input.worldPoint);
+   let rim=pow(1.-abs(dot(normalize(input.normal),eye)),2.3);
+   rgb+=vec3f(.06+.24*rim);
+ }
+ if(input.kind==10u&&input.unlocked>1.5){
+   rgb+=vec3f(.26,.045,.025)*(.55+.45*sin(frame.player.w*5.));
  }
  let fog=clamp((input.depth-2.)/34.,0.,.78);
  rgb=mix(rgb,vec3f(.10,.10,.09),fog);

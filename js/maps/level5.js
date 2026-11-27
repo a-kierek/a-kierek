@@ -8,9 +8,9 @@ function createLevel5World(){
     ['sector5-d',mid,mid],['sector5-e',lo,mid],['sector5-f',hi,mid],
     ['sector5-g',mid,lo],['sector5-h',mid,hi]
   ])addCard(id,x+.5,y+.5);
-  addControl('sector5-generator',mid+.5,lo+.5,'EMERGENCY GENERATOR');
+  addControl('sector5-generator',mid+.5,lo+2.5,'EMERGENCY GENERATOR');
   addControl('sector5-antenna',lo+.5,lo+.5,'ALARM ANTENNA');
-  addControl('sector5-vent',mid+.5,hi+.5,'SECTOR VENTILATION');
+  addControl('sector5-vent',mid+.5,hi-1.5,'SECTOR VENTILATION');
   for(const [i,x,y] of [['a',lo,mid],['b',hi,mid],['c',mid,hi]])
     addPickup('sector5-decoy-'+i,x+1.5,y+1.5,'stamina','ENERGY DRINK',1);
   for(const [x,y] of [[lo+2,lo+2],[hi-2,lo+2],[lo+2,hi-2],[hi-2,hi-2]])addLocker(x+.5,y+.5);

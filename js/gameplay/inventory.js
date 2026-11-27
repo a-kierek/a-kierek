@@ -1,18 +1,48 @@
 // Usable inventory: items remain in the player's possession until explicitly activated.
 function ensureInventory(){
- if(!gameSession.player.inventory)gameSession.player.inventory={energy:[],slow:0,freeze:0};
- return gameSession.player.inventory;
+ const inventory=gameSession.player.inventory??={energy:[],slow:0,freeze:0,shield:0};
+ inventory.shield??=0;
+ return inventory;
 }
+const INVENTORY_SLOTS=[
+ ['inventoryDrink','Drink',useEnergyDrink],
+ ['inventorySlow','Slow device',useHardSlow],
+ ['inventoryFreeze','Freeze device',useHardFreeze],
+ ['inventoryShield','Shield',useShield]
+];
 function updateInventoryUI(){
  const inv=ensureInventory();
- const counters={inventoryDrinkCount:inv.energy.length,inventorySlowCount:gameSession.player.slowCharges||0,inventoryFreezeCount:gameSession.player.freezeCharges||0};
- for(const [id,v] of Object.entries(counters)){const e=$(id);if(e)e.textContent=String(v)}
+ const counts=[inv.energy.length,gameSession.player.slowCharges||0,gameSession.player.freezeCharges||0,inv.shield];
  const drink=$('inventoryDrinkSprite');
  if(drink&&inv.energy.length)drink.src=ENERGY_DRINK_PNGS[inv.energy[0].energySprite||0];
- for(const [id,n] of [['inventoryDrink',inv.energy.length],['inventorySlow',gameSession.player.slowCharges||0],['inventoryFreeze',gameSession.player.freezeCharges||0]]){
-  const e=$(id);if(e){e.disabled=n<1;e.setAttribute('aria-label',id+' · '+n+' szt.')}
- }
- const root=$('activeInventory');if(root)root.classList.toggle('inv-empty',!inv.energy.length&&!inv.slow&&!inv.freeze);
+ INVENTORY_SLOTS.forEach(([id,label],index)=>{
+  const button=$(id),count=counts[index],selected=index===gameSession.inventorySlot;
+  if(button){
+   button.classList.toggle('is-empty',count===0);
+   button.classList.toggle('is-selected',selected);
+   button.setAttribute('aria-pressed',String(selected));
+   button.setAttribute('aria-label',label+' · '+count);
+  }
+  const counter=$(id+'Count');
+  if(counter)counter.textContent=String(count);
+ });
+ $('activeInventory')?.classList.toggle('inv-empty',!counts.some(Boolean));
+}
+function selectInventorySlot(index){
+ if(gameSession.state!=='playing'||gameSession.graphicsDemo)return;
+ gameSession.inventorySlot=(index+INVENTORY_SLOTS.length)%INVENTORY_SLOTS.length;
+ updateInventoryUI();
+}
+function useSelectedItem(){
+ if(gameSession.state==='playing'&&!gameSession.graphicsDemo)INVENTORY_SLOTS[gameSession.inventorySlot][2]();
+}
+function useShield(){
+ if(gameSession.state!=='playing')return;
+ const inventory=ensureInventory();
+ if(!inventory.shield){showToast('NO SHIELDS',1.6);return;}
+ inventory.shield--;
+ gameSession.player.shieldUntil=Math.max(gameSession.elapsed,gameSession.player.shieldUntil||0)+12;
+ showToast('SHIELD ACTIVE · 12 SEC',2.4);playUnlock();updateInventoryUI();
 }
 function useEnergyDrink(){
  if(gameSession.state!=='playing')return;
@@ -29,12 +59,9 @@ function useEnergyDrink(){
  }
  updateInventoryUI();
 }
-for(const [id,fn] of [['inventoryDrink',useEnergyDrink],['inventorySlow',useHardSlow],['inventoryFreeze',useHardFreeze]]){
- const button=$(id);if(button)button.addEventListener('click',fn);
-}
-window.addEventListener('keydown',e=>{
- if(gameSession.state!=='playing'||e.repeat||e.target?.matches?.('input,textarea,select'))return;
- if(e.code==='Digit1')useEnergyDrink();
- if(e.code==='Digit2'||e.code==='KeyZ')useHardSlow();
- if(e.code==='Digit3'||e.code==='KeyX')useHardFreeze();
+INVENTORY_SLOTS.forEach(([id],index)=>{
+ $(id)?.addEventListener('click',()=>{
+  selectInventorySlot(index);
+  if(isCoarse)useSelectedItem();
+ });
 });

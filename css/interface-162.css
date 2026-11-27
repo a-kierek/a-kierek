@@ -134,3 +134,8 @@ html body #pause #pauseCard,html body #ending #endCard{width:min(470px,100%)!imp
 @media (pointer: coarse) {
  #graphicsDemoHint span { display: none; }
 }
+
+#hud #activeInventory .inv-buttons>button.is-empty{opacity:.5;filter:saturate(.5)}
+#hud #activeInventory .inv-buttons>button.is-selected{border-color:#e6d6b9!important;opacity:1}
+#hud #activeInventory .inventory-shield-icon svg{width:23px;height:27px;color:#b9cdc8}
+#hud #interactHint.pickup-hint{background:#141618ab!important;border-color:#dfddd146!important;color:#ece8df!important}

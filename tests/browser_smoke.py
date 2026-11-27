@@ -34,7 +34,7 @@ with sync_playwright() as p:
  page.wait_for_function("window.CatroomsGraphicsStatus?.backend==='webgpu' && typeof gameSession!=='undefined' && gameSession.world.length>0",timeout=15000)
  assert page.evaluate("window.CatroomsScriptsReady===true && !window.CatroomsStartupError && typeof bossRushVisible==='function' && typeof resetBossRush==='function'")
  assert page.evaluate("!document.getElementById('loadingScreen')?.classList.contains('load-failed')")
- assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===21 && ['door','rock','battery','card'].every(kind=>gpuRenderer.modelMeshes[kind]?.indexCount>0)")
+ assert page.evaluate("gpuRenderer.modelMeshes.pig===undefined && Object.keys(gpuRenderer.modelMeshes).length===24 && ['door','rock','battery','card','terminal','shield','drink'].every(kind=>gpuRenderer.modelMeshes[kind]?.indexCount>0)")
  assert page.evaluate("gpuRenderer.loadedSpriteLayers[1].width>0 && gpuRenderer.loadedSpriteLayers[1].height>0")
  assert page.evaluate("$('bossRushBtn').hidden===!bossRushVisible()")
  # New v1.7.0-alpha.1 release UI and title music checks.
@@ -108,6 +108,42 @@ with sync_playwright() as p:
   return true;
  })()""")
  print('PASS 3D floor pickups, E and touch interaction, objective count and enemy wake timer')
+ result=page.evaluate("""()=>{
+   begin(3,{testRun:true});
+   const s=gameSession,player=s.player;
+   s.guards=[];s.props=[];s.bonusItems=[];s.safeRoom=null;s.safeRoomFurniture=[];
+   const reactor=s.terminals[0];
+   const key=(event,code)=>window.dispatchEvent(new KeyboardEvent(event,{code}));
+   Object.assign(player,{x:reactor.x-.8,y:reactor.y});
+   key('keydown','KeyE');
+   updateInteractionHold(5.5);
+   const requiredHold=!reactor.used&&s.interactionHold?.elapsed===5.5;
+   key('keyup','KeyE');
+   updateInteractionHold(.3);
+   const released=!reactor.used&&!s.interactionHold;
+   key('keydown','KeyE');
+   updateInteractionHold(5.75);
+   key('keyup','KeyE');
+   const activated=reactor.used;
+   const shield={type:'shield',name:'SHIELD',x:player.x,y:player.y};
+   s.bonusItems=[shield];
+   update(0);
+   const untouched=!shield.taken&&!ensureInventory().shield;
+   key('keydown','KeyE');key('keyup','KeyE');
+   const stored=shield.taken&&ensureInventory().shield===1&&!damageBlocked('hazard');
+   UI.map.classList.remove('expanded');
+   window.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,cancelable:true}));
+   const selected=s.inventorySlot===3&&$('inventoryShield').getAttribute('aria-pressed')==='true';
+   key('keydown','Digit1');key('keyup','Digit1');
+   const noHotkey=ensureInventory().shield===1;
+   C.dispatchEvent(new MouseEvent('mousedown',{button:2,bubbles:true,cancelable:true}));
+   const used=ensureInventory().shield===0&&player.shieldUntil===s.elapsed+12&&damageBlocked('hazard');
+   setState('menu');
+   return {requiredHold,released,activated,untouched,stored,selected,noHotkey,used};
+ }""")
+ assert all(result.values()),result
+ print('PASS deferred shield use, scroll/RMB inventory, and continuous reactor hold')
+
  assert page.evaluate("""(()=>{begin(1,{testRun:true});const exp=gpuRenderer.worldGeometry;
  if(!exp.available||exp.enabled)return false;
  window.dispatchEvent(new KeyboardEvent('keydown',{code:'F8'}));gpuRenderer.render();
@@ -210,8 +246,7 @@ with sync_playwright() as p:
  for level in [1,2,3,4,5,6,7,8,9,10,11,12,13]:
   result=page.evaluate('n=>{requestedSeed=12345;begin(n,{testRun:true});godMode=true;return {state:gameSession.state,level:gameSession.level,size:gameSession.world.length};}',level)
   assert result['state']=='playing' and result['level']==level and result['size']>0, result
-  page.wait_for_timeout(65)
-  assert page.evaluate('gameSession.clock>0')
+  page.wait_for_function("gameSession.clock>0",timeout=6500)
   page.evaluate('pause()')
   assert page.evaluate("gameSession.state==='paused'")
   page.evaluate("setState('menu')")
@@ -233,6 +268,7 @@ with sync_playwright() as p:
      gameSession.hardEmergency={x,y,time:45};
      gameSession.interactables=[{type:'repair',id:'hard-repair',x,y}];
      interact();
+     updateInteractionHold(REACTOR_HOLD_SECONDS);
      return repairKeypadAudio;
    };
    try{

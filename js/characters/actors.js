@@ -5,6 +5,6 @@ const ACTORS={
   listener:{id:'listener',name:'SZEPT',alias:'Nasluchiwacz',image:PERSON_A_PNG,img:personAImg,skill:'Slyszy kroki zza zakretow. Bada zrodla halasu.',risk:'VERY HIGH',color:'#ef9e99'},
   stranger:{id:'stranger',name:'NIEZNAJOMY',alias:'Figure from the photograph / Sector 05',image:STRANGER_PNG,img:strangerImg,skill:'Tracks movement and reacts quickly to noise.',risk:'EKSTREMALNE',color:'#b2b8c6'},
   pig:{id:'pig',name:'CHRUM',alias:'Pig from sector 4',image:PIG_PNG,img:pigImg,skill:'Slyszy kroki i szarzuje, gdy Cie zobaczy.',risk:'HIGH',color:'#dfac9a'},
-  meltdown:{id:'meltdown',name:'REACTOR FAILURE',alias:'The machine was not repaired in 45 seconds.',image:PERSON_B_PNG,img:personBImg,skill:'POWER FAILURE · TIME EXPIRED',risk:'KRYTYCZNE',color:'#d74e41'},
+  meltdown:{id:'meltdown',name:'REACTOR FAILURE',alias:'The repair deadline expired.',image:PERSON_B_PNG,img:personBImg,skill:'POWER FAILURE · TIME EXPIRED',risk:'KRYTYCZNE',color:'#d74e41'},
   hazard:{id:'hazard',name:'TOKSYCZNY PLYN',alias:'radioaktywna ciecz',image:PIG_PNG,img:pigImg,skill:'The liquid burned you. Avoid green puddles.',risk:'SRODOWISKOWE',color:'#8ad95c'}
 };

@@ -28,13 +28,39 @@ function collectObjectivePickup(item){
 
 const interactionLabels={
  lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
- door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR / 45 SECONDS'
+ door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR'
 };
+const REACTOR_HOLD_SECONDS=5.75;
+function needsInteractionHold(target){
+ return target?.type==='repair'||(target?.type==='panel'&&/reactor|reaktor/i.test(target.title||''));
+}
 function showInteractionHint(target,fallback='AKTYWUJ PANEL'){
  gameSession.interactReady=target;
  const hint=$('interactHint');
  hint.style.display=target?'block':'none';
- if(target)hint.textContent='[ E ] '+(target.type==='pickup'?target.title:interactionLabels[target.type]||fallback);
+ hint.classList.toggle('pickup-hint',target?.type==='pickup');
+ if(!target)return;
+ const hold=needsInteractionHold(target);
+ const label=target.type==='pickup'||hold?(target.title||interactionLabels[target.type]):interactionLabels[target.type]||fallback;
+ const elapsed=gameSession.interactionHold?.ref===target.ref?gameSession.interactionHold?.elapsed:0;
+ const holdText=elapsed>0?' · '+Math.floor(100*elapsed/REACTOR_HOLD_SECONDS)+'%':' · 5.75 S';
+ hint.textContent=(hold?'HOLD [ E ] ': '[ E ] ')+label+(hold?holdText:'');
+}
+
+function updateInteractionHold(dt){
+ const hold=gameSession.interactionHold;
+ if(!hold)return;
+ const target=gameSession.interactReady;
+ if(gameSession.state!=='playing'||target?.ref!==hold.ref||!needsInteractionHold(target)){
+  gameSession.interactionHold=null;
+  return;
+ }
+ hold.elapsed+=dt;
+ if(hold.elapsed+1e-9<REACTOR_HOLD_SECONDS){showInteractionHint(target);return;}
+ gameSession.interactionHold=null;
+ if(target.type==='repair')finishHardEmergency();
+ else activatePanel(target.ref);
+ showInteractionHint(findInteractable());
 }
 
 function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.textContent=formatTime(gameSession.clock);if(gameSession.elapsed>gameSession.toastTimeout)UI.toast.classList.remove('visible');if(!gameSession.awake&&gameSession.elapsed>=gameSession.wakeAt){gameSession.awake=true;showToast('⚠ IT HEARS YOU. KEEP MOVING.',4);playSting()}
@@ -50,7 +76,7 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  UI.stamina.style.width=staminaWidth();
  if(gameSession.player.moving){let t=dt*speed/Math.max(1,len);move(gameSession.player,(forward*dirX+strafe*sX)*t,(forward*dirY+strafe*sY)*t,.22);gameSession.walkPhase+=dt*(sprint?14:9);}else gameSession.walkPhase*=Math.max(0,1-dt*7);
  if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
- pickupCoins();updateCoinCounter();updateSeen();
+ updateCoinCounter();updateSeen();
  showInteractionHint(findInteractable(),'UZYJ');
  if(applyHazardsAndRegen(dt))return;
  if(gameSession.awake){updateGuard(gameSession.cat,dt,0);let distance=Math.hypot(gameSession.cat.x-gameSession.player.x,gameSession.cat.y-gameSession.player.y);gameSession.nearCat=distance;UI.danger.style.opacity=distance<5?String(clamp((5-distance)/2,0,1)):'0';if(distance<.67&&!isSafeRoomProtected()&&lineOfSight(gameSession.cat.x,gameSession.cat.y,gameSession.player.x,gameSession.player.y)&&lose())return;
@@ -64,32 +90,36 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  if(gameSession.mapOn&&Math.floor(gameSession.elapsed*5)!==Math.floor((gameSession.elapsed-dt)*5))drawMap();
 }
 
-function pickupFacility(){
-  for(let f of gameSession.fuses){
-    if(f.taken||objectivePickupModel(f)||Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)>.66||!lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y))continue;
-    collectObjectivePickup(f);
-  }
-  for(let item of gameSession.bonusItems){
-    if(item.taken||Math.hypot(gameSession.player.x-item.x,gameSession.player.y-item.y)>.67||!lineOfSight(gameSession.player.x,gameSession.player.y,item.x,item.y))continue;
-    item.taken=true;
-    if(item.type==='coin'){gameSession.player.coins=(gameSession.player.coins||0)+1;updateCoinCounter();}
-    else if(item.type==='key')gameSession.keysOwned.add(item.id);
-    else if(item.type==='hardSlow'){gameSession.player.slowCharges=(gameSession.player.slowCharges||0)+item.quantity;ensureInventory().slow=gameSession.player.slowCharges;}
-    else if(item.type==='hardFreeze'){gameSession.player.freezeCharges=(gameSession.player.freezeCharges||0)+item.quantity;ensureInventory().freeze=gameSession.player.freezeCharges;}
-    else if(item.type==='stamina'){ensureInventory().energy.push({energySprite:item.energySprite||0,fakeMonster:!!item.fakeMonster});}
-    else if(item.type==='shield')gameSession.player.shieldUntil=gameSession.elapsed+12;
-    if(item.type==='coin')playCoinPickup();else playPickup();
-    showToast('PICKED UP: '+item.name+(item.type==='shield'?' · 12 SEC':item.quantity>1?' +'+item.quantity:''),2.5);
-    updateInventoryUI();
-  }
+function collectBonusPickup(item){
+ item.taken=true;
+ const quantity=item.quantity||1;
+ if(item.type==='coin'){
+  gameSession.player.coins=(gameSession.player.coins||0)+quantity;
+  gameSession.stats.coins=(gameSession.stats.coins||0)+quantity;
+  updateCoinCounter();
+ }else if(item.type==='key')gameSession.keysOwned.add(item.id);
+ else if(item.type==='hardSlow'){gameSession.player.slowCharges=(gameSession.player.slowCharges||0)+quantity;ensureInventory().slow=gameSession.player.slowCharges;}
+ else if(item.type==='hardFreeze'){gameSession.player.freezeCharges=(gameSession.player.freezeCharges||0)+quantity;ensureInventory().freeze=gameSession.player.freezeCharges;}
+ else if(item.type==='stamina'){ensureInventory().energy.push({energySprite:item.energySprite||0,fakeMonster:!!item.fakeMonster});}
+ else if(item.type==='shield')ensureInventory().shield+=quantity;
+ if(item.type==='coin')playCoinPickup();else playPickup();
+ showToast('PICKED UP: '+item.name+(quantity>1?' +'+quantity:''),2.5);
+ updateInventoryUI();
 }
 
 function findInteractable(){
   if(gameSession.player.hidden)return{type:'unhide',title:'LEAVE HIDING PLACE'};
   const all=[];
+  const {x,y}=gameSession.player;
   for(const item of gameSession.fuses){
-    const model=!item.taken&&objectivePickupModel(item);
-    if(model)all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:model==='battery'?'PICK UP BATTERY':'PICK UP CARD'});
+    if(item.taken||Math.hypot(item.x-x,item.y-y)>=1.1)continue;
+    const model=objectivePickupModel(item);
+    const label=model==='battery'?'BATTERY':model==='card'?'CARD':renderStage()===3?'CORE':renderStage()===4?'FOOD':'ITEM';
+    all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:'PICK UP '+label,objective:true});
+  }
+  for(const item of gameSession.bonusItems){
+    if(item.taken||Math.hypot(item.x-x,item.y-y)>=1.1)continue;
+    all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:'PICK UP '+(item.name||item.type).toUpperCase()});
   }
   for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
   const exit=gameSession.exitCell;
@@ -104,7 +134,7 @@ function findInteractable(){
     const gate=o.type==='door'||o.type==='lockedExit';
     const range=o.type==='pickup'?1.1:gate?1.65:1.4;
     return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<range&&
-      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:o.type==='slot'});
+      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:['slot','panel','repair'].includes(o.type)});
   })||null;
 }
 
@@ -112,8 +142,10 @@ function interact(){
   if(gameSession.state!=='playing')return;
   const target=findInteractable();
   if(target?.type==='pickup'){
-    collectObjectivePickup(target.ref);
+    if(target.objective)collectObjectivePickup(target.ref);
+    else collectBonusPickup(target.ref);
     if(!gameSession.graphicsDemo&&gameSession.level!==1)updateObjectiveFacility();
+    showInteractionHint(findInteractable());
     return;
   }
   if(gameSession.graphicsDemo){
@@ -128,7 +160,11 @@ function interact(){
   if(gameSession.level===1)return;
   if(!target){showToast('NOTHING TO INTERACT WITH',1.4);return}
   const o=target.ref;
-  if(target.type==='repair'&&isHardMode()){finishHardEmergency();return}
+  if(needsInteractionHold(target)){
+    gameSession.interactionHold={ref:o,elapsed:0};
+    showInteractionHint(target);
+    return;
+  }
   if(target.type==='unhide'){gameSession.player.hidden=false;showToast('YOU LEFT HIDING',1.6);return}
   if(target.type==='hide'){gameSession.player.hidden=true;gameSession.player.flash=false;showToast('HIDDEN · PRESS E TO LEAVE',2.5);return}
   if(target.type==='stairs'){
@@ -144,17 +180,19 @@ function interact(){
     o.open=true;gameSession.world[o.y][o.x]=0;markWorldChanged();gameSession.stats.doors++;addNoise(o.x+.5,o.y+.5,11,'brama');
     playDoorMovement(true);showToast('✓ OPENED: '+o.title,2.8);updateObjectiveFacility();return;
   }
-  if(target.type==='panel'){
-    if(o.used)return;
-    if(gameSession.level===3){
-      const next=gameSession.terminals.filter(t=>t.used).length+1;
-      if(o.order!==next){gameSession.alarmTimer=9;addNoise(o.x,o.y,14,'alarm');createGameSample('reactorWrongOrder',.48);showToast(`⚠ WRONG ORDER! REACTOR ${next} MUST BE FIRST`,3.4);return}
-    }
-    o.used=true;gameSession.stats.panels++;addNoise(o.x,o.y,gameSession.level===3?15:10,'urzadzenie');
-    playUnlock();showToast('✓ ACTIVATED: '+o.title,3.2);
-    if(gameSession.level===3&&gameSession.stats.panels===gameSession.terminals.length)playWin();
-    updateObjectiveFacility();return;
-  }
+  if(target.type==='panel')activatePanel(o);
+}
+
+function activatePanel(o){
+ if(o.used)return;
+ if(gameSession.level===3){
+   const next=gameSession.terminals.filter(t=>t.used).length+1;
+   if(o.order!==next){gameSession.alarmTimer=9;addNoise(o.x,o.y,14,'alarm');createGameSample('reactorWrongOrder',.48);showToast(`⚠ WRONG ORDER! REACTOR ${next} MUST BE FIRST`,3.4);return}
+ }
+ o.used=true;gameSession.stats.panels++;addNoise(o.x,o.y,gameSession.level===3?15:10,'urzadzenie');
+ playUnlock();showToast('✓ ACTIVATED: '+o.title,3.2);
+ if(gameSession.level===3&&gameSession.stats.panels===gameSession.terminals.length)playWin();
+ updateObjectiveFacility();return;
 }
 
 function updateObjectiveFacility(){
@@ -191,7 +229,7 @@ function updateFacility(dt,finalMode){
     }
   }else gameSession.walkPhase*=Math.max(0,1-dt*7);
   if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
-  pickupFacility();updateCoinCounter();updateSeen();if(applyHazardsAndRegen(dt))return;
+  updateCoinCounter();updateSeen();if(applyHazardsAndRegen(dt))return;
   gameSession.noiseEvents=gameSession.noiseEvents.filter(e=>e.expiry>gameSession.elapsed);
   showInteractionHint(findInteractable());
   gameSession.guardSight=Math.max(0,gameSession.guardSight-dt);gameSession.guardNoise=Math.max(0,gameSession.guardNoise-dt);

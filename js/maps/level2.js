@@ -6,8 +6,8 @@ function createLevel2World(){
   addControl('power',mid+.5,lo+.5,'POWER CONTROL');
   addControl('pump',mid+.5,hi+.5,'DRAINAGE PUMP');
   addControl('filters',lo+.5,lo+.5,'MAIN FILTERS');
-  addPickup('decoy2a',lo+.5,mid+.5,'stamina','ENERGY DRINK',1);
-  addPickup('decoy2b',hi+.5,mid+.5,'stamina','ENERGY DRINK',1);
+  addPickup('decoy2a',lo+.5,mid+1.5,'stamina','ENERGY DRINK',1);
+  addPickup('decoy2b',hi+.5,mid+1.5,'stamina','ENERGY DRINK',1);
   for(const [x,y] of [[lo+1,lo+2],[hi-1,lo+2],[lo+1,hi-2],[hi-1,hi-2]])addLocker(x+.5,y+.5);
   addGate('shortcut2a',mid,lo+5,'SHORTCUT A',{cards:1},'Collect one card');
   addGate('shortcut2b',mid,hi-5,'SHORTCUT B',{panel:'power'},'Activate the power panel');

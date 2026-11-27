@@ -62,13 +62,35 @@ check('objective pickups require reach and clear sight, and keep their sector ty
  assert.equal(run('interact();Boolean(fuses[0].taken)'),false);
  assert.equal(run('world[2][3]=0;world[3][2]=0;findInteractable().title'),'PICK UP CARD');
  assert.equal(run('player.x=5;findInteractable()'),null);
- assert.equal(run('player.x=2.8;pickupFacility();player.collected'),0);
+ assert.equal(run('player.x=2.8;player.collected'),0);
  assert.equal(run('interact();interact();player.collected'),1);
  assert.equal(run('fuses[0].taken && UI.count.textContent===1'),true);
  assert.equal(run(`level=12;bossRush={stage:2};objectivePickupModel({rushSector:1})`),'battery');
  assert.equal(run('objectivePickupModel({rushSector:3})'),null);
- run(fixture+`level=3;fuses=[{x:2.5,y:2.5}];player.collected=0;pickupFacility();`);
- assert.equal(run('player.collected'),1);
+ run(fixture+`level=3;fuses=[{x:2.5,y:2.5}];player.collected=0;`);
+ assert.equal(run('findInteractable().title'),'PICK UP CORE');
+ assert.equal(run('interact();player.collected'),1);
+});
+check('emergency selects a preplaced reactor and scales the deadline with its route',()=>{
+ run('level=6;requestedSeed=2405;reset();state="playing";');
+ assert.ok(run('gameSession.emergencyReactors.length>=4'));
+ const valid=run(`const reactorMap=gameSession.emergencyReactors;triggerHardEmergency();
+  const activeReactor=gameSession.hardEmergency;
+  const stepsToReactor=bfsDistances(Math.floor(player.x),Math.floor(player.y))[Math.floor(activeReactor.y)][Math.floor(activeReactor.x)];
+  reactorMap.includes(activeReactor.reactor)&&stepsToReactor>=8&&activeReactor.time===Math.ceil(45+REACTOR_HOLD_SECONDS+stepsToReactor/2.3)`);
+ assert.equal(valid,true);
+ run('finishHardEmergency();gameSession.emergencyReactors=[{x:player.x,y:player.y}];triggerHardEmergency()');
+ assert.equal(run('gameSession.hardEmergency'),null);
+});
+check('Yellow safe-room walls match the door thickness in collision and sight',()=>{
+ run(fixture+`safeRoom={left:2,top:2,side:5,doorX:4,doorY:2,open:false};
+ for(let y=2;y<7;y++)for(let x=2;x<7;x++)if(x===2||x===6||y===2||y===6)world[y][x]=8;
+ world[2][4]=4;installThinSafeRoomWalls(safeRoom);markWorldChanged();`);
+ assert.equal(run('world[3][2]'),9);
+ assert.equal(run('freeAt(2.78,3.5,.12)&&!freeAt(2.5,3.5,0)'),true);
+ assert.equal(run('lineOfSight(1.5,3.5,3.5,3.5)'),false);
+ assert.equal(run('safeRoomFurniture.every(w=>Math.min(w.w,w.d)===SAFE_ROOM_WALL_THICKNESS)'),true);
+ assert.equal(run('world[2][4]=0;lineOfSight(4.5,1.5,4.5,3.5)'),true);
 });
 check('shield and god mode, toxic damage, exact expiry, meltdown exception',()=>{
  run(fixture+`props=[{type:'hazard',x:2.5,y:2.5}];player.shieldUntil=12;elapsed=11.99;`);
@@ -112,16 +134,18 @@ check('real map resets: NORMAL, procedural, HARD, Boss Rush and custom',()=>{
   assert.equal(run('world.length===N&&world.every(r=>r.length===N)'),true,`map ${l}`);
   assert.equal(run('freeAt(player.x,player.y,.22)'),true,`spawn ${l}`);
   assert.equal(run('fuses.length===GOAL'),true,`goal ${l}`);
+  assert.equal(run("props.some(p=>p.type==='rock')"),false,`rocks ${l}`);
+  if(l>=6&&l<=11&&l!==10)assert.ok(run('gameSession.emergencyReactors.length>=4'),`reactor spawns ${l}`);
   run(`state='playing';godMode=true;update(.016);godMode=false;`);
   assert.equal(run('state'), 'playing',`first update ${l}`);
-  if(l===12){assert.equal(run('rushSafeRooms.length'),3);assert.equal(run('safeRoomFurniture.length'),12);assert.equal(run('interactables.filter(o=>o.type==="slot").length'),3);assert.equal(run('bonusItems.filter(o=>o.type==="coin").length'),25);assert.equal(run('bossRush.seed'),12345);}
+  if(l===12){assert.equal(run('rushSafeRooms.length'),3);assert.equal(run('safeRoomFurniture.filter(o=>o.material===SAFE_ROOM_WALL_MATERIAL).length'),5);assert.equal(run('interactables.filter(o=>o.type==="slot").length'),3);assert.equal(run('bonusItems.filter(o=>o.type==="coin").length'),25);assert.equal(run('bossRush.seed'),12345);}
   else assert.equal(run('rushSafeRooms.length'),0);
  }
  run(`customGameConfig.safeRooms=false;level=13;requestedSeed=12345;reset();`);
- assert.equal(run('safeRoomFurniture.length'),0);assert.equal(run('safeRoom'),null);assert.equal(run('player.coins'),0);
+ assert.equal(run('safeRoomFurniture.every(o=>o.collisionOnly)'),true);assert.equal(run('safeRoom'),null);assert.equal(run('player.coins'),0);
 });
 check('same seed reproduces map, rooms, furniture, loot and initial enemies',()=>{
- const snapshot=`JSON.stringify({world,fuses,bonusItems,interactables,safeRoomFurniture,guards,rooms:bossRushRooms(),props})`;
+ const snapshot=`JSON.stringify({world,fuses,bonusItems,interactables,safeRoomFurniture,guards,rooms:bossRushRooms(),props,reactors:gameSession.emergencyReactors})`;
  for(const l of [5,6,12]){run(`level=${l};requestedSeed=54321;reset();`);const a=run(snapshot);run(`player.x=20;player.y=20;requestedSeed=54321;reset();`);assert.equal(run(snapshot),a,`seed ${l}`);}
 });
 // Real map generation regression: remove only our prop tiles, then compare

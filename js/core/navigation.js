@@ -3,7 +3,7 @@ function bfsDistances(sx,sy){let dist=Array.from({length:gameSession.N},()=>Arra
 // Generation BFS above intentionally uses tiles only. Runtime collision, sight
 // and navigation share the actual furniture footprint (not floored positions).
 function solidFurniture(){return typeof gameSession.safeRoomFurniture==='undefined'?[]:gameSession.safeRoomFurniture;}
-function solidBox(b){return b.material===1||b.material===3||b.material===4;}
+function solidBox(b){return b.material===1||b.material===3||b.material===4||b.material===SAFE_ROOM_WALL_MATERIAL;}
 function overlapsBox(x,y,r,b){
  const dx=Math.max(0,Math.abs(x-b.x)-b.w*.5),dy=Math.max(0,Math.abs(y-b.y)-b.d*.5);
  return dx*dx+dy*dy<=r*r;
@@ -53,7 +53,7 @@ function prepareObjectCollisions(){
 function tileBlocked(x,y,objects){
  if(x<0||y<0||x>=objects.size||y>=objects.size)return true;
  const tile=objects.world[y]?.[x];
- return tile!==0&&(tile!==5||!objects.reserved.has(y*objects.size+x));
+ return tile!==0&&tile!==THIN_SAFE_ROOM_TILE&&(tile!==5||!objects.reserved.has(y*objects.size+x));
 }
 function distanceToSegmentSquared(x,y,ax,ay,dx,dy){
  const length=dx*dx+dy*dy;

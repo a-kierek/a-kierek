@@ -5,9 +5,37 @@
 const SLOT_REWARD_WEIGHTS=Object.freeze({freeze:15,slow:35,none:50});
 
 function isSafeRoomProtected(){
- return Boolean(gameSession.player&&bossRushRooms().some(room=>!room.open&&
-  Math.floor(gameSession.player.x)>=room.left+1&&Math.floor(gameSession.player.x)<=room.left+room.side-2&&
-  Math.floor(gameSession.player.y)>=room.top+1&&Math.floor(gameSession.player.y)<=room.top+room.side-2));
+ const p=gameSession.player;
+ return Boolean(p&&bossRushRooms().some(room=>{
+  const margin=room.thinWalls?.5+SAFE_ROOM_WALL_THICKNESS/2:1;
+  return !room.open&&p.x>=room.left+margin&&p.x<room.left+room.side-margin&&
+    p.y>=room.top+margin&&p.y<room.top+room.side-margin;
+ }));
+}
+function installThinSafeRoomWalls(room){
+ const {left,top,side,doorX,doorY}=room;
+ const right=left+side-1,bottom=top+side-1;
+ const thickness=SAFE_ROOM_WALL_THICKNESS,half=thickness/2;
+ const install=(horizontal,wall,from,to,door)=>{
+  const add=(begin,end)=>{
+   if(end<=begin)return;
+   const middle=(begin+end)/2,length=end-begin,cross=wall+.5;
+   gameSession.safeRoomFurniture.push({
+    x:horizontal?middle:cross,y:horizontal?cross:middle,z:.5,
+    w:horizontal?length:thickness,d:horizontal?thickness:length,h:1,material:SAFE_ROOM_WALL_MATERIAL
+   });
+  };
+  if(door!==null){add(from,door);add(door+1,to);}
+  else add(from,to);
+ };
+ install(true,top,left+.5-half,right+.5+half,doorY===top?doorX:null);
+ install(true,bottom,left+.5-half,right+.5+half,doorY===bottom?doorX:null);
+ install(false,left,top+.5,bottom+.5,doorX===left?doorY:null);
+ install(false,right,top+.5,bottom+.5,doorX===right?doorY:null);
+ for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+  if(gameSession.world[y][x]===8)gameSession.world[y][x]=THIN_SAFE_ROOM_TILE;
+ }
+ room.thinWalls=true;
 }
 function pickSafeRoomPosterMaterials(count=3){const pool=[7,8,9,10,11];for(let i=pool.length-1;i>0;i--){const j=Math.floor(mapRandom()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}return pool.slice(0,count)}
 
@@ -135,23 +163,25 @@ function setupSafeRoomAndCoins(){
   // Meshes use the exact GLB topology, UVs and colours, not rotating sprites.
   // Only a simplified cabinet bounding box remains for physical collisions.
   gameSession.safeRoom={...room,open:false,machineX,machineY,machineYaw:machine.machineYaw,fireX,fireY,treeX:null,treeY:null,treeYaw:0};
+  if(renderStage()===1)installThinSafeRoomWalls(gameSession.safeRoom);
   gameSession.interactables.push({id:'slot-machine',type:'slot',title:'SLOT MACHINE · 1 COIN',x:machineX,y:machineY,used:false});
   const put=(x,y,z,w,d,h,material,collisionOnly=false)=>gameSession.safeRoomFurniture.push({x,y,z,w,d,h,material,collisionOnly});
   put(machineX,machineY,.39,.69,.50,.78,1,true);
   // The imported campfire GLB replaces the previous firepit/flame cubes.
   // Flat posters attached to room walls; no billboard rotation.
+  const inset=gameSession.safeRoom.thinWalls?.61:1.03;
   const posterAxis=(room.doorY===room.top||room.doorY===room.top+room.side-1)?'vertical':'horizontal';
   const posterMaterials=pickSafeRoomPosterMaterials(3);
   const posterSizes=[[.70,.50],[.72,.56],[.68,.48]];
   const posterPlacements=posterAxis==='vertical'
    ?[
-     {x:room.left+1.03,y:room.top+1.55,vertical:true},
-     {x:room.left+1.03,y:room.top+room.side-1.55,vertical:true},
-     {x:room.left+room.side-1.03,y:room.centerY,vertical:true}
+     {x:room.left+inset,y:room.top+1.55,vertical:true},
+     {x:room.left+inset,y:room.top+room.side-1.55,vertical:true},
+     {x:room.left+room.side-inset,y:room.centerY,vertical:true}
     ]
    :[
-     {x:room.left+1.55,y:room.top+1.03,vertical:false},
-     {x:room.left+room.side-1.55,y:room.top+1.03,vertical:false},
+     {x:room.left+1.55,y:room.top+inset,vertical:false},
+     {x:room.left+room.side-1.55,y:room.top+inset,vertical:false},
      {x:room.centerX,y:room.top+room.side-1.03,vertical:false}
     ];
   posterMaterials.forEach((material,index)=>{const [w,h]=posterSizes[index]||[.70,.50];const cfg=posterPlacements[index];if(!cfg)return;put(cfg.x,cfg.y,.58,cfg.vertical?.028:w,cfg.vertical?w:.028,h,material)});
@@ -175,16 +205,6 @@ function setupSafeRoomAndCoins(){
   gameSession.bonusItems.push({id:'coin-'+n,type:'coin',name:'1 Coin',x:cell.x+.5,y:cell.y+.5,taken:false,quantity:1,phase:mapRandom()*Math.PI*2});n++;
  }
  updateCoinCounter();
-}
-function pickupCoins(){
- if(!gameSession.player)return;
- let acquired=0;
- for(const coin of gameSession.bonusItems){
-  if(coin.type==='coin'&&!coin.taken&&Math.hypot(coin.x-gameSession.player.x,coin.y-gameSession.player.y)<.69&&lineOfSight(gameSession.player.x,gameSession.player.y,coin.x,coin.y)){
-   coin.taken=true;acquired++;gameSession.stats.coins=(gameSession.stats.coins||0)+1;gameSession.player.coins=(gameSession.player.coins||0)+1;
-  }
- }
- if(acquired){playCoinPickup();showToast('FOUND '+acquired+' GROSZ'+(acquired===1?'':'E'),2);updateCoinCounter();}
 }
 function safeRoomInteraction(room){
  if(gameSession.state!=='playing'||!bossRushRooms().includes(room)||!lineOfSight(gameSession.player.x,gameSession.player.y,room.doorX+.5,room.doorY+.5,{allowTargetTile:true}))return false;

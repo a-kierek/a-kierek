@@ -14,7 +14,7 @@ class GameSession {
   this.hardPulseNext=0;
   this.hardEmergency=null;
   this.hardNextEmergency=75;
-  this.hardRocks=[];
+  this.emergencyReactors=[];
   this.N=35;
   this.GOAL=5;
   this.guards=[];
@@ -22,6 +22,8 @@ class GameSession {
   this.props=[];
   this.doors=[];
   this.interactReady=null;
+  this.interactionHold=null;
+  this.inventorySlot=0;
   this.crouching=false;
   this.alarmTimer=0;
   this.guardSight=0;

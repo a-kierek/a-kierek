@@ -18,7 +18,13 @@ function uploadMaterialMips(device,texture,source,w,h,layer,cover=false){
   previous=c;
  }
 }
-async function loadHdAlbedo(path,w,h){const img=new Image();img.src=path;await img.decode();if(img.naturalWidth!==w||img.naturalHeight!==h)throw Error('Invalid HD material dimensions');return img;}
+async function loadHdAlbedo(path,w,h){
+ const img=new Image();
+ img.src=path.startsWith('data:')?path:path+'?v=1.7.0-alpha.1.4';
+ await img.decode();
+ if(img.naturalWidth!==w||img.naturalHeight!==h)throw Error('Invalid HD material dimensions');
+ return img;
+}
 async function buildHdMaterials(renderer){
  const d=renderer.device;
  let wall,floor;

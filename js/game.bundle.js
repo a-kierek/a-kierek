@@ -142,7 +142,7 @@ class GameSession {
   this.hardPulseNext=0;
   this.hardEmergency=null;
   this.hardNextEmergency=75;
-  this.hardRocks=[];
+  this.emergencyReactors=[];
   this.N=35;
   this.GOAL=5;
   this.guards=[];
@@ -150,6 +150,8 @@ class GameSession {
   this.props=[];
   this.doors=[];
   this.interactReady=null;
+  this.interactionHold=null;
+  this.inventorySlot=0;
   this.crouching=false;
   this.alarmTimer=0;
   this.guardSight=0;
@@ -257,6 +259,9 @@ let customGameConfig={stage:1,size:65,difficulty:'normal',safeRooms:true,enemies
 const isHardMode=()=>gameSession.level>=6&&gameSession.level<=9||gameSession.level===11||gameSession.level===12||(gameSession.level===13&&customGameConfig?.difficulty==='hard');
 const hardStage=()=>gameSession.level===13?(customGameConfig?.stage||1):gameSession.level===12?(gameSession.bossRush?.stage||1):gameSession.level===11?5:isHardMode()?gameSession.level-5:0;
 const renderStage=()=>gameSession.level===13?(customGameConfig?.stage||1):gameSession.level===12?(gameSession.bossRush?.stage||1):gameSession.level===10?5:isHardMode()?hardStage():gameSession.level;
+const THIN_SAFE_ROOM_TILE=9;
+const SAFE_ROOM_WALL_THICKNESS=.16;
+const SAFE_ROOM_WALL_MATERIAL=12;
 function objectivePickupModel(item){
  const stage=item.rushSector??renderStage();
  return stage===1?'battery':stage===2?'card':null;
@@ -356,7 +361,7 @@ const ACTORS={
   listener:{id:'listener',name:'SZEPT',alias:'Nasluchiwacz',image:PERSON_A_PNG,img:personAImg,skill:'Slyszy kroki zza zakretow. Bada zrodla halasu.',risk:'VERY HIGH',color:'#ef9e99'},
   stranger:{id:'stranger',name:'NIEZNAJOMY',alias:'Figure from the photograph / Sector 05',image:STRANGER_PNG,img:strangerImg,skill:'Tracks movement and reacts quickly to noise.',risk:'EKSTREMALNE',color:'#b2b8c6'},
   pig:{id:'pig',name:'CHRUM',alias:'Pig from sector 4',image:PIG_PNG,img:pigImg,skill:'Slyszy kroki i szarzuje, gdy Cie zobaczy.',risk:'HIGH',color:'#dfac9a'},
-  meltdown:{id:'meltdown',name:'REACTOR FAILURE',alias:'The machine was not repaired in 45 seconds.',image:PERSON_B_PNG,img:personBImg,skill:'POWER FAILURE · TIME EXPIRED',risk:'KRYTYCZNE',color:'#d74e41'},
+  meltdown:{id:'meltdown',name:'REACTOR FAILURE',alias:'The repair deadline expired.',image:PERSON_B_PNG,img:personBImg,skill:'POWER FAILURE · TIME EXPIRED',risk:'KRYTYCZNE',color:'#d74e41'},
   hazard:{id:'hazard',name:'TOKSYCZNY PLYN',alias:'radioaktywna ciecz',image:PIG_PNG,img:pigImg,skill:'The liquid burned you. Avoid green puddles.',risk:'SRODOWISKOWE',color:'#8ad95c'}
 };
 
@@ -367,7 +372,7 @@ function bfsDistances(sx,sy){let dist=Array.from({length:gameSession.N},()=>Arra
 // Generation BFS above intentionally uses tiles only. Runtime collision, sight
 // and navigation share the actual furniture footprint (not floored positions).
 function solidFurniture(){return typeof gameSession.safeRoomFurniture==='undefined'?[]:gameSession.safeRoomFurniture;}
-function solidBox(b){return b.material===1||b.material===3||b.material===4;}
+function solidBox(b){return b.material===1||b.material===3||b.material===4||b.material===SAFE_ROOM_WALL_MATERIAL;}
 function overlapsBox(x,y,r,b){
  const dx=Math.max(0,Math.abs(x-b.x)-b.w*.5),dy=Math.max(0,Math.abs(y-b.y)-b.d*.5);
  return dx*dx+dy*dy<=r*r;
@@ -417,7 +422,7 @@ function prepareObjectCollisions(){
 function tileBlocked(x,y,objects){
  if(x<0||y<0||x>=objects.size||y>=objects.size)return true;
  const tile=objects.world[y]?.[x];
- return tile!==0&&(tile!==5||!objects.reserved.has(y*objects.size+x));
+ return tile!==0&&tile!==THIN_SAFE_ROOM_TILE&&(tile!==5||!objects.reserved.has(y*objects.size+x));
 }
 function distanceToSegmentSquared(x,y,ax,ay,dx,dy){
  const length=dx*dx+dy*dy;
@@ -644,6 +649,21 @@ function addCard(id,x,y){gameSession.world[Math.floor(y)][Math.floor(x)]=0;gameS
 
 function addControl(id,x,y,title,order=0){gameSession.world[Math.floor(y)][Math.floor(x)]=0;let item={id,x,y,type:'panel',title,used:false,order};gameSession.interactables.push(item);gameSession.terminals.push(item)}
 
+function placeTerminalPoses(){
+ const s=gameSession,routes=bfsDistances(Math.floor(s.player.x),Math.floor(s.player.y));
+ const nearbyItems=[...s.fuses,...s.bonusItems,s.player,...s.guards,s.cat];
+ for(const terminal of [...s.terminals,...s.emergencyReactors]){
+  const x=Math.floor(terminal.x),y=Math.floor(terminal.y);
+  const approaches=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>s.world[y+dy]?.[x+dx]===0);
+  const distance=([dx,dy])=>routes[y+dy]?.[x+dx]>=0?routes[y+dy][x+dx]:Infinity;
+  approaches.sort((a,b)=>distance(a)-distance(b));
+  const [dx,dy]=approaches[0]||[-1,0];
+  terminal.yaw=Math.atan2(dy,dx);
+  if(decorFloorAllowed(s.world,x,y,true)&&nearbyItems.every(item=>!Number.isFinite(item?.x)||Math.hypot(item.x-terminal.x,item.y-terminal.y)>.9)){
+   s.safeRoomFurniture.push({x:terminal.x,y:terminal.y,z:.27,w:.69,d:.69,h:.54,material:1,collisionOnly:true});
+  }
+ }
+}
 function addLocker(x,y){gameSession.world[Math.floor(y)][Math.floor(x)]=0;gameSession.interactables.push({id:'hide-'+x+'-'+y,x,y,type:'hide',title:'LOCKER / HIDING PLACE'})}
 
 
@@ -663,7 +683,7 @@ function scatterEnvironmentalProps(bloodCount,hazardCount,avoid=[]){
     return true;
   }
   for(const c of cells){if(chosen.length>=bloodCount+hazardCount)break;if(!okay(c))continue;chosen.push(c)}
-  chosen.forEach((c,i)=>gameSession.props.push({type:i<hazardCount?'hazard':'blood',x:c.x+.5+(rnd()-.5)*.18,y:c.y+.5+(rnd()-.5)*.18,phase:rnd()*TAU,size:((i<hazardCount)?.68:.74)+rnd()*.12}));
+  chosen.forEach((c,i)=>gameSession.props.push({type:i<hazardCount?'hazard':'blood',x:c.x+.5+(rnd()-.5)*.18,y:c.y+.5+(rnd()-.5)*.18,phase:rnd()*TAU,size:((i<hazardCount)?.76:.74)+rnd()*.17}));
 }
 
 function refreshHpHud(){
@@ -716,7 +736,7 @@ function damageBlocked(cause){
 }
 function applyHazardsAndRegen(dt){
   const hazards=gameSession.props.filter(p=>p.type==='hazard'&&(!p.expires||p.expires>gameSession.elapsed));
-  const touching=hazards.find(h=>Math.hypot(gameSession.player.x-h.x,gameSession.player.y-h.y)<.7);
+  const touching=hazards.find(h=>Math.hypot(gameSession.player.x-h.x,gameSession.player.y-h.y)<(h.size||.75)*.67+.16);
   if(touching && gameSession.elapsed-(gameSession.player.lastHazardHit??-999)>=5){
     if(!damageBlocked('hazard')){
     gameSession.player.lastHazardHit=gameSession.elapsed;gameSession.player.lastDamageAt=gameSession.elapsed;gameSession.player.regenBucket=0;
@@ -777,8 +797,8 @@ function createLevel2World(){
   addControl('power',mid+.5,lo+.5,'POWER CONTROL');
   addControl('pump',mid+.5,hi+.5,'DRAINAGE PUMP');
   addControl('filters',lo+.5,lo+.5,'MAIN FILTERS');
-  addPickup('decoy2a',lo+.5,mid+.5,'stamina','ENERGY DRINK',1);
-  addPickup('decoy2b',hi+.5,mid+.5,'stamina','ENERGY DRINK',1);
+  addPickup('decoy2a',lo+.5,mid+1.5,'stamina','ENERGY DRINK',1);
+  addPickup('decoy2b',hi+.5,mid+1.5,'stamina','ENERGY DRINK',1);
   for(const [x,y] of [[lo+1,lo+2],[hi-1,lo+2],[lo+1,hi-2],[hi-1,hi-2]])addLocker(x+.5,y+.5);
   addGate('shortcut2a',mid,lo+5,'SHORTCUT A',{cards:1},'Collect one card');
   addGate('shortcut2b',mid,hi-5,'SHORTCUT B',{panel:'power'},'Activate the power panel');
@@ -803,10 +823,10 @@ function createFinalWorld(){
  const [lo,mid,hi]=carveFriendlyLayout(57,882971);
  gameSession.GOAL=8;gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];
  for(const [id,x,y] of [['core1',hi,lo],['core2',lo,hi],['core3',hi,hi],['core4',mid,mid],['core5',lo,mid],['core6',hi,mid],['core7',mid,lo],['core8',mid,hi]])addCard(id,x+.5,y+.5);
- addControl('reactor1',mid+.5,lo+.5,'REACTOR I · POWER',1);
+ addControl('reactor1',mid+.5,lo+2.5,'REACTOR I · POWER',1);
  addControl('reactor2',lo+.5,lo+.5,'REACTOR II · PRESSURE',2);
- addControl('reactor3',mid+.5,hi+.5,'REACTOR III · INSULATION',3);
- addControl('reactor4',hi+.5,lo+.5,'REACTOR IV · COOLING',4);
+ addControl('reactor3',mid+.5,hi-1.5,'REACTOR III · INSULATION',3);
+ addControl('reactor4',hi+.5,lo+2.5,'REACTOR IV · COOLING',4);
  for(const [i,x,y] of [['fA',lo,mid],['fB',hi,mid],['fC',mid,hi]])addPickup(i,x+1.5,y+1.5,'stamina','ENERGY DRINK',1);
  for(const [x,y] of [[lo+1,lo+2],[hi-1,lo+2],[lo+1,hi-2],[hi-1,hi-2],[mid+2,mid+2]])addLocker(x+.5,y+.5);
  addGate('f-shortcut',mid,lo+6,'EMERGENCY PASSAGE',{cards:2},'Collect two cores');
@@ -872,7 +892,7 @@ function createPigWorld(){
   addControl('barn',mid+.5,lo+.5,'GATE LEVER');
   addControl('vent',mid+.5,hi+.5,'BARN VENTILATION');
   addControl('mixer',lo+.5,lo+.5,'FEED MIXER');
-  for(const [x,y] of [[hi,mid],[lo,lo],[mid,mid+4]])
+  for(const [x,y] of [[hi,mid+1],[lo+1,lo],[mid,mid+4]])
     addPickup('bacon-'+x+'-'+y,x+.5,y+.5,'stamina','ENERGY DRINK',1);
   for(const [x,y] of [[lo+2,lo+2],[hi-2,lo+2],[lo+2,hi-2]])addLocker(x+.5,y+.5);
   addGate('pen',mid,lo+6,'BARN GATE',{panel:'barn'},'Pull the gate lever');
@@ -906,9 +926,9 @@ function createLevel5World(){
     ['sector5-d',mid,mid],['sector5-e',lo,mid],['sector5-f',hi,mid],
     ['sector5-g',mid,lo],['sector5-h',mid,hi]
   ])addCard(id,x+.5,y+.5);
-  addControl('sector5-generator',mid+.5,lo+.5,'EMERGENCY GENERATOR');
+  addControl('sector5-generator',mid+.5,lo+2.5,'EMERGENCY GENERATOR');
   addControl('sector5-antenna',lo+.5,lo+.5,'ALARM ANTENNA');
-  addControl('sector5-vent',mid+.5,hi+.5,'SECTOR VENTILATION');
+  addControl('sector5-vent',mid+.5,hi-1.5,'SECTOR VENTILATION');
   for(const [i,x,y] of [['a',lo,mid],['b',hi,mid],['c',mid,hi]])
     addPickup('sector5-decoy-'+i,x+1.5,y+1.5,'stamina','ENERGY DRINK',1);
   for(const [x,y] of [[lo+2,lo+2],[hi-2,lo+2],[lo+2,hi-2],[hi-2,hi-2]])addLocker(x+.5,y+.5);
@@ -1129,13 +1149,39 @@ function collectObjectivePickup(item){
 
 const interactionLabels={
  lockedExit:'CHECK EXIT',safeDoor:'OPEN / CLOSE ROOM',slot:'PLAY FOR 1 COIN',
- door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR / 45 SECONDS'
+ door:'OPEN / CHECK GATE',hide:'HIDE',unhide:'WYJDZ',stairs:'TAKE STAIRS',repair:'REPAIR REACTOR'
 };
+const REACTOR_HOLD_SECONDS=5.75;
+function needsInteractionHold(target){
+ return target?.type==='repair'||(target?.type==='panel'&&/reactor|reaktor/i.test(target.title||''));
+}
 function showInteractionHint(target,fallback='AKTYWUJ PANEL'){
  gameSession.interactReady=target;
  const hint=$('interactHint');
  hint.style.display=target?'block':'none';
- if(target)hint.textContent='[ E ] '+(target.type==='pickup'?target.title:interactionLabels[target.type]||fallback);
+ hint.classList.toggle('pickup-hint',target?.type==='pickup');
+ if(!target)return;
+ const hold=needsInteractionHold(target);
+ const label=target.type==='pickup'||hold?(target.title||interactionLabels[target.type]):interactionLabels[target.type]||fallback;
+ const elapsed=gameSession.interactionHold?.ref===target.ref?gameSession.interactionHold?.elapsed:0;
+ const holdText=elapsed>0?' · '+Math.floor(100*elapsed/REACTOR_HOLD_SECONDS)+'%':' · 5.75 S';
+ hint.textContent=(hold?'HOLD [ E ] ': '[ E ] ')+label+(hold?holdText:'');
+}
+
+function updateInteractionHold(dt){
+ const hold=gameSession.interactionHold;
+ if(!hold)return;
+ const target=gameSession.interactReady;
+ if(gameSession.state!=='playing'||target?.ref!==hold.ref||!needsInteractionHold(target)){
+  gameSession.interactionHold=null;
+  return;
+ }
+ hold.elapsed+=dt;
+ if(hold.elapsed+1e-9<REACTOR_HOLD_SECONDS){showInteractionHint(target);return;}
+ gameSession.interactionHold=null;
+ if(target.type==='repair')finishHardEmergency();
+ else activatePanel(target.ref);
+ showInteractionHint(findInteractable());
 }
 
 function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.textContent=formatTime(gameSession.clock);if(gameSession.elapsed>gameSession.toastTimeout)UI.toast.classList.remove('visible');if(!gameSession.awake&&gameSession.elapsed>=gameSession.wakeAt){gameSession.awake=true;showToast('⚠ IT HEARS YOU. KEEP MOVING.',4);playSting()}
@@ -1151,7 +1197,7 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  UI.stamina.style.width=staminaWidth();
  if(gameSession.player.moving){let t=dt*speed/Math.max(1,len);move(gameSession.player,(forward*dirX+strafe*sX)*t,(forward*dirY+strafe*sY)*t,.22);gameSession.walkPhase+=dt*(sprint?14:9);}else gameSession.walkPhase*=Math.max(0,1-dt*7);
  if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
- pickupCoins();updateCoinCounter();updateSeen();
+ updateCoinCounter();updateSeen();
  showInteractionHint(findInteractable(),'UZYJ');
  if(applyHazardsAndRegen(dt))return;
  if(gameSession.awake){updateGuard(gameSession.cat,dt,0);let distance=Math.hypot(gameSession.cat.x-gameSession.player.x,gameSession.cat.y-gameSession.player.y);gameSession.nearCat=distance;UI.danger.style.opacity=distance<5?String(clamp((5-distance)/2,0,1)):'0';if(distance<.67&&!isSafeRoomProtected()&&lineOfSight(gameSession.cat.x,gameSession.cat.y,gameSession.player.x,gameSession.player.y)&&lose())return;
@@ -1165,32 +1211,36 @@ function updateBase(dt){gameSession.elapsed+=dt;gameSession.clock+=dt;UI.clock.t
  if(gameSession.mapOn&&Math.floor(gameSession.elapsed*5)!==Math.floor((gameSession.elapsed-dt)*5))drawMap();
 }
 
-function pickupFacility(){
-  for(let f of gameSession.fuses){
-    if(f.taken||objectivePickupModel(f)||Math.hypot(gameSession.player.x-f.x,gameSession.player.y-f.y)>.66||!lineOfSight(gameSession.player.x,gameSession.player.y,f.x,f.y))continue;
-    collectObjectivePickup(f);
-  }
-  for(let item of gameSession.bonusItems){
-    if(item.taken||Math.hypot(gameSession.player.x-item.x,gameSession.player.y-item.y)>.67||!lineOfSight(gameSession.player.x,gameSession.player.y,item.x,item.y))continue;
-    item.taken=true;
-    if(item.type==='coin'){gameSession.player.coins=(gameSession.player.coins||0)+1;updateCoinCounter();}
-    else if(item.type==='key')gameSession.keysOwned.add(item.id);
-    else if(item.type==='hardSlow'){gameSession.player.slowCharges=(gameSession.player.slowCharges||0)+item.quantity;ensureInventory().slow=gameSession.player.slowCharges;}
-    else if(item.type==='hardFreeze'){gameSession.player.freezeCharges=(gameSession.player.freezeCharges||0)+item.quantity;ensureInventory().freeze=gameSession.player.freezeCharges;}
-    else if(item.type==='stamina'){ensureInventory().energy.push({energySprite:item.energySprite||0,fakeMonster:!!item.fakeMonster});}
-    else if(item.type==='shield')gameSession.player.shieldUntil=gameSession.elapsed+12;
-    if(item.type==='coin')playCoinPickup();else playPickup();
-    showToast('PICKED UP: '+item.name+(item.type==='shield'?' · 12 SEC':item.quantity>1?' +'+item.quantity:''),2.5);
-    updateInventoryUI();
-  }
+function collectBonusPickup(item){
+ item.taken=true;
+ const quantity=item.quantity||1;
+ if(item.type==='coin'){
+  gameSession.player.coins=(gameSession.player.coins||0)+quantity;
+  gameSession.stats.coins=(gameSession.stats.coins||0)+quantity;
+  updateCoinCounter();
+ }else if(item.type==='key')gameSession.keysOwned.add(item.id);
+ else if(item.type==='hardSlow'){gameSession.player.slowCharges=(gameSession.player.slowCharges||0)+quantity;ensureInventory().slow=gameSession.player.slowCharges;}
+ else if(item.type==='hardFreeze'){gameSession.player.freezeCharges=(gameSession.player.freezeCharges||0)+quantity;ensureInventory().freeze=gameSession.player.freezeCharges;}
+ else if(item.type==='stamina'){ensureInventory().energy.push({energySprite:item.energySprite||0,fakeMonster:!!item.fakeMonster});}
+ else if(item.type==='shield')ensureInventory().shield+=quantity;
+ if(item.type==='coin')playCoinPickup();else playPickup();
+ showToast('PICKED UP: '+item.name+(quantity>1?' +'+quantity:''),2.5);
+ updateInventoryUI();
 }
 
 function findInteractable(){
   if(gameSession.player.hidden)return{type:'unhide',title:'LEAVE HIDING PLACE'};
   const all=[];
+  const {x,y}=gameSession.player;
   for(const item of gameSession.fuses){
-    const model=!item.taken&&objectivePickupModel(item);
-    if(model)all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:model==='battery'?'PICK UP BATTERY':'PICK UP CARD'});
+    if(item.taken||Math.hypot(item.x-x,item.y-y)>=1.1)continue;
+    const model=objectivePickupModel(item);
+    const label=model==='battery'?'BATTERY':model==='card'?'CARD':renderStage()===3?'CORE':renderStage()===4?'FOOD':'ITEM';
+    all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:'PICK UP '+label,objective:true});
+  }
+  for(const item of gameSession.bonusItems){
+    if(item.taken||Math.hypot(item.x-x,item.y-y)>=1.1)continue;
+    all.push({type:'pickup',ref:item,x:item.x,y:item.y,title:'PICK UP '+(item.name||item.type).toUpperCase()});
   }
   for(let d of gameSession.doors)if(!d.open)all.push({type:'door',ref:d,x:d.x+.5,y:d.y+.5,title:d.title});
   const exit=gameSession.exitCell;
@@ -1205,7 +1255,7 @@ function findInteractable(){
     const gate=o.type==='door'||o.type==='lockedExit';
     const range=o.type==='pickup'?1.1:gate?1.65:1.4;
     return Math.hypot(gameSession.player.x-o.x,gameSession.player.y-o.y)<range&&
-      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:o.type==='slot'});
+      lineOfSight(gameSession.player.x,gameSession.player.y,o.x,o.y,{allowTargetTile:gate||o.type==='safeDoor',allowTargetFurniture:['slot','panel','repair'].includes(o.type)});
   })||null;
 }
 
@@ -1213,8 +1263,10 @@ function interact(){
   if(gameSession.state!=='playing')return;
   const target=findInteractable();
   if(target?.type==='pickup'){
-    collectObjectivePickup(target.ref);
+    if(target.objective)collectObjectivePickup(target.ref);
+    else collectBonusPickup(target.ref);
     if(!gameSession.graphicsDemo&&gameSession.level!==1)updateObjectiveFacility();
+    showInteractionHint(findInteractable());
     return;
   }
   if(gameSession.graphicsDemo){
@@ -1229,7 +1281,11 @@ function interact(){
   if(gameSession.level===1)return;
   if(!target){showToast('NOTHING TO INTERACT WITH',1.4);return}
   const o=target.ref;
-  if(target.type==='repair'&&isHardMode()){finishHardEmergency();return}
+  if(needsInteractionHold(target)){
+    gameSession.interactionHold={ref:o,elapsed:0};
+    showInteractionHint(target);
+    return;
+  }
   if(target.type==='unhide'){gameSession.player.hidden=false;showToast('YOU LEFT HIDING',1.6);return}
   if(target.type==='hide'){gameSession.player.hidden=true;gameSession.player.flash=false;showToast('HIDDEN · PRESS E TO LEAVE',2.5);return}
   if(target.type==='stairs'){
@@ -1245,17 +1301,19 @@ function interact(){
     o.open=true;gameSession.world[o.y][o.x]=0;markWorldChanged();gameSession.stats.doors++;addNoise(o.x+.5,o.y+.5,11,'brama');
     playDoorMovement(true);showToast('✓ OPENED: '+o.title,2.8);updateObjectiveFacility();return;
   }
-  if(target.type==='panel'){
-    if(o.used)return;
-    if(gameSession.level===3){
-      const next=gameSession.terminals.filter(t=>t.used).length+1;
-      if(o.order!==next){gameSession.alarmTimer=9;addNoise(o.x,o.y,14,'alarm');createGameSample('reactorWrongOrder',.48);showToast(`⚠ WRONG ORDER! REACTOR ${next} MUST BE FIRST`,3.4);return}
-    }
-    o.used=true;gameSession.stats.panels++;addNoise(o.x,o.y,gameSession.level===3?15:10,'urzadzenie');
-    playUnlock();showToast('✓ ACTIVATED: '+o.title,3.2);
-    if(gameSession.level===3&&gameSession.stats.panels===gameSession.terminals.length)playWin();
-    updateObjectiveFacility();return;
-  }
+  if(target.type==='panel')activatePanel(o);
+}
+
+function activatePanel(o){
+ if(o.used)return;
+ if(gameSession.level===3){
+   const next=gameSession.terminals.filter(t=>t.used).length+1;
+   if(o.order!==next){gameSession.alarmTimer=9;addNoise(o.x,o.y,14,'alarm');createGameSample('reactorWrongOrder',.48);showToast(`⚠ WRONG ORDER! REACTOR ${next} MUST BE FIRST`,3.4);return}
+ }
+ o.used=true;gameSession.stats.panels++;addNoise(o.x,o.y,gameSession.level===3?15:10,'urzadzenie');
+ playUnlock();showToast('✓ ACTIVATED: '+o.title,3.2);
+ if(gameSession.level===3&&gameSession.stats.panels===gameSession.terminals.length)playWin();
+ updateObjectiveFacility();return;
 }
 
 function updateObjectiveFacility(){
@@ -1292,7 +1350,7 @@ function updateFacility(dt,finalMode){
     }
   }else gameSession.walkPhase*=Math.max(0,1-dt*7);
   if(gameSession.player.a>PI)gameSession.player.a-=TAU;if(gameSession.player.a<-PI)gameSession.player.a+=TAU;
-  pickupFacility();updateCoinCounter();updateSeen();if(applyHazardsAndRegen(dt))return;
+  updateCoinCounter();updateSeen();if(applyHazardsAndRegen(dt))return;
   gameSession.noiseEvents=gameSession.noiseEvents.filter(e=>e.expiry>gameSession.elapsed);
   showInteractionHint(findInteractable());
   gameSession.guardSight=Math.max(0,gameSession.guardSight-dt);gameSession.guardNoise=Math.max(0,gameSession.guardNoise-dt);
@@ -1457,8 +1515,14 @@ const CATROOMS_MODEL_MESHES=Object.freeze({
  door:'assets/models/door-optimized.mesh',
  battery:'assets/models/pickups/battery.mesh',
  card:'assets/models/pickups/card.mesh',
+ shield:'assets/models/pickups/shield.mesh',
+ drink:'assets/models/pickups/drink.mesh',
+ terminal:'assets/models/pickups/terminal.mesh',
 });
 const MODEL_BATTERY_ALBEDO='assets/models/pickups/battery-albedo.webp';
+const MODEL_SHIELD_ALBEDO='assets/models/pickups/shield-albedo.webp';
+const MODEL_DRINK_ALBEDO='assets/models/pickups/drink-albedo.webp';
+const MODEL_TERMINAL_ALBEDO='assets/models/pickups/terminal-albedo.webp';
 
 ;
 // SOURCE: js/graphics/decor-data.js
@@ -1482,7 +1546,7 @@ const DECOR_MODELS=Object.freeze({
 const DECOR_ALBEDO='assets/models/decor/albedo.webp';
 const DECOR_FOOTPRINTS=Object.freeze({
  box:{floor:[-0.3262397,0.1722548,-0.311331,0.125449,-0.1660929,-0.3188379,-0.1659783,-0.3189058,-0.1657321,-0.3190387,0.1361508,-0.3331081,0.1398236,-0.3320677,0.1566557,-0.316339,0.2408164,-0.2376951,0.3081449,-0.1747799,0.3262357,-0.1569398,0.3262397,-0.156925,0.1801074,0.2866636,0.1643261,0.3331081,0.1395296,0.3255371,-0.0811373,0.2532285,-0.3015874,0.1808162],side:[-0.3262397,0.0018689,0.0791027,0.0,0.3256414,0.0021676,0.3262397,0.0508909,0.3262397,0.0973596,0.3262357,0.4690945,0.3256413,0.5178325,0.2998801,0.52,-0.1416538,0.5199998,-0.1560712,0.5199983,-0.3261474,0.518239]},
- cabinet:{floor:[-0.1295455,-0.1309781,-0.1169259,-0.2332508,-0.0428004,-0.2508402,0.0428004,-0.2508402,0.1169259,-0.2332508,0.1295455,-0.1309781,0.1295455,0.2508402,-0.1295455,0.2508402]},
+ cabinet:{floor:[-0.1295455,-0.1309781,-0.1169259,-0.2332508,-0.0428004,-0.2508402,0.0428004,-0.2508402,0.1169259,-0.2332508,0.1295455,-0.1309781,0.1295455,0.2508402,-0.1295455,0.2508402],side:[-0.1295455,0.0,0.1295455,0.0,0.1295455,0.9,-0.1295455,0.9]},
  desk:{floor:[-0.391033,0.0252299,-0.3875814,0.0147234,-0.1520969,-0.2358923,-0.1418409,-0.2416092,0.1386985,-0.3944113,0.1457987,-0.3965697,0.1526252,-0.3936592,0.2713493,-0.2849976,0.3876744,-0.1737715,0.391033,-0.167154,0.3893521,-0.1599258,0.2555672,0.1301646,0.2505457,0.1407785,0.0161646,0.3924263,0.0059112,0.3965697,-0.00425,0.3960994,-0.0141814,0.3927964,-0.0270311,0.3841734,-0.3764708,0.0572738,-0.3859303,0.0450267,-0.3898872,0.0353373]},
  bench:{floor:[-0.4132681,-0.107162,-0.4050516,-0.1491062,-0.403545,-0.1506288,-0.3997008,-0.1510281,0.3669055,-0.1510281,0.3697571,-0.1493642,0.3910234,-0.0681217,0.4132681,0.0839843,0.4128017,0.0954458,0.4120005,0.0978086,-0.2670598,0.1456234,-0.3479384,0.1510281,-0.4132681,0.1510281]},
  pipe:{floor:[-0.1071711,-0.0950526,-0.1058287,-0.1149651,-0.0991701,-0.1371038,-0.0893767,-0.1550344,-0.0755734,-0.1706512,-0.0610452,-0.1835365,-0.0405372,-0.1946885,-0.0211858,-0.200524,0.0004188,-0.2018552,0.0181105,-0.2004755,0.0391782,-0.1941314,0.057879,-0.1850319,0.075992,-0.1706625,0.0889641,-0.1564047,0.0992975,-0.1375051,0.1053518,-0.1183482,0.1071711,-0.0950746,0.1071711,0.2018552,-0.1071711,0.2018552]},
@@ -1542,7 +1606,13 @@ function uploadMaterialMips(device,texture,source,w,h,layer,cover=false){
   previous=c;
  }
 }
-async function loadHdAlbedo(path,w,h){const img=new Image();img.src=path;await img.decode();if(img.naturalWidth!==w||img.naturalHeight!==h)throw Error('Invalid HD material dimensions');return img;}
+async function loadHdAlbedo(path,w,h){
+ const img=new Image();
+ img.src=path.startsWith('data:')?path:path+'?v=1.7.0-alpha.1.4';
+ await img.decode();
+ if(img.naturalWidth!==w||img.naturalHeight!==h)throw Error('Invalid HD material dimensions');
+ return img;
+}
 async function buildHdMaterials(renderer){
  const d=renderer.device;
  let wall,floor;
@@ -2147,13 +2217,18 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  } else {
    let cell=vec2i(floor(worldPt));
    if(cell.x>=0 && cell.y>=0 && cell.x<i32(frame.viewport.z) && cell.y<i32(frame.viewport.z)) {
-     let id=decalCells[u32(cell.y)*128u+u32(cell.x)];
-     if(id>0u && id<=256u){
+     var ids=decalCells[u32(cell.y)*128u+u32(cell.x)];
+     for(var i=0; i<3 && ids!=0u; i++){
+       let id=ids&511u;
+       ids>>=9u;
        let d=decalData[id-1u];
        let radius=max(.1,d.z*.67);
        let local=(worldPt-d.xy)/(radius*2.)+.5;
        if(all(local>=vec2f(0.)) && all(local<=vec2f(1.))){
-         if(d.w>1.5){
+         if(d.w>2.5){
+           let glow=1.-smoothstep(.12,.5,length(local-.5));
+           c+=vec3f(.11*glow*glow);
+         }else if(d.w>1.5){
            let shadow=1.-smoothstep(.14,.50,length(local-.5));
            c*=1.-.38*shadow;
          }else{
@@ -2293,6 +2368,12 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
        let flicker=.65+.35*sin(frame.player.w*17.+local.x*15.);
        col=mix(vec3f(.63,.09,.02),vec3f(1.,.77,.18),local.z)*flicker;
        if(local.z>.70){col*=.60;}
+     }else if(typ==12){ // thin safe-room brick, with continuous UVs at corners
+       let point=origin3+ray3*tNear;
+       let u=select(point.x,point.y,faceX);
+       let row=floor(point.z*6.);
+       let mortar=step(fract(u*4.+row*.5),.04)+step(fract(point.z*6.),.06);
+       col=vec3f(.24,.25,.21)*(1.-min(1.,mortar)*.35);
      }else if(typ>=7&&typ<=11){ // photo posters on the wall
        let extent=object.upper.xyz-object.lower.xyz;
        let vertical=extent.x<extent.y;
@@ -2476,8 +2557,9 @@ struct MeshVertexOut {
  let bias=select(.025,max(.001,wall/2048.),input.kind>=5u);
  if(input.depth>wall-bias){discard;}
  var base=input.tint;
- if(input.kind==1u||input.kind==3u||input.kind==5u||input.kind==6u){
+ if(input.kind==1u||input.kind==3u||input.kind==5u||input.kind==6u||input.kind>=8u){
    base*=textureSampleLevel(slotAlbedo,albedoSampler,input.uv,0.).rgb;
+   if(input.kind==10u){base*=.73;}
  }
  if(input.kind==4u){base=mix(base,vec3f(.82,.74,.50),.45);} if(input.kind==4u&&input.unlocked>.5){base=mix(base,vec3f(.28,.72,.38),.72);}
  var light=clamp(.46+.47*dot(normalize(input.normal),normalize(vec3f(.40,-.15,.88))),.30,1.);
@@ -2506,7 +2588,15 @@ struct MeshVertexOut {
  }
  var rgb=base*light;
  if((frame.lighting.x>.5||frame.flashlight.w>.5)&&!(input.kind==0u&&input.tint.r>.85)){
-   rgb=base*surfaceLighting(input.worldPoint,normalize(input.normal),.65,vec3f(light),frame);
+   rgb=base*surfaceLighting(input.worldPoint,normalize(input.normal),select(.65,.91,input.kind==10u),vec3f(light),frame);
+ }
+ if(input.kind>=6u&&input.kind<=9u){
+   let eye=normalize(vec3f(frame.player.xy,.5)-input.worldPoint);
+   let rim=pow(1.-abs(dot(normalize(input.normal),eye)),2.3);
+   rgb+=vec3f(.06+.24*rim);
+ }
+ if(input.kind==10u&&input.unlocked>1.5){
+   rgb+=vec3f(.26,.045,.025)*(.55+.45*sin(frame.player.w*5.));
  }
  let fog=clamp((input.depth-2.)/34.,0.,.78);
  rgb=mix(rgb,vec3f(.10,.10,.09),fog);
@@ -2797,8 +2887,14 @@ const GPU_WALL_H=256;
 const GPU_TILE_SIZE=64;
 const GPU_MAX_DECALS=256;
 const GPU_MAX_SPRITES=256;
-const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32};
-const PICKUP_MESH_KINDS={battery:6,card:7};
+const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32,shield:16,drink:24,terminal:24};
+const WORLD_ITEM_KINDS={battery:6,card:7,shield:8,drink:9,terminal:10};
+const WORLD_ITEM_TILTS={
+ battery:[0,0,Math.PI/2,-Math.PI/2],card:[0],shield:[0,0,Math.PI],drink:[0,0,Math.PI/2,-Math.PI/2],terminal:[0]
+};
+const WORLD_ITEM_SCALE={battery:.62,card:.72,shield:1,drink:1,terminal:1};
+function bonusPickupModel(item){return item.type==='shield'?'shield':item.type==='stamina'?'drink':null;}
+function worldItemPool(model){return model==='battery'||model==='card'?'pickup':model;}
 // The order of the atlas is a single contract for upload and projection.
 function spriteLayerSources(){return [catImg,pigImg,personBImg,personAImg,fuseImg,keycardImg,foodImg,terminalImg,lockerArt,stairArt,staminaArt,shieldArt,extraPickupArt,coopAvatarArt,slowDeviceImg,freezeDeviceImg,...energyDrinkImgs,hardRockArt,coinSprite,slotMachineSprite,strangerImg];}
 const SPRITE_LAYER=Object.freeze({cat:0,pig:1,watcher:2,listener:3,terminal:7,hide:8,stairs:9,stamina:10,shield:11,key:12,coopAvatar:13,hardSlow:14,hardFreeze:15,rock:21,coin:22,slot:23,stranger:24});
@@ -2874,6 +2970,9 @@ class CatroomsWebGPURenderer {
     this.loadedSpriteLayers=resolved.map((img,i)=>({layer:i,width:img.naturalWidth||img.width,height:img.naturalHeight||img.height}));
     await Promise.all(SAFE_ROOM_POSTER_IMAGES.map(async img=>{if(!img.complete){try{await img.decode();}catch(e){/* draw fallback poster */}}}));
     const walls=[wallTexture,metalTexture,finalWallTexture,pigWallTexture,doorOpenTexture,doorTexture,doorShutImg];
+    await Promise.all(HD_WALL_PATHS.slice(0,2).map(async (path,i)=>{
+      try{walls[i]=await loadHdAlbedo(path,512,1024);}catch{/* Keep the procedural fallback when offline assets are damaged. */}
+    }));
     walls.forEach((tex,i)=>this.uploadCanvasLayer(this.wallTexture,tex,GPU_WALL_W,GPU_WALL_H,i));
     SAFE_ROOM_POSTER_IMAGES.forEach((img,index)=>{const off=document.createElement('canvas');off.width=GPU_WALL_W;off.height=GPU_WALL_H;const g=off.getContext('2d');g.fillStyle='#080506';g.fillRect(0,0,off.width,off.height);if(img&&img.complete&&img.naturalWidth){const ratio=Math.max(off.width/img.naturalWidth,off.height/img.naturalHeight);const w=img.naturalWidth*ratio,h=img.naturalHeight*ratio;g.drawImage(img,(off.width-w)/2,(off.height-h)/2,w,h)}else{g.fillStyle='#7b5a4b';g.fillRect(0,0,off.width,off.height)}this.device.queue.copyExternalImageToTexture({source:off},{texture:this.wallTexture,origin:[0,0,7+index]},[off.width,off.height,1]);});
     const tmp=document.createElement('canvas');tmp.width=GPU_TILE_SIZE;tmp.height=GPU_TILE_SIZE;const g=tmp.getContext('2d');
@@ -2897,18 +2996,27 @@ class CatroomsWebGPURenderer {
   async buildModels(){
     this.modelShadows=new CatroomsModelShadows(this.device);
     const shadowData=[];
-    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(PICKUP_MESH_KINDS),...Object.keys(DECOR_MODELS)]){
+    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(WORLD_ITEM_KINDS),...Object.keys(DECOR_MODELS)]){
       const mesh=await AssetManager.mesh(kind);
       const vertexBuffer=this.device.createBuffer({size:mesh.vertexData.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
       const indexBuffer=this.device.createBuffer({size:mesh.indexData.byteLength,usage:GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST});
       this.device.queue.writeBuffer(vertexBuffer,0,mesh.vertexData);
       this.device.queue.writeBuffer(indexBuffer,0,mesh.indexData);
       this.modelMeshes[kind]={vertexBuffer,indexBuffer,indexCount:mesh.indices};
-      if(kind!=='campfire'&&!PICKUP_MESH_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
+      if(WORLD_ITEM_TILTS[kind]){
+        const vertices=new Float32Array(mesh.vertexData.buffer,mesh.vertexData.byteOffset,mesh.vertices*11);
+        this.modelMeshes[kind].groundPoses=WORLD_ITEM_TILTS[kind].map(tilt=>{
+          const c=Math.cos(tilt),s=Math.sin(tilt);
+          let bottom=Infinity;
+          for(let i=0;i<vertices.length;i+=11)bottom=Math.min(bottom,vertices[i+1]*s+vertices[i+2]*c);
+          return {c,s,z:-bottom*WORLD_ITEM_SCALE[kind]};
+        });
+      }
+      if(kind!=='campfire'&&!WORLD_ITEM_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
     }
     this.modelShadows.initialize(shadowData);
     this.meshAlbedoTextures={};
-    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO}).map(async ([kind,src])=>{
+    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO,shield:MODEL_SHIELD_ALBEDO,drink:MODEL_DRINK_ALBEDO,terminal:MODEL_TERMINAL_ALBEDO}).map(async ([kind,src])=>{
       const image=new Image();
       image.src=src;
       await image.decode();
@@ -2976,15 +3084,14 @@ class CatroomsWebGPURenderer {
     for(const f of gameSession.fuses)if(!f.taken&&!objectivePickupModel(f))sprites.push({kind:'fuse',x:f.x,y:f.y,phase:f.phase||0});
     if(gameSession.level===1&&gameSession.awake){const p=gameSession.renderPosition(gameSession.cat);sprites.push({kind:'cat',x:p.x,y:p.y,frozen:!!gameSession.cat.frozen});}
     for(const a of coop.avatarSprites())sprites.push({kind:'coopAvatar',x:a.x,y:a.y});
-    for(const item of gameSession.bonusItems)if(!item.taken&&item.type==='coin')sprites.push({kind:'coin',x:item.x,y:item.y});
-    // Slot machine is static 3D world geometry, never a camera-facing sprite.
-    for(const guard of gameSession.guards){const p=gameSession.renderPosition(guard);sprites.push({kind:guard.kind,x:p.x,y:p.y,phase:guard.x,variant:guard.variant||'classic',frozen:!!guard.frozen,size:guard.sizeMultiplier||1});}
-    if(gameSession.level>=2){
-      for(const t of gameSession.terminals)sprites.push({kind:'terminal',x:t.x,y:t.y});
-      for(const item of gameSession.interactables)if(item.type==='hide'||item.type==='stairs')sprites.push({kind:item.type,x:item.x,y:item.y});
-      for(const item of gameSession.bonusItems)if(!item.taken&&item.type!=='coin')sprites.push({kind:item.type,x:item.x,y:item.y,phase:item.phase,energySprite:item.energySprite});
-      if(isHardMode()&&gameSession.hardEmergency)sprites.push({kind:'terminal',x:gameSession.hardEmergency.x,y:gameSession.hardEmergency.y});
+    for(const item of gameSession.bonusItems){
+      if(!item.taken&&!bonusPickupModel(item))sprites.push({kind:item.type,x:item.x,y:item.y,phase:item.phase});
     }
+    for(const guard of gameSession.guards){
+      const p=gameSession.renderPosition(guard);
+      sprites.push({kind:guard.kind,x:p.x,y:p.y,phase:guard.x,variant:guard.variant||'classic',frozen:!!guard.frozen,size:guard.sizeMultiplier||1});
+    }
+    for(const item of gameSession.interactables)if(item.type==='hide'||item.type==='stairs')sprites.push({kind:item.type,x:item.x,y:item.y});
     const fuseLayer=renderStage()===1?4:renderStage()===4?6:5;
     const scales={cat:1.19,pig:1.07,watcher:1.38,listener:1.38,fuse:renderStage()===4?.76:.58,terminal:.73,hide:.9,stairs:.78,stamina:.43,shield:.43,key:.42,coopAvatar:.94,hardSlow:.54,hardFreeze:.58,rock:.89,coin:.43,slot:.86,stranger:1.36};
     const sourceAspect=this.spriteAspects||(this.spriteAspects=spriteLayerSources().map(img=>(img.naturalWidth||img.width||1)/(img.naturalHeight||img.height||1)));
@@ -3028,7 +3135,10 @@ class CatroomsWebGPURenderer {
     const upload=(buffer,data)=>{this.device.queue.writeBuffer(buffer,0,data);this.stats.staticBytes+=data.byteLength;};
     if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N){
       this.tilesData.fill(0);
-      for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++)this.tilesData[y*128+x]=scene.world[y][x];
+      for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++){
+        const tile=scene.world[y][x];
+        this.tilesData[y*128+x]=tile===THIN_SAFE_ROOM_TILE?0:tile;
+      }
       this.doorLayout=scene===gameSession?this.makeDoorLayout(scene):[];
       for(const d of this.doorLayout)this.tilesData[d.y*128+d.x]=0;
       // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
@@ -3048,18 +3158,36 @@ class CatroomsWebGPURenderer {
       }
       this.furnitureCount=i;upload(this.furnitureBuffer,this.furnitureData);this.stats.furnitureUploads++;this.furnitureSource=furniture;this.furnitureLength=furniture.length;
     }
-    // Trail arrays may be replaced each update even when the hazard content stays identical.
+    // Register each decal across its full footprint, including across tile edges.
+    // Three 9-bit indices fit in one storage word, with zero reserved for no decal.
     let count=0;
+    const addDecal=(p,size,type)=>{
+      if(count<GPU_MAX_DECALS)this.decalScratch.set([p.x,p.y,size,type],count++*4);
+    };
     for(const p of scene.props){
-      if((p.type!=='hazard'&&!(p.type==='decor'&&p.solid))||count>=GPU_MAX_DECALS)continue;
-      const x=Math.floor(p.x),y=Math.floor(p.y);if(x<0||y<0||x>=scene.N||y>=scene.N)continue;
-      this.decalScratch.set([p.x,p.y,p.type==='decor'?Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12):p.size||.75,p.type==='decor'?2:1],count++*4);
+      if(p.type==='hazard')addDecal(p,p.size||.75,1);
+      else if(p.type==='decor'&&p.solid)addDecal(p,Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12),2);
     }
+    for(const item of scene.fuses||[])if(!item.taken&&objectivePickupModel(item))addDecal(item,.48,3);
+    for(const item of scene.bonusItems||[])if(!item.taken&&bonusPickupModel(item))addDecal(item,.42,3);
     let changed=this.decalWorld!==scene.world||this.decalCount!==count;
     for(let i=0;!changed&&i<count*4;i++)if(this.decalScratch[i]!==this.decalData[i])changed=true;
     if(changed){
       this.decalGridData.fill(0);this.decalData.fill(0);this.decalData.set(this.decalScratch.subarray(0,count*4));
-      for(let i=0;i<count;i++){const x=Math.floor(this.decalData[i*4]),y=Math.floor(this.decalData[i*4+1]);this.decalGridData[y*128+x]=i+1;}
+      for(let i=0;i<count;i++){
+        const [x,y,size,type]=this.decalData.subarray(i*4,i*4+4);
+        const radius=Math.max(.1,size*.67);
+        for(let row=Math.max(0,Math.floor(y-radius));row<=Math.min(scene.N-1,Math.floor(y+radius));row++){
+          for(let col=Math.max(0,Math.floor(x-radius));col<=Math.min(scene.N-1,Math.floor(x+radius));col++){
+            const key=row*128+col,packed=this.decalGridData[key];
+            let shift=0;
+            while(shift<27&&((packed>>>shift)&511)!==0)shift+=9;
+            if(shift<27)this.decalGridData[key]=packed|((i+1)<<shift);
+            // Keep dangerous puddles visible even when several effects share a cell.
+            else if(type===1)this.decalGridData[key]=(packed&0x3ffff)|((i+1)<<18);
+          }
+        }
+      }
       upload(this.decalCellsBuffer,this.decalGridData);upload(this.decalDataBuffer,this.decalData);this.stats.decalUploads++;this.decalCount=count;this.decalWorld=scene.world;
     }
   }
@@ -3127,15 +3255,31 @@ class CatroomsWebGPURenderer {
   }
   visiblePickups(camera){
     const visible=[];
-    for(const item of gameSession.fuses){
-      if(item.taken)continue;
-      const model=objectivePickupModel(item);
+    const add=(item,model,active=false)=>{
       if(!model||!this.modelMeshes[model]||Math.hypot(item.x-camera.x,item.y-camera.y)>28||
-         !this.modelInView(item.x,item.y,.35,camera))continue;
-      visible.push({item,model});
-      if(visible.length===MESH_POSE_COUNTS.pickup)break;
-    }
-    return visible;
+        !this.modelInView(item.x,item.y,model==='terminal'?.65:.35,camera))return;
+      visible.push({item,model,active,pool:worldItemPool(model)});
+    };
+    for(const item of gameSession.fuses)if(!item.taken)add(item,objectivePickupModel(item));
+    for(const item of gameSession.bonusItems)if(!item.taken)add(item,bonusPickupModel(item));
+    for(const item of gameSession.terminals)add(item,'terminal');
+    for(const item of gameSession.emergencyReactors||[])add(item,'terminal',gameSession.hardEmergency?.reactor===item);
+    const counts={};
+    visible.sort((a,b)=>Math.hypot(a.item.x-camera.x,a.item.y-camera.y)-Math.hypot(b.item.x-camera.x,b.item.y-camera.y));
+    return visible.filter(entry=>{
+      const {pool}=entry;
+      entry.index=counts[pool]??0;
+      counts[pool]=entry.index+1;
+      return entry.index<MESH_POSE_COUNTS[pool];
+    });
+  }
+  worldItemPose({item,model,active}){
+    const poses=this.modelMeshes[model].groundPoses;
+    const phase=item.phase||0;
+    const {c,s,z}=poses[Math.floor(phase*1000)%poses.length];
+    const yaw=model==='terminal'?(item.yaw??Math.PI):phase;
+    return [item.x,item.y,z,WORLD_ITEM_SCALE[model],Math.cos(yaw),Math.sin(yaw),WORLD_ITEM_KINDS[model],
+      active?2:item.used?1:0,c,s,0,0];
   }
   roomPose(room,kind){
     if(kind==='campfire')return [room.fireX,room.fireY,0,.68,1,0,0,0];
@@ -3276,10 +3420,7 @@ class CatroomsWebGPURenderer {
       for(let i=0;i<rocks.length;i++)this.writePose('rock',i,this.rockPose(rocks[i]));
       for(let i=0;i<doors.length;i++)this.writePose('door',i,doors[i]);
       for(let i=0;i<decor.length;i++)this.writePose('decor',i,this.decorPose(decor[i]));
-      for(const [index,{item,model}] of pickups.entries()){
-        const angle=item.phase||0;
-        this.writePose('pickup',index,[item.x,item.y,0,1,Math.cos(angle),Math.sin(angle),PICKUP_MESH_KINDS[model],0]);
-      }
+      for(const entry of pickups)this.writePose(entry.pool,entry.index,this.worldItemPose(entry));
       const meshPass=encoder.beginRenderPass({label:'Imported world meshes',
         colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
         depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:'clear',depthClearValue:1,depthStoreOp:'store'}});
@@ -3306,9 +3447,9 @@ class CatroomsWebGPURenderer {
         if(meshKind!==p.model){meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');meshKind=p.model;}
         meshPass.setBindGroup(0,this.rushMeshBinds.decor[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
       }
-      for(const [index,{model}] of pickups.entries()){
+      for(const {index,model,pool} of pickups){
         const mesh=this.modelMeshes[model];
-        meshPass.setBindGroup(0,this.rushMeshBinds.pickup[index]);
+        meshPass.setBindGroup(0,this.rushMeshBinds[pool][index]);
         meshPass.setVertexBuffer(0,mesh.vertexBuffer);
         meshPass.setIndexBuffer(mesh.indexBuffer,'uint32');
         meshPass.drawIndexed(mesh.indexCount);this.stats.triangles+=mesh.indexCount/3;
@@ -3465,18 +3606,18 @@ function drawMap(){
  for(let y=0;y<gameSession.N;y++)for(let x=0;x<gameSession.N;x++){
   if(!gameSession.seen[y]?.[x])continue;
   const cell=gameSession.world[y][x];
-  g.fillStyle=cell===5?'#77705f':cell===1?'#52564c':cell===3?'#a0dbab':cell===4?'#b75c42':isHardMode()?'#27302c':'#29362f';
+  g.fillStyle=cell===5?'#77705f':(cell===1||cell===8||cell===THIN_SAFE_ROOM_TILE)?'#52564c':cell===3?'#a0dbab':cell===4?'#b75c42':isHardMode()?'#27302c':'#29362f';
   g.fillRect(x*ts,y*ts,Math.ceil(ts),Math.ceil(ts));
  }
- function pin(x,y,color,radius=.32){
-  if(!gameSession.seen[Math.floor(y)]?.[Math.floor(x)])return;
+ function pin(x,y,color,radius=.32,reveal=false){
+  if(!reveal&&!gameSession.seen[Math.floor(y)]?.[Math.floor(x)])return;
   g.fillStyle=color;g.beginPath();g.arc((x+.02)*ts,(y+.02)*ts,Math.max(1.7,ts*radius),0,Math.PI*2);g.fill();
  }
  for(const f of gameSession.fuses)if(!f.taken)pin(f.x,f.y,'#edc879',.28);
  for(const b of gameSession.bonusItems)if(!b.taken)pin(b.x,b.y,b.type==='coin'?'#e9c05a':b.type==='stamina'?'#a9edb5':b.type==='hardFreeze'?'#82d8fa':b.type==='hardSlow'?'#dcb0ef':'#a6b8d0',.23);
  for(const s of gameSession.interactables)if(s.type==='slot')pin(s.x,s.y,'#f2bf58',.4);
  for(const t of gameSession.terminals)pin(t.x,t.y,t.used?'#4fca7d':'#ecc38d',.29);
- if(isHardMode()&&gameSession.hardEmergency)pin(gameSession.hardEmergency.x,gameSession.hardEmergency.y,'#f64539',.48);
+ if(isHardMode()&&gameSession.hardEmergency)pin(gameSession.hardEmergency.x,gameSession.hardEmergency.y,'#f64539',.48,true);
  for(const p of gameSession.props)if(p.type==='hazard'&&(!p.expires||p.expires>gameSession.elapsed))pin(p.x,p.y,'#63b963',.19);
  if(gameSession.player.collected===gameSession.GOAL&&gameSession.terminals.every(t=>t.used)){
   g.fillStyle='#8bf0b8';g.fillRect(gameSession.exitCell.x*ts,gameSession.exitCell.y*ts,Math.ceil(ts),Math.ceil(ts));
@@ -4091,26 +4232,6 @@ function assignChampion(g,variant){
  g.nextTrail=0;g.nextPulse=30+rnd()*60;
  return g;
 }
-function scatterHardRocks(spawn,desired){
- const avoid=[spawn,{x:gameSession.exitCell.x,y:gameSession.exitCell.y},...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards];
- const candidates=dungeonEmptyCells(spawn.x,spawn.y).filter(c=>c.d>9&&
-   [[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dy])=>gameSession.world[c.y+dy]?.[c.x+dx]===0) &&
-   (()=>{let localOpen=0;for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++)if(gameSession.world[c.y+oy]?.[c.x+ox]===0)localOpen++;return localOpen>=8;})() &&
-   avoid.every(p=>Math.hypot((p.x||0)-c.x-.5,(p.y||0)-c.y-.5)>2.3));
- // Deterministic shuffle, while keeping the guaranteed route to every objective.
- candidates.sort(()=>rnd()-.5);
- const important=[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards];
- let placed=0;
- for(const c of candidates){
-   if(placed>=desired)break;
-   if(gameSession.hardRocks.some(r=>Math.hypot(r.x-c.x-.5,r.y-c.y-.5)<2.5))continue;
-   gameSession.world[c.y][c.x]=5;const d=bfsDistances(spawn.x,spawn.y);
-   const pass=important.every(q=>d[Math.floor(q.y)]?.[Math.floor(q.x)]>=0)&&[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>d[gameSession.exitCell.y+dy]?.[gameSession.exitCell.x+dx]>=0);
-   if(!pass){gameSession.world[c.y][c.x]=0;continue;}
-   const rock={type:'rock',x:c.x+.5,y:c.y+.5,phase:rnd()*TAU,size:.58+rnd()*.10};
-   gameSession.hardRocks.push(rock);gameSession.props.push(rock);placed++;
- }
-}
 function resetHard(){
  const stage=hardStage()||1;
  document.body.classList.remove('level2','final-level','pig-level','procedural-level','hard-detected');
@@ -4120,7 +4241,7 @@ function resetHard(){
  requestedSeed=null;hardGenerateMap(hardSeed,stage);
  const spawn={x:7,y:7},cells=dungeonEmptyCells(spawn.x,spawn.y);
  gameSession.GOAL=[0,8,9,10,9,11][stage];
- gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.hardRocks=[];
+ gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];
  // Portal is not allowed to split routes between the player and objectives.
  const candidates=cells.slice().sort((a,b)=>b.d-a.d);
  let exit=candidates.find(c=>c.d>35&&gameSession.world[c.y][c.x]===0&&
@@ -4167,8 +4288,6 @@ function resetHard(){
    }
  }
  gameSession.world[exit.y][exit.x]=3;
- // Rocks are solid, block AI routes, and never isolate an objective.
- scatterHardRocks(spawn,gameSession.level===13&&customGameConfig.difficulty==='normal'?12:[0,26,34,41,50,54][stage]);
  scatterEnvironmentalProps(16+stage*4,9+stage*2,[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,spawn]);
  gameSession.seen=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(false));
  commonFacilityReset();
@@ -4210,23 +4329,36 @@ function useHardFreeze(){
  gameSession.player.freezeCharges--;gameSession.player.inventory.freeze=gameSession.player.freezeCharges;target.frozen=true;target.path=[];target.state='frozen';
  showToast('STWOR ZAMROZONY · DOTYK NADAL ZABIJA',3.5);playUnlock();updateInventoryUI();
 }
+function placeEmergencyReactors(){
+ if(!Number.isFinite(gameSession.hardNextEmergency)||gameSession.level===12||!isHardMode())return;
+ const player=gameSession.player,room=gameSession.safeRoom;
+ const reserved=[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards,
+  ...gameSession.props,{x:gameSession.exitCell.x+.5,y:gameSession.exitCell.y+.5}];
+ const cells=dungeonEmptyCells(Math.floor(player.x),Math.floor(player.y)).filter(c=>c.d>=9&&
+  (!room||c.x<room.left-1||c.x>room.left+room.side||c.y<room.top-1||c.y>room.top+room.side)&&
+  reserved.every(p=>Math.hypot(p.x-c.x-.5,p.y-c.y-.5)>=2)&&
+  [[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>gameSession.world[c.y+dy]?.[c.x+dx]===0).length>=3);
+ const selected=chooseFarCells(cells,8,9,[]);
+ gameSession.emergencyReactors=selected.map((c,index)=>({
+  id:'emergency-reactor-'+index,x:c.x+.5,y:c.y+.5
+ }));
+}
 function triggerHardEmergency(){
- const sx=Math.floor(gameSession.player.x),sy=Math.floor(gameSession.player.y),dist=bfsDistances(sx,sy);
- const options=[];
- for(let y=2;y<gameSession.N-2;y++)for(let x=2;x<gameSession.N-2;x++){
-  if(gameSession.world[y][x]!==0||dist[y][x]<7||dist[y][x]>20)continue;
-  if(gameSession.fuses.some(f=>!f.taken&&Math.hypot(f.x-x-.5,f.y-y-.5)<2))continue;
-  if(gameSession.terminals.some(t=>Math.hypot(t.x-x-.5,t.y-y-.5)<2))continue;
-  if(gameSession.hardRocks.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<2))continue;
-  options.push({x,y,d:dist[y][x]});
- }
- options.sort((a,b)=>Math.abs(a.d-13)-Math.abs(b.d-13));
- const q=options[Math.min(options.length-1,Math.floor(rnd()*Math.min(12,options.length)))]||{x:sx,y:sy};
- gameSession.hardEmergency={x:q.x+.5,y:q.y+.5,time:45};
- gameSession.interactables.push({id:'hard-repair',x:gameSession.hardEmergency.x,y:gameSession.hardEmergency.y,type:'repair',title:'REPAIR THE EMERGENCY REACTOR',used:false});
+ if(gameSession.hardEmergency)return;
+ if(isSafeRoomProtected()){gameSession.hardNextEmergency=gameSession.elapsed+12;return;}
+ const player=gameSession.player;
+ const routes=bfsDistances(Math.floor(player.x),Math.floor(player.y));
+ const candidates=gameSession.emergencyReactors.map(reactor=>({
+  reactor,distance:routes[Math.floor(reactor.y)]?.[Math.floor(reactor.x)]??-1
+ })).filter(({distance,reactor})=>distance>=8&&Math.hypot(reactor.x-player.x,reactor.y-player.y)>=5);
+ if(!candidates.length){gameSession.hardNextEmergency=gameSession.elapsed+12;return;}
+ const {reactor,distance}=candidates[Math.floor(rnd()*candidates.length)];
+ const time=Math.ceil(45+REACTOR_HOLD_SECONDS+distance/2.3);
+ gameSession.hardEmergency={reactor,x:reactor.x,y:reactor.y,time};
+ gameSession.interactables.push({id:'hard-repair',x:reactor.x,y:reactor.y,type:'repair',title:'REPAIR REACTOR',used:false});
  $('hardEmergency').hidden=false;
- showToast('ALARM · REPAIR REACTOR IN 45 SECONDS',4);
- addNoise(gameSession.hardEmergency.x,gameSession.hardEmergency.y,20,'alarm');playSting();if(typeof createGameSample==='function')createGameSample('metalCrack',.40);
+ showToast('ALARM · REPAIR REACTOR IN '+time+' SECONDS',4);
+ addNoise(reactor.x,reactor.y,20,'alarm');playSting();createGameSample('metalCrack',.40);
 }
 function finishHardEmergency(){
  gameSession.hardEmergency=null;gameSession.interactables=gameSession.interactables.filter(o=>o.id!=='hard-repair');
@@ -4239,8 +4371,8 @@ function updateHard(dt){
  if(!gameSession.hardEmergency&&gameSession.elapsed>=gameSession.hardNextEmergency)triggerHardEmergency();
  if(gameSession.hardEmergency){
   gameSession.hardEmergency.time-=dt;
-  $('hardEmergencyTime').textContent='00:'+String(Math.max(0,Math.ceil(gameSession.hardEmergency.time))).padStart(2,'0');
-  $('hardEmergencyDistance').textContent='DO PANELU: '+Math.round(Math.hypot(gameSession.player.x-gameSession.hardEmergency.x,gameSession.player.y-gameSession.hardEmergency.y))+' M · E';
+  $('hardEmergencyTime').textContent=formatTime(Math.max(0,Math.ceil(gameSession.hardEmergency.time)));
+  $('hardEmergencyDistance').textContent='DO PANELU: '+Math.round(Math.hypot(gameSession.player.x-gameSession.hardEmergency.x,gameSession.player.y-gameSession.hardEmergency.y))+' M · HOLD E';
   if(gameSession.hardEmergency.time<=0){lose('meltdown');return;}
  }
  for(const g of gameSession.guards){
@@ -4267,19 +4399,49 @@ function updateHard(dt){
 // SOURCE: js/gameplay/inventory.js
 // Usable inventory: items remain in the player's possession until explicitly activated.
 function ensureInventory(){
- if(!gameSession.player.inventory)gameSession.player.inventory={energy:[],slow:0,freeze:0};
- return gameSession.player.inventory;
+ const inventory=gameSession.player.inventory??={energy:[],slow:0,freeze:0,shield:0};
+ inventory.shield??=0;
+ return inventory;
 }
+const INVENTORY_SLOTS=[
+ ['inventoryDrink','Drink',useEnergyDrink],
+ ['inventorySlow','Slow device',useHardSlow],
+ ['inventoryFreeze','Freeze device',useHardFreeze],
+ ['inventoryShield','Shield',useShield]
+];
 function updateInventoryUI(){
  const inv=ensureInventory();
- const counters={inventoryDrinkCount:inv.energy.length,inventorySlowCount:gameSession.player.slowCharges||0,inventoryFreezeCount:gameSession.player.freezeCharges||0};
- for(const [id,v] of Object.entries(counters)){const e=$(id);if(e)e.textContent=String(v)}
+ const counts=[inv.energy.length,gameSession.player.slowCharges||0,gameSession.player.freezeCharges||0,inv.shield];
  const drink=$('inventoryDrinkSprite');
  if(drink&&inv.energy.length)drink.src=ENERGY_DRINK_PNGS[inv.energy[0].energySprite||0];
- for(const [id,n] of [['inventoryDrink',inv.energy.length],['inventorySlow',gameSession.player.slowCharges||0],['inventoryFreeze',gameSession.player.freezeCharges||0]]){
-  const e=$(id);if(e){e.disabled=n<1;e.setAttribute('aria-label',id+' · '+n+' szt.')}
- }
- const root=$('activeInventory');if(root)root.classList.toggle('inv-empty',!inv.energy.length&&!inv.slow&&!inv.freeze);
+ INVENTORY_SLOTS.forEach(([id,label],index)=>{
+  const button=$(id),count=counts[index],selected=index===gameSession.inventorySlot;
+  if(button){
+   button.classList.toggle('is-empty',count===0);
+   button.classList.toggle('is-selected',selected);
+   button.setAttribute('aria-pressed',String(selected));
+   button.setAttribute('aria-label',label+' · '+count);
+  }
+  const counter=$(id+'Count');
+  if(counter)counter.textContent=String(count);
+ });
+ $('activeInventory')?.classList.toggle('inv-empty',!counts.some(Boolean));
+}
+function selectInventorySlot(index){
+ if(gameSession.state!=='playing'||gameSession.graphicsDemo)return;
+ gameSession.inventorySlot=(index+INVENTORY_SLOTS.length)%INVENTORY_SLOTS.length;
+ updateInventoryUI();
+}
+function useSelectedItem(){
+ if(gameSession.state==='playing'&&!gameSession.graphicsDemo)INVENTORY_SLOTS[gameSession.inventorySlot][2]();
+}
+function useShield(){
+ if(gameSession.state!=='playing')return;
+ const inventory=ensureInventory();
+ if(!inventory.shield){showToast('NO SHIELDS',1.6);return;}
+ inventory.shield--;
+ gameSession.player.shieldUntil=Math.max(gameSession.elapsed,gameSession.player.shieldUntil||0)+12;
+ showToast('SHIELD ACTIVE · 12 SEC',2.4);playUnlock();updateInventoryUI();
 }
 function useEnergyDrink(){
  if(gameSession.state!=='playing')return;
@@ -4296,14 +4458,11 @@ function useEnergyDrink(){
  }
  updateInventoryUI();
 }
-for(const [id,fn] of [['inventoryDrink',useEnergyDrink],['inventorySlow',useHardSlow],['inventoryFreeze',useHardFreeze]]){
- const button=$(id);if(button)button.addEventListener('click',fn);
-}
-window.addEventListener('keydown',e=>{
- if(gameSession.state!=='playing'||e.repeat||e.target?.matches?.('input,textarea,select'))return;
- if(e.code==='Digit1')useEnergyDrink();
- if(e.code==='Digit2'||e.code==='KeyZ')useHardSlow();
- if(e.code==='Digit3'||e.code==='KeyX')useHardFreeze();
+INVENTORY_SLOTS.forEach(([id],index)=>{
+ $(id)?.addEventListener('click',()=>{
+  selectInventorySlot(index);
+  if(isCoarse)useSelectedItem();
+ });
 });
 
 ;
@@ -4325,9 +4484,37 @@ const coop=Object.freeze({
 const SLOT_REWARD_WEIGHTS=Object.freeze({freeze:15,slow:35,none:50});
 
 function isSafeRoomProtected(){
- return Boolean(gameSession.player&&bossRushRooms().some(room=>!room.open&&
-  Math.floor(gameSession.player.x)>=room.left+1&&Math.floor(gameSession.player.x)<=room.left+room.side-2&&
-  Math.floor(gameSession.player.y)>=room.top+1&&Math.floor(gameSession.player.y)<=room.top+room.side-2));
+ const p=gameSession.player;
+ return Boolean(p&&bossRushRooms().some(room=>{
+  const margin=room.thinWalls?.5+SAFE_ROOM_WALL_THICKNESS/2:1;
+  return !room.open&&p.x>=room.left+margin&&p.x<room.left+room.side-margin&&
+    p.y>=room.top+margin&&p.y<room.top+room.side-margin;
+ }));
+}
+function installThinSafeRoomWalls(room){
+ const {left,top,side,doorX,doorY}=room;
+ const right=left+side-1,bottom=top+side-1;
+ const thickness=SAFE_ROOM_WALL_THICKNESS,half=thickness/2;
+ const install=(horizontal,wall,from,to,door)=>{
+  const add=(begin,end)=>{
+   if(end<=begin)return;
+   const middle=(begin+end)/2,length=end-begin,cross=wall+.5;
+   gameSession.safeRoomFurniture.push({
+    x:horizontal?middle:cross,y:horizontal?cross:middle,z:.5,
+    w:horizontal?length:thickness,d:horizontal?thickness:length,h:1,material:SAFE_ROOM_WALL_MATERIAL
+   });
+  };
+  if(door!==null){add(from,door);add(door+1,to);}
+  else add(from,to);
+ };
+ install(true,top,left+.5-half,right+.5+half,doorY===top?doorX:null);
+ install(true,bottom,left+.5-half,right+.5+half,doorY===bottom?doorX:null);
+ install(false,left,top+.5,bottom+.5,doorX===left?doorY:null);
+ install(false,right,top+.5,bottom+.5,doorX===right?doorY:null);
+ for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+  if(gameSession.world[y][x]===8)gameSession.world[y][x]=THIN_SAFE_ROOM_TILE;
+ }
+ room.thinWalls=true;
 }
 function pickSafeRoomPosterMaterials(count=3){const pool=[7,8,9,10,11];for(let i=pool.length-1;i>0;i--){const j=Math.floor(mapRandom()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}return pool.slice(0,count)}
 
@@ -4455,23 +4642,25 @@ function setupSafeRoomAndCoins(){
   // Meshes use the exact GLB topology, UVs and colours, not rotating sprites.
   // Only a simplified cabinet bounding box remains for physical collisions.
   gameSession.safeRoom={...room,open:false,machineX,machineY,machineYaw:machine.machineYaw,fireX,fireY,treeX:null,treeY:null,treeYaw:0};
+  if(renderStage()===1)installThinSafeRoomWalls(gameSession.safeRoom);
   gameSession.interactables.push({id:'slot-machine',type:'slot',title:'SLOT MACHINE · 1 COIN',x:machineX,y:machineY,used:false});
   const put=(x,y,z,w,d,h,material,collisionOnly=false)=>gameSession.safeRoomFurniture.push({x,y,z,w,d,h,material,collisionOnly});
   put(machineX,machineY,.39,.69,.50,.78,1,true);
   // The imported campfire GLB replaces the previous firepit/flame cubes.
   // Flat posters attached to room walls; no billboard rotation.
+  const inset=gameSession.safeRoom.thinWalls?.61:1.03;
   const posterAxis=(room.doorY===room.top||room.doorY===room.top+room.side-1)?'vertical':'horizontal';
   const posterMaterials=pickSafeRoomPosterMaterials(3);
   const posterSizes=[[.70,.50],[.72,.56],[.68,.48]];
   const posterPlacements=posterAxis==='vertical'
    ?[
-     {x:room.left+1.03,y:room.top+1.55,vertical:true},
-     {x:room.left+1.03,y:room.top+room.side-1.55,vertical:true},
-     {x:room.left+room.side-1.03,y:room.centerY,vertical:true}
+     {x:room.left+inset,y:room.top+1.55,vertical:true},
+     {x:room.left+inset,y:room.top+room.side-1.55,vertical:true},
+     {x:room.left+room.side-inset,y:room.centerY,vertical:true}
     ]
    :[
-     {x:room.left+1.55,y:room.top+1.03,vertical:false},
-     {x:room.left+room.side-1.55,y:room.top+1.03,vertical:false},
+     {x:room.left+1.55,y:room.top+inset,vertical:false},
+     {x:room.left+room.side-1.55,y:room.top+inset,vertical:false},
      {x:room.centerX,y:room.top+room.side-1.03,vertical:false}
     ];
   posterMaterials.forEach((material,index)=>{const [w,h]=posterSizes[index]||[.70,.50];const cfg=posterPlacements[index];if(!cfg)return;put(cfg.x,cfg.y,.58,cfg.vertical?.028:w,cfg.vertical?w:.028,h,material)});
@@ -4495,16 +4684,6 @@ function setupSafeRoomAndCoins(){
   gameSession.bonusItems.push({id:'coin-'+n,type:'coin',name:'1 Coin',x:cell.x+.5,y:cell.y+.5,taken:false,quantity:1,phase:mapRandom()*Math.PI*2});n++;
  }
  updateCoinCounter();
-}
-function pickupCoins(){
- if(!gameSession.player)return;
- let acquired=0;
- for(const coin of gameSession.bonusItems){
-  if(coin.type==='coin'&&!coin.taken&&Math.hypot(coin.x-gameSession.player.x,coin.y-gameSession.player.y)<.69&&lineOfSight(gameSession.player.x,gameSession.player.y,coin.x,coin.y)){
-   coin.taken=true;acquired++;gameSession.stats.coins=(gameSession.stats.coins||0)+1;gameSession.player.coins=(gameSession.player.coins||0)+1;
-  }
- }
- if(acquired){playCoinPickup();showToast('FOUND '+acquired+' GROSZ'+(acquired===1?'':'E'),2);updateCoinCounter();}
 }
 function safeRoomInteraction(room){
  if(gameSession.state!=='playing'||!bossRushRooms().includes(room)||!lineOfSight(gameSession.player.x,gameSession.player.y,room.doorX+.5,room.doorY+.5,{allowTargetTile:true}))return false;
@@ -4577,12 +4756,14 @@ function bossRushSafeRoom(stage){
  const machineX=left+5.5,machineY=top+side-2.12;
  const room={left,top,side,doorX,doorY,centerX:left+side/2,centerY:top+side/2,
   machineX,machineY,machineYaw:Math.PI,fireX:left+7.5,fireY:top+5.2,treeX:null,treeY:null,treeYaw:0,open:false,rushSector:stage};
+ if(stage===1)installThinSafeRoomWalls(room);
  gameSession.rushSafeRooms.push(room);
  gameSession.interactables.push({id:'rush-slot-'+stage,type:'slot',title:'SLOT MACHINE / 1 COIN',x:machineX,y:machineY,used:false,rushSector:stage});
  const add=(x,y,z,w,d,h,material,collisionOnly=false)=>gameSession.safeRoomFurniture.push({x,y,z,w,d,h,material,collisionOnly});
  add(machineX,machineY,.39,.69,.50,.78,1,true);
  const posterMaterials=pickSafeRoomPosterMaterials(3);
- [[left+1.03,top+2.0,.028,.52],[left+1.03,top+side-2.0,.028,.56],[left+side-1.03,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
+ const inset=room.thinWalls?.61:1.03;
+ [[left+inset,top+2.0,.028,.52],[left+inset,top+side-2.0,.028,.56],[left+side-inset,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
  return room;
 }
 function bossRushGenerateMap(){
@@ -4665,35 +4846,6 @@ function bossRushSpawn(stage){
   gameSession.guards.push(g);
  }
 }
-function bossRushScatterRocks(stage){
- const L=BOSS_RUSH_STAGE_LEFT[stage];
- const reserved=[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards].filter(o=>o.rushSector===stage||o.x>=L&&o.x<L+21);
- const spots=[];
- for(let y=13;y<90;y++)for(let x=L+3;x<L+20;x++){
-  if(gameSession.world[y][x]!==0||[17,18,39,40,60,61,82,83].includes(y))continue;
-  if(reserved.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<2.0))continue;
-  // Avoid the two primary longitudinal corridors and any tight chokepoints.
-  if([L+5,L+6,L+15,L+16].includes(x))continue;
-  const orth=[[1,0],[-1,0],[0,1],[0,-1]];
-  if(orth.some(([dx,dy])=>gameSession.world[y+dy]?.[x+dx]!==0))continue;
-  let localOpen=0;for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++)if(gameSession.world[y+oy]?.[x+ox]===0)localOpen++;
-  if(localOpen<8)continue;
-  spots.push({x,y});
- }
- for(let i=spots.length-1;i>0;i--){let j=Math.floor(rnd()*(i+1));[spots[i],spots[j]]=[spots[j],spots[i]];}
- let count=0;
- for(const p of spots){
-  if(count>=7)break;
-  if(gameSession.hardRocks.some(r=>Math.hypot(r.x-p.x-.5,r.y-p.y-.5)<3))continue;
-  gameSession.world[p.y][p.x]=5;
-  const d=bfsDistances(7,18);
-  const exitsConnected=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>d[gameSession.exitCell.y+dy]?.[gameSession.exitCell.x+dx]>=0);
-  const reservedConnected=reserved.every(q=>d[Math.floor(q.y)]?.[Math.floor(q.x)]>=0);
-  if(!exitsConnected||!reservedConnected){gameSession.world[p.y][p.x]=0;continue;}
-  const rock={type:'rock',x:p.x+.5,y:p.y+.5,size:.58+rnd()*.10,phase:rnd()*TAU};
-  gameSession.hardRocks.push(rock);gameSession.props.push(rock);count++;
- }
-}
 function resetBossRush(){
  // Five sectors on one persistent map, not five separate scene loads.
  document.body.classList.remove('level2','final-level','pig-level','procedural-level','sector-five');
@@ -4702,7 +4854,7 @@ function resetBossRush(){
  const runSeed=requestedSeed!=null?(requestedSeed|0):((Date.now()^Math.floor(Math.random()*2147483647))|0);
  requestedSeed=null;seed=runSeed;
  bossRushGenerateMap();
- gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.guards=[];gameSession.hardRocks=[];
+ gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.guards=[];
  gameSession.safeRoom=null;gameSession.safeRoomFurniture=[];gameSession.rushSafeRooms=[];
  gameSession.GOAL=BOSS_RUSH_GOALS.reduce((a,b)=>a+b,0);
  const stageProgress=[];
@@ -4716,7 +4868,6 @@ function resetBossRush(){
  // Position player at the entrance before creating enemy AI.
  gameSession.player={x:9.5,y:18.5,a:0,pitch:0,stamina:isHardMode()?150:100,maxStamina:isHardMode()?150:100,collected:0,moving:false,flash:true,hidden:false,hp:100,maxHp:100};
  for(let stage=1;stage<=5;stage++)bossRushSpawn(stage);
- for(let stage=1;stage<=5;stage++)bossRushScatterRocks(stage);
  gameSession.seen=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(false));
  commonFacilityReset();
  gameSession.player.x=9.5;gameSession.player.y=18.5;
@@ -4839,13 +4990,13 @@ function applyCustomOptions(){
 // tile must have a replacement path in its eight-cell ring. By induction,
 // adding any number of these props cannot disconnect any original component.
 const DECOR_DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
-function decorFloorAllowed(world,x,y){
+function decorFloorAllowed(world,x,y,backed=false){
  if(world[y]?.[x]!==0)return false;
  const open=(xx,yy)=>world[yy]?.[xx]===0;
  const neighbors=DECOR_DIRS.map(([dx,dy])=>[x+dx,y+dy]).filter(([xx,yy])=>open(xx,yy));
- if(neighbors.length<3)return false;
+ if(neighbors.length<(backed?2:3))return false;
  let count=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(open(x+dx,y+dy))count++;
- if(count<7)return false; // never a single-width corridor or narrow corner
+ if(!backed&&count<7)return false; // never a single-width corridor or narrow corner
  const seen=new Set(),queue=[neighbors[0]];seen.add(neighbors[0].join(','));
  for(let i=0;i<queue.length;i++)for(const [dx,dy] of DECOR_DIRS){
   const nx=queue[i][0]+dx,ny=queue[i][1]+dy,key=nx+','+ny;
@@ -4885,7 +5036,7 @@ function scatterLevelDecor(){
  const poseRandom=()=>{poseSeed=(Math.imul(poseSeed,1664525)+1013904223)|0;return (poseSeed>>>0)/4294967296;};
  const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
  const rooms=s.level===12?s.rushSafeRooms:s.safeRoom?[s.safeRoom]:[];
- const reserved=[s.player,...s.guards,...s.fuses,...s.terminals,...s.interactables,...s.bonusItems,...s.props.filter(p=>p.type==='hazard'||p.type==='rock'),...(s.level===1?[s.cat]:[]),{x:s.exitCell.x+.5,y:s.exitCell.y+.5},...s.doors.map(d=>({x:d.x+.5,y:d.y+.5})),...rooms.map(r=>({x:r.doorX+.5,y:r.doorY+.5}))].filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y));
+ const reserved=[s.player,...s.guards,...s.fuses,...s.terminals,...s.emergencyReactors,...s.interactables,...s.bonusItems,...s.props.filter(p=>p.type==='hazard'||p.type==='rock'),...(s.level===1?[s.cat]:[]),{x:s.exitCell.x+.5,y:s.exitCell.y+.5},...s.doors.map(d=>({x:d.x+.5,y:d.y+.5})),...rooms.map(r=>({x:r.doorX+.5,y:r.doorY+.5}))].filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y));
  const inRoom=(x,y)=>rooms.some(r=>x>=r.left-1&&x<=r.left+r.side&&y>=r.top-1&&y<=r.top+r.side);
  const placed=[];
  for(const stage of s.level===12?[1,2,3,4,5]:[renderStage()]){
@@ -4894,7 +5045,7 @@ function scatterLevelDecor(){
    if(world[y][x]!==0||inRoom(x,y)||(s.level===12&&bossRushArea(x)!==stage))continue;
    if(reserved.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<2.0))continue;
    // Gates, exits and safe-room approaches must never be occupied.
-   if(DECOR_DIRS.some(([dx,dy])=>[3,4,8].includes(world[y+dy]?.[x+dx])))continue;
+   if(DECOR_DIRS.some(([dx,dy])=>[3,4,8,THIN_SAFE_ROOM_TILE].includes(world[y+dy]?.[x+dx])))continue;
    cells.push({x,y});
   }
   shuffle(cells);
@@ -4904,18 +5055,21 @@ function scatterLevelDecor(){
   for(let pass=0;pass<(stage===5?1:3);pass++)plan.push(...shuffle(keys.slice()));
   if(stage===5){plan.push('mannequin','lastClock','mannequin','lastClock');if(s.level!==12)plan.push(...shuffle(keys.slice()));}
   if(stage!==5&&s.level!==12&&N>=65)plan.push(...shuffle(keys.slice()));
+  let cabinetCount=0;
   for(const kind of plan){
    const spec=DECOR_MODELS[kind];if(!spec)continue;
    if(spec.triangles>8000&&placed.filter(p=>p.model===kind&&p.stage===stage).length>=2)continue;
    const isWall=spec.placement==='wall';
-   const againstWall=kind==='bench'||kind==='pipe';
+   const fallenCabinet=kind==='cabinet'&&cabinetCount++%2===1;
+   const standingCabinet=kind==='cabinet'&&!fallenCabinet;
+   const againstWall=kind==='bench'||kind==='pipe'||standingCabinet;
    let selected=null;
    for(const cell of cells){
     const {x,y}=cell;if(world[y][x]!==0)continue;
     if(placed.some(p=>Math.hypot(p.cellX-x,p.cellY-y)<2.6))continue;
     const walls=DECOR_DIRS.filter(([dx,dy])=>world[y+dy]?.[x+dx]===1);
     if(isWall){if(!walls.length)continue;selected={...cell,wall:walls[Math.floor(random()*walls.length)]};break;}
-    if(!decorFloorAllowed(world,x,y))continue;
+    if(!decorFloorAllowed(world,x,y,standingCabinet))continue;
     if(againstWall&&!walls.length)continue;
     selected=againstWall?{...cell,wall:walls[Math.floor(poseRandom()*walls.length)]}:cell;break;
    }
@@ -4926,6 +5080,12 @@ function scatterLevelDecor(){
    else {
     world[y][x]=5;
     if(againstWall){const pose=wallFloorDecorPose(kind,spec,wall);px+=pose.dx;py+=pose.dy;yaw=pose.yaw;}
+    if(fallenCabinet){
+     size=.84;tilt=poseRandom()<.5?Math.PI/2:-Math.PI/2;
+     const shift=Math.sign(tilt)*spec.height*size/2;
+     px-=Math.sin(yaw)*shift;py+=Math.cos(yaw)*shift;
+     z=spec.depth*size;radius=Math.hypot(spec.height/2,spec.radius)*size;
+    }
     if(kind==='box'||kind==='crt'){
      const pose=looseDecorPose(kind,spec,poseRandom);
      px+=pose.dx;py+=pose.dy;z=pose.z;yaw=pose.yaw;size=pose.size;tilt=pose.tilt;radius=pose.radius;
@@ -5162,8 +5322,8 @@ function reset(){
  // Avoid stale UI diff caches when returning to a mode with the same counters.
  delete $('missionDetails').dataset.stats;delete $('stealthStatus').dataset.stealth;
  const mode=modeFor(gameSession.level);mode.generate();
- if(mode.roomPolicy==='owned'){scatterLevelDecor();return;}
- if(mode.roomPolicy==='optional'&&!customGameConfig.safeRooms){gameSession.player.coins=0;updateCoinCounter();scatterLevelDecor();return;}
+ if(mode.roomPolicy==='owned'){finishMapPlacement();return;}
+ if(mode.roomPolicy==='optional'&&!customGameConfig.safeRooms){gameSession.player.coins=0;updateCoinCounter();finishMapPlacement();return;}
  setupSafeRoomAndCoins();
  if(mode.roomPolicy==='optional'){
   for(let attempt=0;attempt<7&&!gameSession.safeRoom;attempt++){
@@ -5171,9 +5331,18 @@ function reset(){
   }
   if(!gameSession.safeRoom)showToast('COULD NOT PLACE SAFE ROOM: CHOOSE A LARGER MAP',3);
  }
- scatterLevelDecor();
+ finishMapPlacement();
 }
-function update(dt){if(gameSession.graphicsDemo)updateGraphicsDemo(dt);else modeFor(gameSession.level).step(dt);}
+function finishMapPlacement(){
+ placeEmergencyReactors();
+ scatterLevelDecor();
+ placeTerminalPoses();
+}
+function update(dt){
+ if(gameSession.graphicsDemo)updateGraphicsDemo(dt);
+ else modeFor(gameSession.level).step(dt);
+ if(gameSession.interactionHold)updateInteractionHold(dt);
+}
 
 ;
 // SOURCE: js/engine/loop.js
@@ -5257,7 +5426,7 @@ function setState(next){
  if(previous!==next&&typeof profileCheckpoint==='function')profileCheckpoint();
  if(previous!==next){
   resetSimulationClock();
-  if(previous==='playing'){keys={};resetMobileInputs();}
+  if(previous==='playing'){keys={};gameSession.interactionHold=null;resetMobileInputs();}
   if(previous==='jumpscare'){sessionTimers.clear('death');$('jump').classList.remove('show');}
  }
  if(next==='menu')cancelTransition();
@@ -5695,8 +5864,8 @@ $('difficultyHard').addEventListener('click',()=>chooseDifficulty('hard'));
 personAImg.src=PERSON_A_PNG;
 personBImg.src=PERSON_B_PNG;
 window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(gameSession.state==='playing')pause();else if(gameSession.state==='paused')resume()}if(gameSession.state==='playing'){if(e.code==='KeyM')beginMapHold();if(e.code==='KeyV')rearPeek=true;if(e.code==='KeyE'){if(coop.role==='guest')coop.sendAction('interact');else interact();}if(e.code==='KeyF'){gameSession.player.flash=!gameSession.player.flash;showToast(gameSession.player.flash?'FLASHLIGHT ON':'FLASHLIGHT OFF',1)} }});
-window.addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='KeyM')endMapHold();if(e.code==='KeyV')rearPeek=false;});
-window.addEventListener('blur',()=>{keys={};rearPeek=false;endMapHold(true);if(gameSession.state==='playing'&&!isCoarse)pause()});
+window.addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='KeyM')endMapHold();if(e.code==='KeyE')gameSession.interactionHold=null;if(e.code==='KeyV')rearPeek=false;});
+window.addEventListener('blur',()=>{keys={};gameSession.interactionHold=null;rearPeek=false;endMapHold(true);if(gameSession.state==='playing'&&!isCoarse)pause()});
 // Mouse-look: unrestricted yaw, clamped pitch (no upside-down camera).
 let pointerLockBegan=-10000;
 document.addEventListener('mousemove',e=>{
@@ -5708,6 +5877,16 @@ document.addEventListener('mousemove',e=>{
  setCameraLook(clamp(dx,-85,85)*.0028*gameSettings.mouseSensitivity,-clamp(dy,-85,85)*.00235*gameSettings.mouseSensitivity);
 });
 document.addEventListener('pointerlockchange',()=>{pointerLockBegan=performance.now();});
+window.addEventListener('wheel',e=>{
+ if(gameSession.state!=='playing'||gameSession.graphicsDemo||UI.map.classList.contains('expanded')||!e.deltaY||e.ctrlKey)return;
+ e.preventDefault();
+ selectInventorySlot(gameSession.inventorySlot+Math.sign(e.deltaY));
+},{passive:false});
+C.addEventListener('mousedown',e=>{
+ if(e.button!==2||gameSession.state!=='playing'||UI.map.classList.contains('expanded'))return;
+ e.preventDefault();useSelectedItem();
+});
+C.addEventListener('contextmenu',e=>{if(gameSession.state==='playing')e.preventDefault();});
 C.addEventListener('click',()=>{
  if(gameSession.state==='playing'&&!isCoarse&&document.pointerLockElement!==C)requestGamePointerLock();
 });
@@ -5735,7 +5914,21 @@ function toggleMobileCrouch(){
  el.setAttribute('aria-pressed',String(touchCrouch));
  el.textContent=touchCrouch?'CICHO ✓':'SNEAK';
 }
-$('interactBtn').addEventListener('click',()=>{if(coop.role==='guest')coop.sendAction('interact');else interact();});
+const interactButton=$('interactBtn');
+let interactPointer=null;
+function pressInteract(){if(coop.role==='guest')coop.sendAction('interact');else interact();}
+interactButton.addEventListener('pointerdown',e=>{
+ if(interactPointer!==null||gameSession.state!=='playing'||e.button!==0)return;
+ interactPointer=e.pointerId;
+ interactButton.setPointerCapture(e.pointerId);
+ pressInteract();
+});
+function releaseInteract(e){
+ if(interactPointer!==e.pointerId)return;
+ interactPointer=null;gameSession.interactionHold=null;
+}
+for(const type of ['pointerup','pointercancel','lostpointercapture'])interactButton.addEventListener(type,releaseInteract);
+interactButton.addEventListener('click',e=>{if(e.detail===0&&gameSession.state==='playing'&&!needsInteractionHold(findInteractable()))pressInteract();});
 $('crouchBtn').addEventListener('click',toggleMobileCrouch);
 $('flashMobileBtn').addEventListener('click',()=>{
  if(gameSession.state!=='playing')return;

@@ -22,7 +22,7 @@ def data_url(path):
     return f'data:{mime};base64,{base64.b64encode(asset.read_bytes()).decode("ascii")}'
 
 def inline_css(match):
-    css = (root / match.group(1)).read_text(encoding='utf-8')
+    css = (root / match.group(1).split("?")[0]).read_text(encoding='utf-8')
     for rel in ['blood-ui.png','handprints-ui.png','grease-ui.png','damage-ui.png','menu-blood-handprint.png']:
         css=css.replace("../assets/ui/"+rel, data_url('assets/ui/'+rel))
     return '<style>\n' + css + '\n</style>'
@@ -56,7 +56,7 @@ def combine(reader):
     return '\n;\n'.join('// SOURCE: '+path+'\n'+reader(path) for path in paths[:-1])+ready
 online = combine(script_source)
 (root/'js/game.bundle.js').write_text(online, encoding='utf-8')
-pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1\.3"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1\.3"></script>'
+pattern = r'<script src="js/game\.bundle\.js\?v=1\.7\.0-alpha\.1\.4"></script>\s*<script src="js/core/boot\.js\?v=1\.7\.0-alpha\.1\.4"></script>'
 bundle = combine(lambda path: script_source(path, embed_assets=True))
 boot = script_source(paths[-1], embed_assets=True)
 text, count = re.subn(pattern, lambda _: '<script>\n'+bundle+'\n</script>\n<script>\n'+boot+'\n</script>', text)

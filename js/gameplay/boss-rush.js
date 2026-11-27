@@ -36,12 +36,14 @@ function bossRushSafeRoom(stage){
  const machineX=left+5.5,machineY=top+side-2.12;
  const room={left,top,side,doorX,doorY,centerX:left+side/2,centerY:top+side/2,
   machineX,machineY,machineYaw:Math.PI,fireX:left+7.5,fireY:top+5.2,treeX:null,treeY:null,treeYaw:0,open:false,rushSector:stage};
+ if(stage===1)installThinSafeRoomWalls(room);
  gameSession.rushSafeRooms.push(room);
  gameSession.interactables.push({id:'rush-slot-'+stage,type:'slot',title:'SLOT MACHINE / 1 COIN',x:machineX,y:machineY,used:false,rushSector:stage});
  const add=(x,y,z,w,d,h,material,collisionOnly=false)=>gameSession.safeRoomFurniture.push({x,y,z,w,d,h,material,collisionOnly});
  add(machineX,machineY,.39,.69,.50,.78,1,true);
  const posterMaterials=pickSafeRoomPosterMaterials(3);
- [[left+1.03,top+2.0,.028,.52],[left+1.03,top+side-2.0,.028,.56],[left+side-1.03,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
+ const inset=room.thinWalls?.61:1.03;
+ [[left+inset,top+2.0,.028,.52],[left+inset,top+side-2.0,.028,.56],[left+side-inset,top+5.5,.028,.50]].forEach((cfg,index)=>add(cfg[0],cfg[1],.56,cfg[2],.70,cfg[3],posterMaterials[index]));
  return room;
 }
 function bossRushGenerateMap(){
@@ -124,35 +126,6 @@ function bossRushSpawn(stage){
   gameSession.guards.push(g);
  }
 }
-function bossRushScatterRocks(stage){
- const L=BOSS_RUSH_STAGE_LEFT[stage];
- const reserved=[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards].filter(o=>o.rushSector===stage||o.x>=L&&o.x<L+21);
- const spots=[];
- for(let y=13;y<90;y++)for(let x=L+3;x<L+20;x++){
-  if(gameSession.world[y][x]!==0||[17,18,39,40,60,61,82,83].includes(y))continue;
-  if(reserved.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<2.0))continue;
-  // Avoid the two primary longitudinal corridors and any tight chokepoints.
-  if([L+5,L+6,L+15,L+16].includes(x))continue;
-  const orth=[[1,0],[-1,0],[0,1],[0,-1]];
-  if(orth.some(([dx,dy])=>gameSession.world[y+dy]?.[x+dx]!==0))continue;
-  let localOpen=0;for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++)if(gameSession.world[y+oy]?.[x+ox]===0)localOpen++;
-  if(localOpen<8)continue;
-  spots.push({x,y});
- }
- for(let i=spots.length-1;i>0;i--){let j=Math.floor(rnd()*(i+1));[spots[i],spots[j]]=[spots[j],spots[i]];}
- let count=0;
- for(const p of spots){
-  if(count>=7)break;
-  if(gameSession.hardRocks.some(r=>Math.hypot(r.x-p.x-.5,r.y-p.y-.5)<3))continue;
-  gameSession.world[p.y][p.x]=5;
-  const d=bfsDistances(7,18);
-  const exitsConnected=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>d[gameSession.exitCell.y+dy]?.[gameSession.exitCell.x+dx]>=0);
-  const reservedConnected=reserved.every(q=>d[Math.floor(q.y)]?.[Math.floor(q.x)]>=0);
-  if(!exitsConnected||!reservedConnected){gameSession.world[p.y][p.x]=0;continue;}
-  const rock={type:'rock',x:p.x+.5,y:p.y+.5,size:.58+rnd()*.10,phase:rnd()*TAU};
-  gameSession.hardRocks.push(rock);gameSession.props.push(rock);count++;
- }
-}
 function resetBossRush(){
  // Five sectors on one persistent map, not five separate scene loads.
  document.body.classList.remove('level2','final-level','pig-level','procedural-level','sector-five');
@@ -161,7 +134,7 @@ function resetBossRush(){
  const runSeed=requestedSeed!=null?(requestedSeed|0):((Date.now()^Math.floor(Math.random()*2147483647))|0);
  requestedSeed=null;seed=runSeed;
  bossRushGenerateMap();
- gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.guards=[];gameSession.hardRocks=[];
+ gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.guards=[];
  gameSession.safeRoom=null;gameSession.safeRoomFurniture=[];gameSession.rushSafeRooms=[];
  gameSession.GOAL=BOSS_RUSH_GOALS.reduce((a,b)=>a+b,0);
  const stageProgress=[];
@@ -175,7 +148,6 @@ function resetBossRush(){
  // Position player at the entrance before creating enemy AI.
  gameSession.player={x:9.5,y:18.5,a:0,pitch:0,stamina:isHardMode()?150:100,maxStamina:isHardMode()?150:100,collected:0,moving:false,flash:true,hidden:false,hp:100,maxHp:100};
  for(let stage=1;stage<=5;stage++)bossRushSpawn(stage);
- for(let stage=1;stage<=5;stage++)bossRushScatterRocks(stage);
  gameSession.seen=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(false));
  commonFacilityReset();
  gameSession.player.x=9.5;gameSession.player.y=18.5;

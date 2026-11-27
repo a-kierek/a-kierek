@@ -30,8 +30,8 @@ function reset(){
  // Avoid stale UI diff caches when returning to a mode with the same counters.
  delete $('missionDetails').dataset.stats;delete $('stealthStatus').dataset.stealth;
  const mode=modeFor(gameSession.level);mode.generate();
- if(mode.roomPolicy==='owned'){scatterLevelDecor();return;}
- if(mode.roomPolicy==='optional'&&!customGameConfig.safeRooms){gameSession.player.coins=0;updateCoinCounter();scatterLevelDecor();return;}
+ if(mode.roomPolicy==='owned'){finishMapPlacement();return;}
+ if(mode.roomPolicy==='optional'&&!customGameConfig.safeRooms){gameSession.player.coins=0;updateCoinCounter();finishMapPlacement();return;}
  setupSafeRoomAndCoins();
  if(mode.roomPolicy==='optional'){
   for(let attempt=0;attempt<7&&!gameSession.safeRoom;attempt++){
@@ -39,6 +39,15 @@ function reset(){
   }
   if(!gameSession.safeRoom)showToast('COULD NOT PLACE SAFE ROOM: CHOOSE A LARGER MAP',3);
  }
- scatterLevelDecor();
+ finishMapPlacement();
 }
-function update(dt){if(gameSession.graphicsDemo)updateGraphicsDemo(dt);else modeFor(gameSession.level).step(dt);}
+function finishMapPlacement(){
+ placeEmergencyReactors();
+ scatterLevelDecor();
+ placeTerminalPoses();
+}
+function update(dt){
+ if(gameSession.graphicsDemo)updateGraphicsDemo(dt);
+ else modeFor(gameSession.level).step(dt);
+ if(gameSession.interactionHold)updateInteractionHold(dt);
+}

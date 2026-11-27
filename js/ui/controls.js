@@ -2,8 +2,8 @@
 personAImg.src=PERSON_A_PNG;
 personBImg.src=PERSON_B_PNG;
 window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(gameSession.state==='playing')pause();else if(gameSession.state==='paused')resume()}if(gameSession.state==='playing'){if(e.code==='KeyM')beginMapHold();if(e.code==='KeyV')rearPeek=true;if(e.code==='KeyE'){if(coop.role==='guest')coop.sendAction('interact');else interact();}if(e.code==='KeyF'){gameSession.player.flash=!gameSession.player.flash;showToast(gameSession.player.flash?'FLASHLIGHT ON':'FLASHLIGHT OFF',1)} }});
-window.addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='KeyM')endMapHold();if(e.code==='KeyV')rearPeek=false;});
-window.addEventListener('blur',()=>{keys={};rearPeek=false;endMapHold(true);if(gameSession.state==='playing'&&!isCoarse)pause()});
+window.addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='KeyM')endMapHold();if(e.code==='KeyE')gameSession.interactionHold=null;if(e.code==='KeyV')rearPeek=false;});
+window.addEventListener('blur',()=>{keys={};gameSession.interactionHold=null;rearPeek=false;endMapHold(true);if(gameSession.state==='playing'&&!isCoarse)pause()});
 // Mouse-look: unrestricted yaw, clamped pitch (no upside-down camera).
 let pointerLockBegan=-10000;
 document.addEventListener('mousemove',e=>{
@@ -15,6 +15,16 @@ document.addEventListener('mousemove',e=>{
  setCameraLook(clamp(dx,-85,85)*.0028*gameSettings.mouseSensitivity,-clamp(dy,-85,85)*.00235*gameSettings.mouseSensitivity);
 });
 document.addEventListener('pointerlockchange',()=>{pointerLockBegan=performance.now();});
+window.addEventListener('wheel',e=>{
+ if(gameSession.state!=='playing'||gameSession.graphicsDemo||UI.map.classList.contains('expanded')||!e.deltaY||e.ctrlKey)return;
+ e.preventDefault();
+ selectInventorySlot(gameSession.inventorySlot+Math.sign(e.deltaY));
+},{passive:false});
+C.addEventListener('mousedown',e=>{
+ if(e.button!==2||gameSession.state!=='playing'||UI.map.classList.contains('expanded'))return;
+ e.preventDefault();useSelectedItem();
+});
+C.addEventListener('contextmenu',e=>{if(gameSession.state==='playing')e.preventDefault();});
 C.addEventListener('click',()=>{
  if(gameSession.state==='playing'&&!isCoarse&&document.pointerLockElement!==C)requestGamePointerLock();
 });
@@ -42,7 +52,21 @@ function toggleMobileCrouch(){
  el.setAttribute('aria-pressed',String(touchCrouch));
  el.textContent=touchCrouch?'CICHO ✓':'SNEAK';
 }
-$('interactBtn').addEventListener('click',()=>{if(coop.role==='guest')coop.sendAction('interact');else interact();});
+const interactButton=$('interactBtn');
+let interactPointer=null;
+function pressInteract(){if(coop.role==='guest')coop.sendAction('interact');else interact();}
+interactButton.addEventListener('pointerdown',e=>{
+ if(interactPointer!==null||gameSession.state!=='playing'||e.button!==0)return;
+ interactPointer=e.pointerId;
+ interactButton.setPointerCapture(e.pointerId);
+ pressInteract();
+});
+function releaseInteract(e){
+ if(interactPointer!==e.pointerId)return;
+ interactPointer=null;gameSession.interactionHold=null;
+}
+for(const type of ['pointerup','pointercancel','lostpointercapture'])interactButton.addEventListener(type,releaseInteract);
+interactButton.addEventListener('click',e=>{if(e.detail===0&&gameSession.state==='playing'&&!needsInteractionHold(findInteractable()))pressInteract();});
 $('crouchBtn').addEventListener('click',toggleMobileCrouch);
 $('flashMobileBtn').addEventListener('click',()=>{
  if(gameSession.state!=='playing')return;

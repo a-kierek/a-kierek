@@ -72,26 +72,6 @@ function assignChampion(g,variant){
  g.nextTrail=0;g.nextPulse=30+rnd()*60;
  return g;
 }
-function scatterHardRocks(spawn,desired){
- const avoid=[spawn,{x:gameSession.exitCell.x,y:gameSession.exitCell.y},...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards];
- const candidates=dungeonEmptyCells(spawn.x,spawn.y).filter(c=>c.d>9&&
-   [[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dy])=>gameSession.world[c.y+dy]?.[c.x+dx]===0) &&
-   (()=>{let localOpen=0;for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++)if(gameSession.world[c.y+oy]?.[c.x+ox]===0)localOpen++;return localOpen>=8;})() &&
-   avoid.every(p=>Math.hypot((p.x||0)-c.x-.5,(p.y||0)-c.y-.5)>2.3));
- // Deterministic shuffle, while keeping the guaranteed route to every objective.
- candidates.sort(()=>rnd()-.5);
- const important=[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards];
- let placed=0;
- for(const c of candidates){
-   if(placed>=desired)break;
-   if(gameSession.hardRocks.some(r=>Math.hypot(r.x-c.x-.5,r.y-c.y-.5)<2.5))continue;
-   gameSession.world[c.y][c.x]=5;const d=bfsDistances(spawn.x,spawn.y);
-   const pass=important.every(q=>d[Math.floor(q.y)]?.[Math.floor(q.x)]>=0)&&[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>d[gameSession.exitCell.y+dy]?.[gameSession.exitCell.x+dx]>=0);
-   if(!pass){gameSession.world[c.y][c.x]=0;continue;}
-   const rock={type:'rock',x:c.x+.5,y:c.y+.5,phase:rnd()*TAU,size:.58+rnd()*.10};
-   gameSession.hardRocks.push(rock);gameSession.props.push(rock);placed++;
- }
-}
 function resetHard(){
  const stage=hardStage()||1;
  document.body.classList.remove('level2','final-level','pig-level','procedural-level','hard-detected');
@@ -101,7 +81,7 @@ function resetHard(){
  requestedSeed=null;hardGenerateMap(hardSeed,stage);
  const spawn={x:7,y:7},cells=dungeonEmptyCells(spawn.x,spawn.y);
  gameSession.GOAL=[0,8,9,10,9,11][stage];
- gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];gameSession.hardRocks=[];
+ gameSession.doors=[];gameSession.fuses=[];gameSession.terminals=[];gameSession.interactables=[];gameSession.bonusItems=[];gameSession.props=[];
  // Portal is not allowed to split routes between the player and objectives.
  const candidates=cells.slice().sort((a,b)=>b.d-a.d);
  let exit=candidates.find(c=>c.d>35&&gameSession.world[c.y][c.x]===0&&
@@ -148,8 +128,6 @@ function resetHard(){
    }
  }
  gameSession.world[exit.y][exit.x]=3;
- // Rocks are solid, block AI routes, and never isolate an objective.
- scatterHardRocks(spawn,gameSession.level===13&&customGameConfig.difficulty==='normal'?12:[0,26,34,41,50,54][stage]);
  scatterEnvironmentalProps(16+stage*4,9+stage*2,[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,spawn]);
  gameSession.seen=Array.from({length:gameSession.N},()=>Array(gameSession.N).fill(false));
  commonFacilityReset();
@@ -191,23 +169,36 @@ function useHardFreeze(){
  gameSession.player.freezeCharges--;gameSession.player.inventory.freeze=gameSession.player.freezeCharges;target.frozen=true;target.path=[];target.state='frozen';
  showToast('STWOR ZAMROZONY · DOTYK NADAL ZABIJA',3.5);playUnlock();updateInventoryUI();
 }
+function placeEmergencyReactors(){
+ if(!Number.isFinite(gameSession.hardNextEmergency)||gameSession.level===12||!isHardMode())return;
+ const player=gameSession.player,room=gameSession.safeRoom;
+ const reserved=[...gameSession.fuses,...gameSession.terminals,...gameSession.bonusItems,...gameSession.guards,
+  ...gameSession.props,{x:gameSession.exitCell.x+.5,y:gameSession.exitCell.y+.5}];
+ const cells=dungeonEmptyCells(Math.floor(player.x),Math.floor(player.y)).filter(c=>c.d>=9&&
+  (!room||c.x<room.left-1||c.x>room.left+room.side||c.y<room.top-1||c.y>room.top+room.side)&&
+  reserved.every(p=>Math.hypot(p.x-c.x-.5,p.y-c.y-.5)>=2)&&
+  [[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>gameSession.world[c.y+dy]?.[c.x+dx]===0).length>=3);
+ const selected=chooseFarCells(cells,8,9,[]);
+ gameSession.emergencyReactors=selected.map((c,index)=>({
+  id:'emergency-reactor-'+index,x:c.x+.5,y:c.y+.5
+ }));
+}
 function triggerHardEmergency(){
- const sx=Math.floor(gameSession.player.x),sy=Math.floor(gameSession.player.y),dist=bfsDistances(sx,sy);
- const options=[];
- for(let y=2;y<gameSession.N-2;y++)for(let x=2;x<gameSession.N-2;x++){
-  if(gameSession.world[y][x]!==0||dist[y][x]<7||dist[y][x]>20)continue;
-  if(gameSession.fuses.some(f=>!f.taken&&Math.hypot(f.x-x-.5,f.y-y-.5)<2))continue;
-  if(gameSession.terminals.some(t=>Math.hypot(t.x-x-.5,t.y-y-.5)<2))continue;
-  if(gameSession.hardRocks.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<2))continue;
-  options.push({x,y,d:dist[y][x]});
- }
- options.sort((a,b)=>Math.abs(a.d-13)-Math.abs(b.d-13));
- const q=options[Math.min(options.length-1,Math.floor(rnd()*Math.min(12,options.length)))]||{x:sx,y:sy};
- gameSession.hardEmergency={x:q.x+.5,y:q.y+.5,time:45};
- gameSession.interactables.push({id:'hard-repair',x:gameSession.hardEmergency.x,y:gameSession.hardEmergency.y,type:'repair',title:'REPAIR THE EMERGENCY REACTOR',used:false});
+ if(gameSession.hardEmergency)return;
+ if(isSafeRoomProtected()){gameSession.hardNextEmergency=gameSession.elapsed+12;return;}
+ const player=gameSession.player;
+ const routes=bfsDistances(Math.floor(player.x),Math.floor(player.y));
+ const candidates=gameSession.emergencyReactors.map(reactor=>({
+  reactor,distance:routes[Math.floor(reactor.y)]?.[Math.floor(reactor.x)]??-1
+ })).filter(({distance,reactor})=>distance>=8&&Math.hypot(reactor.x-player.x,reactor.y-player.y)>=5);
+ if(!candidates.length){gameSession.hardNextEmergency=gameSession.elapsed+12;return;}
+ const {reactor,distance}=candidates[Math.floor(rnd()*candidates.length)];
+ const time=Math.ceil(45+REACTOR_HOLD_SECONDS+distance/2.3);
+ gameSession.hardEmergency={reactor,x:reactor.x,y:reactor.y,time};
+ gameSession.interactables.push({id:'hard-repair',x:reactor.x,y:reactor.y,type:'repair',title:'REPAIR REACTOR',used:false});
  $('hardEmergency').hidden=false;
- showToast('ALARM · REPAIR REACTOR IN 45 SECONDS',4);
- addNoise(gameSession.hardEmergency.x,gameSession.hardEmergency.y,20,'alarm');playSting();if(typeof createGameSample==='function')createGameSample('metalCrack',.40);
+ showToast('ALARM · REPAIR REACTOR IN '+time+' SECONDS',4);
+ addNoise(reactor.x,reactor.y,20,'alarm');playSting();createGameSample('metalCrack',.40);
 }
 function finishHardEmergency(){
  gameSession.hardEmergency=null;gameSession.interactables=gameSession.interactables.filter(o=>o.id!=='hard-repair');
@@ -220,8 +211,8 @@ function updateHard(dt){
  if(!gameSession.hardEmergency&&gameSession.elapsed>=gameSession.hardNextEmergency)triggerHardEmergency();
  if(gameSession.hardEmergency){
   gameSession.hardEmergency.time-=dt;
-  $('hardEmergencyTime').textContent='00:'+String(Math.max(0,Math.ceil(gameSession.hardEmergency.time))).padStart(2,'0');
-  $('hardEmergencyDistance').textContent='DO PANELU: '+Math.round(Math.hypot(gameSession.player.x-gameSession.hardEmergency.x,gameSession.player.y-gameSession.hardEmergency.y))+' M · E';
+  $('hardEmergencyTime').textContent=formatTime(Math.max(0,Math.ceil(gameSession.hardEmergency.time)));
+  $('hardEmergencyDistance').textContent='DO PANELU: '+Math.round(Math.hypot(gameSession.player.x-gameSession.hardEmergency.x,gameSession.player.y-gameSession.hardEmergency.y))+' M · HOLD E';
   if(gameSession.hardEmergency.time<=0){lose('meltdown');return;}
  }
  for(const g of gameSession.guards){

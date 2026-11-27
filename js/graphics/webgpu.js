@@ -17,8 +17,14 @@ const GPU_WALL_H=256;
 const GPU_TILE_SIZE=64;
 const GPU_MAX_DECALS=256;
 const GPU_MAX_SPRITES=256;
-const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32};
-const PICKUP_MESH_KINDS={battery:6,card:7};
+const MESH_POSE_COUNTS={slot:4,campfire:4,tree:4,rock:64,door:16,decor:64,pickup:32,shield:16,drink:24,terminal:24};
+const WORLD_ITEM_KINDS={battery:6,card:7,shield:8,drink:9,terminal:10};
+const WORLD_ITEM_TILTS={
+ battery:[0,0,Math.PI/2,-Math.PI/2],card:[0],shield:[0,0,Math.PI],drink:[0,0,Math.PI/2,-Math.PI/2],terminal:[0]
+};
+const WORLD_ITEM_SCALE={battery:.62,card:.72,shield:1,drink:1,terminal:1};
+function bonusPickupModel(item){return item.type==='shield'?'shield':item.type==='stamina'?'drink':null;}
+function worldItemPool(model){return model==='battery'||model==='card'?'pickup':model;}
 // The order of the atlas is a single contract for upload and projection.
 function spriteLayerSources(){return [catImg,pigImg,personBImg,personAImg,fuseImg,keycardImg,foodImg,terminalImg,lockerArt,stairArt,staminaArt,shieldArt,extraPickupArt,coopAvatarArt,slowDeviceImg,freezeDeviceImg,...energyDrinkImgs,hardRockArt,coinSprite,slotMachineSprite,strangerImg];}
 const SPRITE_LAYER=Object.freeze({cat:0,pig:1,watcher:2,listener:3,terminal:7,hide:8,stairs:9,stamina:10,shield:11,key:12,coopAvatar:13,hardSlow:14,hardFreeze:15,rock:21,coin:22,slot:23,stranger:24});
@@ -94,6 +100,9 @@ class CatroomsWebGPURenderer {
     this.loadedSpriteLayers=resolved.map((img,i)=>({layer:i,width:img.naturalWidth||img.width,height:img.naturalHeight||img.height}));
     await Promise.all(SAFE_ROOM_POSTER_IMAGES.map(async img=>{if(!img.complete){try{await img.decode();}catch(e){/* draw fallback poster */}}}));
     const walls=[wallTexture,metalTexture,finalWallTexture,pigWallTexture,doorOpenTexture,doorTexture,doorShutImg];
+    await Promise.all(HD_WALL_PATHS.slice(0,2).map(async (path,i)=>{
+      try{walls[i]=await loadHdAlbedo(path,512,1024);}catch{/* Keep the procedural fallback when offline assets are damaged. */}
+    }));
     walls.forEach((tex,i)=>this.uploadCanvasLayer(this.wallTexture,tex,GPU_WALL_W,GPU_WALL_H,i));
     SAFE_ROOM_POSTER_IMAGES.forEach((img,index)=>{const off=document.createElement('canvas');off.width=GPU_WALL_W;off.height=GPU_WALL_H;const g=off.getContext('2d');g.fillStyle='#080506';g.fillRect(0,0,off.width,off.height);if(img&&img.complete&&img.naturalWidth){const ratio=Math.max(off.width/img.naturalWidth,off.height/img.naturalHeight);const w=img.naturalWidth*ratio,h=img.naturalHeight*ratio;g.drawImage(img,(off.width-w)/2,(off.height-h)/2,w,h)}else{g.fillStyle='#7b5a4b';g.fillRect(0,0,off.width,off.height)}this.device.queue.copyExternalImageToTexture({source:off},{texture:this.wallTexture,origin:[0,0,7+index]},[off.width,off.height,1]);});
     const tmp=document.createElement('canvas');tmp.width=GPU_TILE_SIZE;tmp.height=GPU_TILE_SIZE;const g=tmp.getContext('2d');
@@ -117,18 +126,27 @@ class CatroomsWebGPURenderer {
   async buildModels(){
     this.modelShadows=new CatroomsModelShadows(this.device);
     const shadowData=[];
-    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(PICKUP_MESH_KINDS),...Object.keys(DECOR_MODELS)]){
+    for(const kind of ['campfire','slot','tree','rock','door',...Object.keys(WORLD_ITEM_KINDS),...Object.keys(DECOR_MODELS)]){
       const mesh=await AssetManager.mesh(kind);
       const vertexBuffer=this.device.createBuffer({size:mesh.vertexData.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
       const indexBuffer=this.device.createBuffer({size:mesh.indexData.byteLength,usage:GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST});
       this.device.queue.writeBuffer(vertexBuffer,0,mesh.vertexData);
       this.device.queue.writeBuffer(indexBuffer,0,mesh.indexData);
       this.modelMeshes[kind]={vertexBuffer,indexBuffer,indexCount:mesh.indices};
-      if(kind!=='campfire'&&!PICKUP_MESH_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
+      if(WORLD_ITEM_TILTS[kind]){
+        const vertices=new Float32Array(mesh.vertexData.buffer,mesh.vertexData.byteOffset,mesh.vertices*11);
+        this.modelMeshes[kind].groundPoses=WORLD_ITEM_TILTS[kind].map(tilt=>{
+          const c=Math.cos(tilt),s=Math.sin(tilt);
+          let bottom=Infinity;
+          for(let i=0;i<vertices.length;i+=11)bottom=Math.min(bottom,vertices[i+1]*s+vertices[i+2]*c);
+          return {c,s,z:-bottom*WORLD_ITEM_SCALE[kind]};
+        });
+      }
+      if(kind!=='campfire'&&!WORLD_ITEM_KINDS[kind])this.modelShadows.meshes[kind]=addShadowMesh(shadowData,mesh);
     }
     this.modelShadows.initialize(shadowData);
     this.meshAlbedoTextures={};
-    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO}).map(async ([kind,src])=>{
+    await Promise.all(Object.entries({slot:MODEL_SLOT_ALBEDO_PNG,rock:MODEL_ROCK_ALBEDO,decor:DECOR_ALBEDO,pickup:MODEL_BATTERY_ALBEDO,shield:MODEL_SHIELD_ALBEDO,drink:MODEL_DRINK_ALBEDO,terminal:MODEL_TERMINAL_ALBEDO}).map(async ([kind,src])=>{
       const image=new Image();
       image.src=src;
       await image.decode();
@@ -196,15 +214,14 @@ class CatroomsWebGPURenderer {
     for(const f of gameSession.fuses)if(!f.taken&&!objectivePickupModel(f))sprites.push({kind:'fuse',x:f.x,y:f.y,phase:f.phase||0});
     if(gameSession.level===1&&gameSession.awake){const p=gameSession.renderPosition(gameSession.cat);sprites.push({kind:'cat',x:p.x,y:p.y,frozen:!!gameSession.cat.frozen});}
     for(const a of coop.avatarSprites())sprites.push({kind:'coopAvatar',x:a.x,y:a.y});
-    for(const item of gameSession.bonusItems)if(!item.taken&&item.type==='coin')sprites.push({kind:'coin',x:item.x,y:item.y});
-    // Slot machine is static 3D world geometry, never a camera-facing sprite.
-    for(const guard of gameSession.guards){const p=gameSession.renderPosition(guard);sprites.push({kind:guard.kind,x:p.x,y:p.y,phase:guard.x,variant:guard.variant||'classic',frozen:!!guard.frozen,size:guard.sizeMultiplier||1});}
-    if(gameSession.level>=2){
-      for(const t of gameSession.terminals)sprites.push({kind:'terminal',x:t.x,y:t.y});
-      for(const item of gameSession.interactables)if(item.type==='hide'||item.type==='stairs')sprites.push({kind:item.type,x:item.x,y:item.y});
-      for(const item of gameSession.bonusItems)if(!item.taken&&item.type!=='coin')sprites.push({kind:item.type,x:item.x,y:item.y,phase:item.phase,energySprite:item.energySprite});
-      if(isHardMode()&&gameSession.hardEmergency)sprites.push({kind:'terminal',x:gameSession.hardEmergency.x,y:gameSession.hardEmergency.y});
+    for(const item of gameSession.bonusItems){
+      if(!item.taken&&!bonusPickupModel(item))sprites.push({kind:item.type,x:item.x,y:item.y,phase:item.phase});
     }
+    for(const guard of gameSession.guards){
+      const p=gameSession.renderPosition(guard);
+      sprites.push({kind:guard.kind,x:p.x,y:p.y,phase:guard.x,variant:guard.variant||'classic',frozen:!!guard.frozen,size:guard.sizeMultiplier||1});
+    }
+    for(const item of gameSession.interactables)if(item.type==='hide'||item.type==='stairs')sprites.push({kind:item.type,x:item.x,y:item.y});
     const fuseLayer=renderStage()===1?4:renderStage()===4?6:5;
     const scales={cat:1.19,pig:1.07,watcher:1.38,listener:1.38,fuse:renderStage()===4?.76:.58,terminal:.73,hide:.9,stairs:.78,stamina:.43,shield:.43,key:.42,coopAvatar:.94,hardSlow:.54,hardFreeze:.58,rock:.89,coin:.43,slot:.86,stranger:1.36};
     const sourceAspect=this.spriteAspects||(this.spriteAspects=spriteLayerSources().map(img=>(img.naturalWidth||img.width||1)/(img.naturalHeight||img.height||1)));
@@ -248,7 +265,10 @@ class CatroomsWebGPURenderer {
     const upload=(buffer,data)=>{this.device.queue.writeBuffer(buffer,0,data);this.stats.staticBytes+=data.byteLength;};
     if(this.mapSource!==scene.world||this.mapRevision!==scene.worldRevision||this.mapSize!==scene.N){
       this.tilesData.fill(0);
-      for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++)this.tilesData[y*128+x]=scene.world[y][x];
+      for(let y=0;y<scene.N;y++)for(let x=0;x<scene.N;x++){
+        const tile=scene.world[y][x];
+        this.tilesData[y*128+x]=tile===THIN_SAFE_ROOM_TILE?0:tile;
+      }
       this.doorLayout=scene===gameSession?this.makeDoorLayout(scene):[];
       for(const d of this.doorLayout)this.tilesData[d.y*128+d.x]=0;
       // Low byte = visible terrain, bit 8 = opaque model door. Keep the CPU
@@ -268,18 +288,36 @@ class CatroomsWebGPURenderer {
       }
       this.furnitureCount=i;upload(this.furnitureBuffer,this.furnitureData);this.stats.furnitureUploads++;this.furnitureSource=furniture;this.furnitureLength=furniture.length;
     }
-    // Trail arrays may be replaced each update even when the hazard content stays identical.
+    // Register each decal across its full footprint, including across tile edges.
+    // Three 9-bit indices fit in one storage word, with zero reserved for no decal.
     let count=0;
+    const addDecal=(p,size,type)=>{
+      if(count<GPU_MAX_DECALS)this.decalScratch.set([p.x,p.y,size,type],count++*4);
+    };
     for(const p of scene.props){
-      if((p.type!=='hazard'&&!(p.type==='decor'&&p.solid))||count>=GPU_MAX_DECALS)continue;
-      const x=Math.floor(p.x),y=Math.floor(p.y);if(x<0||y<0||x>=scene.N||y>=scene.N)continue;
-      this.decalScratch.set([p.x,p.y,p.type==='decor'?Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12):p.size||.75,p.type==='decor'?2:1],count++*4);
+      if(p.type==='hazard')addDecal(p,p.size||.75,1);
+      else if(p.type==='decor'&&p.solid)addDecal(p,Math.min(.72,(p.radius??DECOR_MODELS[p.model].radius)*1.65+.12),2);
     }
+    for(const item of scene.fuses||[])if(!item.taken&&objectivePickupModel(item))addDecal(item,.48,3);
+    for(const item of scene.bonusItems||[])if(!item.taken&&bonusPickupModel(item))addDecal(item,.42,3);
     let changed=this.decalWorld!==scene.world||this.decalCount!==count;
     for(let i=0;!changed&&i<count*4;i++)if(this.decalScratch[i]!==this.decalData[i])changed=true;
     if(changed){
       this.decalGridData.fill(0);this.decalData.fill(0);this.decalData.set(this.decalScratch.subarray(0,count*4));
-      for(let i=0;i<count;i++){const x=Math.floor(this.decalData[i*4]),y=Math.floor(this.decalData[i*4+1]);this.decalGridData[y*128+x]=i+1;}
+      for(let i=0;i<count;i++){
+        const [x,y,size,type]=this.decalData.subarray(i*4,i*4+4);
+        const radius=Math.max(.1,size*.67);
+        for(let row=Math.max(0,Math.floor(y-radius));row<=Math.min(scene.N-1,Math.floor(y+radius));row++){
+          for(let col=Math.max(0,Math.floor(x-radius));col<=Math.min(scene.N-1,Math.floor(x+radius));col++){
+            const key=row*128+col,packed=this.decalGridData[key];
+            let shift=0;
+            while(shift<27&&((packed>>>shift)&511)!==0)shift+=9;
+            if(shift<27)this.decalGridData[key]=packed|((i+1)<<shift);
+            // Keep dangerous puddles visible even when several effects share a cell.
+            else if(type===1)this.decalGridData[key]=(packed&0x3ffff)|((i+1)<<18);
+          }
+        }
+      }
       upload(this.decalCellsBuffer,this.decalGridData);upload(this.decalDataBuffer,this.decalData);this.stats.decalUploads++;this.decalCount=count;this.decalWorld=scene.world;
     }
   }
@@ -347,15 +385,31 @@ class CatroomsWebGPURenderer {
   }
   visiblePickups(camera){
     const visible=[];
-    for(const item of gameSession.fuses){
-      if(item.taken)continue;
-      const model=objectivePickupModel(item);
+    const add=(item,model,active=false)=>{
       if(!model||!this.modelMeshes[model]||Math.hypot(item.x-camera.x,item.y-camera.y)>28||
-         !this.modelInView(item.x,item.y,.35,camera))continue;
-      visible.push({item,model});
-      if(visible.length===MESH_POSE_COUNTS.pickup)break;
-    }
-    return visible;
+        !this.modelInView(item.x,item.y,model==='terminal'?.65:.35,camera))return;
+      visible.push({item,model,active,pool:worldItemPool(model)});
+    };
+    for(const item of gameSession.fuses)if(!item.taken)add(item,objectivePickupModel(item));
+    for(const item of gameSession.bonusItems)if(!item.taken)add(item,bonusPickupModel(item));
+    for(const item of gameSession.terminals)add(item,'terminal');
+    for(const item of gameSession.emergencyReactors||[])add(item,'terminal',gameSession.hardEmergency?.reactor===item);
+    const counts={};
+    visible.sort((a,b)=>Math.hypot(a.item.x-camera.x,a.item.y-camera.y)-Math.hypot(b.item.x-camera.x,b.item.y-camera.y));
+    return visible.filter(entry=>{
+      const {pool}=entry;
+      entry.index=counts[pool]??0;
+      counts[pool]=entry.index+1;
+      return entry.index<MESH_POSE_COUNTS[pool];
+    });
+  }
+  worldItemPose({item,model,active}){
+    const poses=this.modelMeshes[model].groundPoses;
+    const phase=item.phase||0;
+    const {c,s,z}=poses[Math.floor(phase*1000)%poses.length];
+    const yaw=model==='terminal'?(item.yaw??Math.PI):phase;
+    return [item.x,item.y,z,WORLD_ITEM_SCALE[model],Math.cos(yaw),Math.sin(yaw),WORLD_ITEM_KINDS[model],
+      active?2:item.used?1:0,c,s,0,0];
   }
   roomPose(room,kind){
     if(kind==='campfire')return [room.fireX,room.fireY,0,.68,1,0,0,0];
@@ -496,10 +550,7 @@ class CatroomsWebGPURenderer {
       for(let i=0;i<rocks.length;i++)this.writePose('rock',i,this.rockPose(rocks[i]));
       for(let i=0;i<doors.length;i++)this.writePose('door',i,doors[i]);
       for(let i=0;i<decor.length;i++)this.writePose('decor',i,this.decorPose(decor[i]));
-      for(const [index,{item,model}] of pickups.entries()){
-        const angle=item.phase||0;
-        this.writePose('pickup',index,[item.x,item.y,0,1,Math.cos(angle),Math.sin(angle),PICKUP_MESH_KINDS[model],0]);
-      }
+      for(const entry of pickups)this.writePose(entry.pool,entry.index,this.worldItemPose(entry));
       const meshPass=encoder.beginRenderPass({label:'Imported world meshes',
         colorAttachments:[{view:colorView,loadOp:'load',storeOp:'store'}],
         depthStencilAttachment:{view:this.meshDepthTexture.createView(),depthLoadOp:'clear',depthClearValue:1,depthStoreOp:'store'}});
@@ -526,9 +577,9 @@ class CatroomsWebGPURenderer {
         if(meshKind!==p.model){meshPass.setVertexBuffer(0,m.vertexBuffer);meshPass.setIndexBuffer(m.indexBuffer,'uint32');meshKind=p.model;}
         meshPass.setBindGroup(0,this.rushMeshBinds.decor[i]);meshPass.drawIndexed(m.indexCount);this.stats.triangles+=m.indexCount/3;
       }
-      for(const [index,{model}] of pickups.entries()){
+      for(const {index,model,pool} of pickups){
         const mesh=this.modelMeshes[model];
-        meshPass.setBindGroup(0,this.rushMeshBinds.pickup[index]);
+        meshPass.setBindGroup(0,this.rushMeshBinds[pool][index]);
         meshPass.setVertexBuffer(0,mesh.vertexBuffer);
         meshPass.setIndexBuffer(mesh.indexBuffer,'uint32');
         meshPass.drawIndexed(mesh.indexCount);this.stats.triangles+=mesh.indexCount/3;

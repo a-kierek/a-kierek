@@ -20,8 +20,10 @@ let W=800,H=600,N=9,world=Array.from({length:N},(_,y)=>Array.from({length:N},(_,
 let player={x:2.5,y:3.5},elapsed=0;
 const renderStage=()=>level,cameraViewAngle=()=>0,cameraPlaneScale=()=>.66,viewPitchOffset=()=>0,isHardMode=()=>false;
 const coop={avatarSprites:()=>[]},window={};
+const THIN_SAFE_ROOM_TILE=9,SAFE_ROOM_WALL_MATERIAL=12;
 const gameSession={renderPosition:actor=>actor,get level(){return level},set level(v){level=v},get awake(){return awake},set awake(v){awake=v},get cat(){return cat},set cat(v){cat=v},get fuses(){return fuses},set fuses(v){fuses=v},get guards(){return guards},set guards(v){guards=v},get terminals(){return terminals},set terminals(v){terminals=v},get interactables(){return interactables},set interactables(v){interactables=v},get bonusItems(){return bonusItems},set bonusItems(v){bonusItems=v},get props(){return props},set props(v){props=v},get hardEmergency(){return hardEmergency},set hardEmergency(v){hardEmergency=v},get N(){return N},set N(v){N=v},get world(){return world},set world(v){world=v},get worldRevision(){return worldRevision},set worldRevision(v){worldRevision=v},get safeRoomFurniture(){return safeRoomFurniture},set safeRoomFurniture(v){safeRoomFurniture=v},get seen(){return seen},set seen(v){seen=v},get player(){return player},set player(v){player=v},get elapsed(){return elapsed},set elapsed(v){elapsed=v}};
 ${read('js/graphics/decor-data.js')}
+${read('js/graphics/materials.js')}
 ${read('js/graphics/camera.js')}
 ${JSON.parse(read('tools/script-order.json')).filter(p=>p.startsWith('js/graphics/shaders/')).map(read).join('\n')}
 ${read('js/graphics/webgpu.js')}
@@ -54,6 +56,7 @@ function test(label,fn){fn();console.log('PASS '+label);}
    run('world[3][4]=4;worldRevision++;r.syncStaticBuffers()');assert.equal(run('uploads.length'),5);assert.equal(run('r.tilesData[3*128+4]'),4);
    run('world[3][4]=0;worldRevision++;r.syncStaticBuffers()');assert.equal(run('uploads.length'),6);assert.equal(run('r.tilesData[3*128+4]'),0);
    run('props=[{type:"hazard",x:3.5,y:3.5,size:.8}];r.syncStaticBuffers()');assert.equal(run('uploads.length'),8);assert.equal(run('r.decalGridData[3*128+3]'),1);
+   assert.equal(run('r.decalGridData[3*128+4]'),1,'hazard also indexed on the next tile');
    run('props=props.slice();r.syncStaticBuffers()');assert.equal(run('uploads.length'),8);
    run('props=[];r.syncStaticBuffers()');assert.equal(run('uploads.length'),10);assert.equal(run('r.decalGridData[3*128+3]'),0);
    run('safeRoomFurniture.push({x:3,y:3,z:.5,w:1,d:1,h:1,material:1});r.syncStaticBuffers()');assert.equal(run('uploads.length'),11);assert.equal(run('r.furnitureCount'),1);

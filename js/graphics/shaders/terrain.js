@@ -175,13 +175,18 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
  } else {
    let cell=vec2i(floor(worldPt));
    if(cell.x>=0 && cell.y>=0 && cell.x<i32(frame.viewport.z) && cell.y<i32(frame.viewport.z)) {
-     let id=decalCells[u32(cell.y)*128u+u32(cell.x)];
-     if(id>0u && id<=256u){
+     var ids=decalCells[u32(cell.y)*128u+u32(cell.x)];
+     for(var i=0; i<3 && ids!=0u; i++){
+       let id=ids&511u;
+       ids>>=9u;
        let d=decalData[id-1u];
        let radius=max(.1,d.z*.67);
        let local=(worldPt-d.xy)/(radius*2.)+.5;
        if(all(local>=vec2f(0.)) && all(local<=vec2f(1.))){
-         if(d.w>1.5){
+         if(d.w>2.5){
+           let glow=1.-smoothstep(.12,.5,length(local-.5));
+           c+=vec3f(.11*glow*glow);
+         }else if(d.w>1.5){
            let shadow=1.-smoothstep(.14,.50,length(local-.5));
            c*=1.-.38*shadow;
          }else{
@@ -321,6 +326,12 @@ fn scenerySurface(ray:vec3f,isFloor:bool,rd:f32)->vec4f {
        let flicker=.65+.35*sin(frame.player.w*17.+local.x*15.);
        col=mix(vec3f(.63,.09,.02),vec3f(1.,.77,.18),local.z)*flicker;
        if(local.z>.70){col*=.60;}
+     }else if(typ==12){ // thin safe-room brick, with continuous UVs at corners
+       let point=origin3+ray3*tNear;
+       let u=select(point.x,point.y,faceX);
+       let row=floor(point.z*6.);
+       let mortar=step(fract(u*4.+row*.5),.04)+step(fract(point.z*6.),.06);
+       col=vec3f(.24,.25,.21)*(1.-min(1.,mortar)*.35);
      }else if(typ>=7&&typ<=11){ // photo posters on the wall
        let extent=object.upper.xyz-object.lower.xyz;
        let vertical=extent.x<extent.y;

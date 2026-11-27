@@ -15,7 +15,7 @@ function setState(next){
  if(previous!==next&&typeof profileCheckpoint==='function')profileCheckpoint();
  if(previous!==next){
   resetSimulationClock();
-  if(previous==='playing'){keys={};resetMobileInputs();}
+  if(previous==='playing'){keys={};gameSession.interactionHold=null;resetMobileInputs();}
   if(previous==='jumpscare'){sessionTimers.clear('death');$('jump').classList.remove('show');}
  }
  if(next==='menu')cancelTransition();

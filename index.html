@@ -18,7 +18,7 @@
 <link href="css/v1-style.css" rel="stylesheet"/>
 <link href="css/boss-rush.css" rel="stylesheet"/>
 <link href="css/v1_5-ui.css" rel="stylesheet"/>
-<link href="css/interface-162.css" rel="stylesheet"/>
+<link href="css/interface-162.css?v=1.7.0-alpha.1.4" rel="stylesheet"/>
 </head>
 <body>
 <div aria-live="polite" id="loadingScreen" role="status">
@@ -35,9 +35,9 @@
 <div class="bottombar"><div class="objective"><div class="eyebrow">OBJECTIVE</div><div class="goal" id="goal">FIND 7 BATTERIES</div><div id="hudObjectiveText">Collect batteries</div><div id="hudObjectiveProgress" aria-hidden="true"><i></i></div><div id="missionDetails" style="display:none"></div><div class="signal"><span id="bearing"><span aria-hidden="true" class="icon-slot" data-icon="up"></span></span> <span id="signalText">Search for the signal...</span></div></div><div id="staminaWrap"><div class="barText"><img alt="Stamina" class="hud-stat-icon" src="assets/ui/pixel-drumstick.png"/></div><div class="bar"><div class="barFill" id="staminaFill"></div></div></div><div id="hpWrap"><div class="health-caption">HEALTH</div><div class="barText"><img alt="Health" class="hud-stat-icon" src="assets/ui/pixel-heart.png"/> <span id="hpValue">100 / 100</span></div><div class="bar"><div class="barFill hpBar" id="hpFill"></div></div></div></div>
 <div aria-label="Inventory" id="fieldInventory"><div class="f-inv-heading" hidden="">RESOURCES</div><div class="f-inv-main"><img alt="Items" class="hud-stat-icon battery-hud-icon" src="assets/ui/battery-charging-icon.svg"/><span id="fieldItemCount">0 / 7</span></div></div>
 <div aria-label="Interaction hint" id="fieldAction"><div class="f-action-title">INTERACTION</div><div class="f-action-value" id="fieldActionText">E / CHECK SURROUNDINGS</div></div>
-<div aria-label="Usable items" class="active-inventory" id="activeInventory"><div class="inv-title">INVENTORY</div><div class="inv-buttons"><button aria-label="Drink an energy drink" id="inventoryDrink" type="button"><img alt="Energy drink" id="inventoryDrinkSprite" src="assets/items/energy-classic.png"/><span>DRINK <b id="inventoryDrinkCount">0</b></span><small>1</small></button><button aria-label="Aktywuj spowalniacz" id="inventorySlow" type="button"><img alt="Spowalniacz" src="assets/items/slow-device.png"/><span>SLOW DEVICE <b id="inventorySlowCount">0</b></span><small>2</small></button><button aria-label="Aktywuj zamrazacz" id="inventoryFreeze" type="button"><img alt="Zamrazacz" src="assets/items/freeze-device.png"/><span>FREEZE DEVICE <b id="inventoryFreezeCount">0</b></span><small>3</small></button></div></div>
-<div aria-live="assertive" hidden="" id="hardEmergency" role="status"><strong>EMERGENCY / REPAIR PANEL</strong><span id="hardEmergencyTime">00:45</span><small id="hardEmergencyDistance">GO TO THE PANEL</small></div>
-<div id="tipDesktop">WASD MOVE · MOUSE LOOK · SHIFT RUN · CTRL CROUCH · E INTERACT · F FLASHLIGHT · M MAP · ESC PAUSE</div>
+<div aria-label="Usable items" class="active-inventory" id="activeInventory"><div class="inv-title">INVENTORY</div><div class="inv-buttons"><button aria-label="Drink an energy drink" id="inventoryDrink" type="button"><img alt="Energy drink" id="inventoryDrinkSprite" src="assets/items/energy-classic.png"/><span>DRINK <b id="inventoryDrinkCount">0</b></span></button><button aria-label="Aktywuj spowalniacz" id="inventorySlow" type="button"><img alt="Spowalniacz" src="assets/items/slow-device.png"/><span>SLOW DEVICE <b id="inventorySlowCount">0</b></span></button><button aria-label="Aktywuj zamrazacz" id="inventoryFreeze" type="button"><img alt="Zamrazacz" src="assets/items/freeze-device.png"/><span>FREEZE DEVICE <b id="inventoryFreezeCount">0</b></span></button><button aria-label="Shield" id="inventoryShield" type="button"><span class="inventory-shield-icon" data-icon="shield" aria-hidden="true"></span><span>SHIELD <b id="inventoryShieldCount">0</b></span></button></div></div>
+<div aria-live="assertive" hidden="" id="hardEmergency" role="status"><strong>EMERGENCY / REPAIR PANEL</strong><span id="hardEmergencyTime">--:--</span><small id="hardEmergencyDistance">GO TO THE PANEL</small></div>
+<div id="tipDesktop">WASD MOVE · MOUSE LOOK · SHIFT RUN · CTRL CROUCH · E INTERACT · SCROLL SELECT · RMB USE ITEM · F FLASHLIGHT · M MAP · ESC PAUSE</div>
 <div id="mapPanel"><div class="mapTitle"><span aria-hidden="true" class="icon-slot" data-icon="map"></span> MAP / DISCOVERED AREA</div><canvas height="280" id="mapCanvas" width="280"></canvas><div hidden="" id="mapClock">00:00</div><div id="mapRunDetails" hidden><div id="mapLevelDetails"></div><div id="mapDetectionDetails"></div></div><small><span aria-hidden="true" class="icon-slot" data-icon="dot"></span> You · <span aria-hidden="true" class="icon-slot" data-icon="battery"></span> batteries · <span style="color:#f16e65"><span aria-hidden="true" class="icon-slot" data-icon="dot"></span> threat</span></small></div>
 </div>
 <div hidden="" id="rageBadge"><span aria-hidden="true" class="icon-slot" data-icon="skull"></span> RAGE MODE · ACTIVE</div><button hidden="" id="rageMobile" type="button"><span aria-hidden="true" class="icon-slot" data-icon="skull"></span> </button><div id="mobile">
@@ -148,6 +148,7 @@
 <div class="settings-scroll pixel-inline-scroll">
 <section aria-label="Kamera">
 <h3><span>01</span> CAMERA AND CONTROLS</h3>
+<p>E to pick up. Hold E to activate a reactor. Scroll to select an item and right-click to use it.</p>
 <label class="setting-slider"><span>FIELD OF VIEW (FOV) <output for="menuSettingFov" id="menuSettingFovOut">75°</output></span><input id="menuSettingFov" max="110" min="60" step="5" type="range" value="75"/></label>
 <label class="setting-slider"><span>MOUSE SENSITIVITY <output for="menuSettingMouse" id="menuSettingMouseOut">1.00×</output></span><input id="menuSettingMouse" max="2.50" min="0.30" step="0.05" type="range" value="1"/></label>
 <label class="setting-slider"><span>TOUCH SENSITIVITY <output for="menuSettingTouch" id="menuSettingTouchOut">1.00×</output></span><input id="menuSettingTouch" max="1.90" min="0.55" step="0.05" type="range" value="1"/></label>
@@ -179,7 +180,7 @@
 <div class="player-profile pixel-profile"><label for="playerNameInput">PLAYER NAME</label><input aria-label="Player name" autocomplete="off" id="playerNameInput" maxlength="22" spellcheck="false" type="text" value="PLAYER"/></div>
 <div class="pixel-player-help">LOCAL PROFILE · CHANGES SAVE AUTOMATICALLY.</div><div id="profileStats" class="profile-grid"></div><div class="profile-detail"><h3>TIME RECORDS</h3><div id="profileRecords"></div><h3>ACHIEVEMENTS</h3><div id="profileAchievements"></div><h3>UNLOCKED CONTENT</h3><div id="profileUnlocks"></div><small>Activity totals are tracked from v1.6.2a. Existing campaign records and unlocks are retained.</small></div>
 </section>
-<section class="pixel-simple-panel" id="pixelCreditsPanel" hidden><div class="pixel-section-label">CREDITS</div><h2>THE CATROOMS / REFORGED!</h2><p>Original game and creative direction: THE CATROOMS project creator.</p><p>Custom WebGPU renderer · Reforged technical and interface updates.</p><p><a href="https://sketchfab.com/3d-models/battery-4cab1d1dfcb54ab79230a0a8d44a087e">Battery</a> by hoschu, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Rescaled and converted for the game.</p></section>
+<section class="pixel-simple-panel" id="pixelCreditsPanel" hidden><div class="pixel-section-label">CREDITS</div><h2>THE CATROOMS / REFORGED!</h2><p>Original game and creative direction: THE CATROOMS project creator.</p><p>Custom WebGPU renderer · Reforged technical and interface updates.</p><p><a href="https://sketchfab.com/3d-models/battery-4cab1d1dfcb54ab79230a0a8d44a087e">Battery</a> by hoschu, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Rescaled and converted for the game.</p><p><a href="https://sketchfab.com/3d-models/ericsson-military-control-terminal-c5f7144f84ee4ed7bc91124ea3ef563a">Ericsson Military Control Terminal</a> by LuddePudde, <a href="https://sketchfab.com/3d-models/scrap-shield-43991debf2b649e4b0c5bb62fda78442">Scrap Shield</a> by max_imum, and <a href="https://sketchfab.com/3d-models/black-monster-energy-drink-e542f90ba187428bb4f309a7345166ab">Black Monster Energy Drink</a> by ForevereQ. Rescaled and converted under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p><p>Sewer Brick by <a href="https://freepbr.com/">FreePBR.com</a>.</p></section>
 </main>
 </div>
 <footer class="pixel-footer" aria-hidden="true"></footer>
@@ -279,7 +280,7 @@ window.addEventListener('error', function(event){
   overlay.classList.add('load-failed');
 },true);
 </script>
-<script src="js/game.bundle.js?v=1.7.0-alpha.1.3"></script>
-<script src="js/core/boot.js?v=1.7.0-alpha.1.3"></script>
+<script src="js/game.bundle.js?v=1.7.0-alpha.1.4"></script>
+<script src="js/core/boot.js?v=1.7.0-alpha.1.4"></script>
 </body>
 </html>
